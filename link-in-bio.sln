@@ -5,6 +5,8 @@ VisualStudioVersion = 17.8.34330.188
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Client", "Client\Client.csproj", "{2D9F67A0-E3F7-4AB3-9B80-6171AB13F7C8}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Storyblok", "Storyblok\Storyblok.csproj", "{185860ED-DA70-4D35-9FC4-D28D472D7AB8}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -15,6 +17,10 @@ Global
 		{2D9F67A0-E3F7-4AB3-9B80-6171AB13F7C8}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{2D9F67A0-E3F7-4AB3-9B80-6171AB13F7C8}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{2D9F67A0-E3F7-4AB3-9B80-6171AB13F7C8}.Release|Any CPU.Build.0 = Release|Any CPU
+		{185860ED-DA70-4D35-9FC4-D28D472D7AB8}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{185860ED-DA70-4D35-9FC4-D28D472D7AB8}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{185860ED-DA70-4D35-9FC4-D28D472D7AB8}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{185860ED-DA70-4D35-9FC4-D28D472D7AB8}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

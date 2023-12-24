@@ -35,6 +35,13 @@
         <a href="" class="reload">Reload</a>
         <a class="dismiss">🗙</a>
     </div>
+    <script src="//app.storyblok.com/f/storyblok-v2-latest.js"></script>
+    <script>
+        const storyblokInstance = new StoryblokBridge();
+        storyblokInstance.on(["change", "published"], () => {
+            window.location.reload();
+        });
+    </script>
     <script src="_framework/blazor.webassembly.js"></script>
 </body>
 </html>
