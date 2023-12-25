@@ -1,0 +1,16 @@
+﻿@using Client.Data.Components
+
+<header class="flex flex-col items-center z-20 translate-y-12 opacity-0 transition-all translate-y-12 ease-out duration-1000" data-replace="{ 'translate-y-12': 'translate-y-0', 'opacity-0': 'opacity-100' }">
+    <div class="relative">
+        <div class="absolute top-0 left-0 w-32 h-32 p-1 ring-4 rounded-full ring-purple-600 dark:ring-purple-600 animate-pulse"></div>
+        <img class="w-32 h-32 p-1 object-cover object-bottom rounded-full" src="@Model?.Profile?.Url" alt="@Model?.Profile?.Alt">
+    </div>
+    <a href="@Model?.ProfileLink?.Url" class="mt-6 bg-purple-100 text-purple-800 text-lg font-bold me-2 px-4 py-0.5 rounded-full ring-2 ring-purple-700 transition-transform duration-200 transform hover:scale-105">@Model?.ProfileLink?.Label</a>
+    <TypedText Model="@Model?.TypedTexts" />
+</header>
+
+@code {
+
+    [Parameter]
+    public StoryblokHeader? Model { get; set; }
+}

@@ -1,0 +1,29 @@
+﻿@using Client.Data.Components
+
+<ul class="flex flex-col w-full gap-y-10 z-20 translate-y-12 opacity-0 transition-all translate-y-12 ease-out duration-1000" data-replace="{ 'translate-y-12': 'translate-y-0', 'opacity-0': 'opacity-100' }">
+    @if(Model is not null)
+    {
+        @foreach (var link in Model)
+        {
+            <li class="w-full flex justify-center">
+                @if (string.IsNullOrEmpty(link.Url))
+                {
+                    <a href="@link.Url" class="group text-center w-4/5 sm:w-1/2 md:w-1/3 box-border text-neutral-600 font-bold ring-1 ring-purple-600 rounded-lg py-2 relative">
+                        <i class="@link.CssClass mr-2"></i> @link.Label
+                    </a>
+                }
+                else
+                {
+                    <a href="@link.Url" class="group text-center w-4/5 sm:w-1/2 md:w-1/3 transition-all ease-in-out duration-200 box-border text-white font-bold ring-1 ring-purple-600 rounded-lg py-2 hover:ring-2 hover:ring-white relative hover:scale-110">
+                        <i class="group-hover:scale-125 transition-transform ease-in-out duration-200 @link.CssClass mr-2"></i> @link.Label
+                    </a>
+                }
+            </li>
+        }
+    }
+</ul>
+@code {
+
+    [Parameter]
+    public List<StoryblokLink>? Model { get; set; }
+}

@@ -1,0 +1,37 @@
+﻿@using Client.Data.Components
+
+@inject IJSRuntime JS
+
+<h1 id="typed-output" class="text-center text-2xl font-bold text-white h-32 flex items-center px-8 outline-none"></h1>
+
+<script>
+    window.setupTyped = (list) => {
+        var options = {
+            strings: list,
+            typeSpeed: 50,
+            backSpeed: 30,
+            backDelay: 1500,
+            startDelay: 500,
+            showCursor: false,
+            loop: true
+        };
+
+        var typed = new Typed("#typed-output", options);
+    }
+</script>
+
+@code {
+
+    [Parameter]
+    public List<StoryblokText>? Model { get; set; }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if(Model is not null)
+        {
+            await JS.InvokeVoidAsync("setupTyped", Model.Select(e => e.Text).ToList());
+        }
+
+        await base.OnParametersSetAsync();
+    }
+}
