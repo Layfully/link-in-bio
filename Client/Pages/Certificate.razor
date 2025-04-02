@@ -1,10 +1,8 @@
 ﻿@using Storyblok
 @using Storyblok.Client
-@using Client.Components
 @using Client.Data.Components
-@using Client.Data.Extensions
 
-@inject IJSRuntime JS
+@inject IJSRuntime Js
 @inject StoryblokStoryClient StoryblokClient
 @page "/Certificate/{name}"
 
@@ -61,14 +59,14 @@
     private StoryblokCertificate? Model { get; set; }
 
 
-    protected async override Task OnInitializedAsync()
+    protected override async Task OnInitializedAsync()
     {
         var certificate = await StoryblokClient.Story().WithSlug($"/certificates/{Name}").ResolveLinks(ResolveLinksType.None).Load<StoryblokCertificate>();
 
         Model = certificate?.Content;
 
-        await JS.InvokeVoidAsync("replaceData");
-        await JS.InvokeVoidAsync("setupParticles");
+        await Js.InvokeVoidAsync("replaceData");
+        await Js.InvokeVoidAsync("setupParticles");
 
         await base.OnInitializedAsync();
     }

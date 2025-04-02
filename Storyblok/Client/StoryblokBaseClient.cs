@@ -65,7 +65,7 @@ public abstract class StoryblokBaseClient
         return Settings.SupportedCultures[0].Equals(culture, StringComparison.OrdinalIgnoreCase);
     }
 
-    protected JsonSerializerOptions JsonOptions
+    protected static JsonSerializerOptions JsonOptions
     {
         get
         {

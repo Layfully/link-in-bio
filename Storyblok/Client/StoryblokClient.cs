@@ -44,27 +44,27 @@ public class StoryblokStoryClient : StoryblokBaseClient
         string cacheKey = $"{culture}_{slug}_{resolveLinks}_{resolveAssets}_{resolveRelations}";
         if (MemoryCache.TryGetValue(cacheKey, out StoryblokStory? cachedStory) && cachedStory is not null)
         {
-            Logger.LogTrace($"Using cached story for slug \"{slug}\" (culture \"{culture}\").");
+            Logger.LogTrace("Using cached story for slug {slug} (culture {culture}).", slug, culture);
             return cachedStory;
         }
 
         var cacheKeyUnavailable = "404_" + cacheKey;
         if (MemoryCache.TryGetValue(cacheKeyUnavailable, out _))
         {
-            Logger.LogTrace($"Using cached 404 for slug \"{slug}\" (culture \"{culture}\").");
+            Logger.LogTrace("Using cached 404 for slug {slug} (culture {culture}).", slug, culture);
             return null;
         }
 
-        Logger.LogTrace($"Trying to load story for slug \"{slug}\" (culture \"{culture}\").");
+        Logger.LogTrace("Trying to load story for slug {slug} (culture {culture}).", slug, culture);
         var story = await LoadStoryFromStoryblok(culture, slug, resolveLinks, resolveAssets, resolveRelations);
         if (story is not null)
         {
-            Logger.LogTrace($"Story loaded for slug \"{slug}\" (culture \"{culture}\").");
+            Logger.LogTrace("Story loaded for slug {slug} (culture {culture}).", slug, culture);
             MemoryCache.Set(cacheKey, story, TimeSpan.FromSeconds(Settings.CacheDurationSeconds));
             return story;
         }
 
-        Logger.LogTrace($"Story not found for slug \"{slug}\" (culture \"{culture}\").");
+        Logger.LogTrace("Story not found for slug {slug} (culture {culture}).", slug, culture);
         MemoryCache.Set(cacheKeyUnavailable, true, TimeSpan.FromSeconds(Settings.CacheDurationSeconds));
         return null;
     }

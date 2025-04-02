@@ -84,7 +84,7 @@ public class StoryblokTranslatedSlug
 public class StoryblokStoriesContainer
 {
     [JsonPropertyName("stories")]
-    public IEnumerable<StoryblokStory> Stories { get; set; } = Enumerable.Empty<StoryblokStory>();
+    public IEnumerable<StoryblokStory> Stories { get; init; } = [];
 }
 
 public class StoryblokStoryContainer

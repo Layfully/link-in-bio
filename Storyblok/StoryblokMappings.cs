@@ -10,36 +10,37 @@ public static class StoryblokMappings
     {
         get
         {
-            if (_mappingsCache is null)
+            if (_mappingsCache is not null)
             {
-                var components = from a in AppDomain.CurrentDomain.GetAssemblies()
-                                 from t in a.GetTypes()
-                                 let attributes = t.GetCustomAttributes(typeof(StoryblokComponentAttribute), true)
-                                 where attributes != null && attributes.Length > 0
-                                 select new { Type = t, Attribute = attributes.Cast<StoryblokComponentAttribute>().First() };
-
-                Dictionary<string, Mapping> mappingsCache = new();
-
-                foreach (var component in components)
-                {
-                    if (mappingsCache.ContainsKey(component.Attribute.Name))
-                    {
-                        continue;
-                    }
-
-                    mappingsCache[component.Attribute.Name] = new Mapping
-                    {
-                        Type = component.Type,
-                        ComponentName = component.Attribute.Name,
-                        View = component.Attribute.View
-                    };
-                }
-
-                _mappingsCache = mappingsCache; // this makes sure we don't have concurrent operations on the dictionary while it's filling
-                return mappingsCache;
+                return _mappingsCache;
             }
 
-            return _mappingsCache;
+            var components = from a in AppDomain.CurrentDomain.GetAssemblies()
+                from t in a.GetTypes()
+                let attributes = t.GetCustomAttributes(typeof(StoryblokComponentAttribute), true)
+                where attributes is { Length: > 0 }
+                select new { Type = t, Attribute = attributes.Cast<StoryblokComponentAttribute>().First() };
+
+            Dictionary<string, Mapping> mappingsCache = new();
+
+            foreach (var component in components)
+            {
+                if (mappingsCache.ContainsKey(component.Attribute.Name))
+                {
+                    continue;
+                }
+
+                mappingsCache[component.Attribute.Name] = new Mapping
+                {
+                    Type = component.Type,
+                    ComponentName = component.Attribute.Name,
+                    View = component.Attribute.View
+                };
+            }
+
+            _mappingsCache = mappingsCache; // this makes sure we don't have concurrent operations on the dictionary while it's filling
+            return mappingsCache;
+
         }
     }
 
