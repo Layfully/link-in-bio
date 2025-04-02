@@ -22,7 +22,7 @@ public class StoryblokStory<T> : StoryblokStory where T : StoryblokComponent
         TagList = story.TagList;
 
         T? castContent = story.Content as T;
-        Content = castContent ?? throw new Exception($"A component of type \"{story.Content?.GetType()}\" cannot be cast to \"{typeof(T)}\"");
+        Content = castContent ?? throw new Exception($"A component of type \"{story.Content.GetType()}\" cannot be cast to \"{typeof(T)}\"");
     }
 
     [JsonPropertyName("content")]
@@ -84,7 +84,7 @@ public class StoryblokTranslatedSlug
 public class StoryblokStoriesContainer
 {
     [JsonPropertyName("stories")]
-    public IEnumerable<StoryblokStory> Stories { get; set; } = Enumerable.Empty<StoryblokStory>();
+    public IEnumerable<StoryblokStory> Stories { get; init; } = [];
 }
 
 public class StoryblokStoryContainer

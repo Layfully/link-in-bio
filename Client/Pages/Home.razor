@@ -4,14 +4,14 @@
 @using Client.Data.Components
 @using Client.Data.Extensions
 
-@inject IJSRuntime JS
+@inject IJSRuntime Js
 @inject StoryblokStoryClient StoryblokClient
 @page "/"
 
 <PageTitle>Adrian Gaborek - Links</PageTitle>
 <main class="flex flex-col items-center justify-center bg-gray-900 min-h-screen">
-    <Header Model="@header" />
-    <LinkList Model="@linkList" />
+    <Header Model="@_header" />
+    <LinkList Model="@_linkList" />
 </main>
 <div id="particles-js" class="absolute top-0 left-0 w-full h-full z-10"></div>
 
@@ -50,21 +50,21 @@
 </script>
 
 @code {
-    private StoryblokHeader? header;
-    private List<StoryblokLink>? linkList;
+    private StoryblokHeader? _header;
+    private List<StoryblokLink>? _linkList;
 
-    protected async override Task OnInitializedAsync()
+    protected override async Task OnInitializedAsync()
     {
         var story = await StoryblokClient.Story().WithSlug("/home").ResolveLinks(ResolveLinksType.None).Load<StoryblokPage>();
 
         if (story?.Content?.Body is not null)
         {
-            header = story.Content.Body[0] as StoryblokHeader;
-            linkList = story.Content.Body[1].ToList<StoryblokLink>();
+            _header = story.Content.Body[0] as StoryblokHeader;
+            _linkList = story.Content.Body[1].ToList<StoryblokLink>();
         }
 
-        await JS.InvokeVoidAsync("replaceData");
-        await JS.InvokeVoidAsync("setupParticles");
+        await Js.InvokeVoidAsync("replaceData");
+        await Js.InvokeVoidAsync("setupParticles");
 
         await base.OnInitializedAsync();
     }

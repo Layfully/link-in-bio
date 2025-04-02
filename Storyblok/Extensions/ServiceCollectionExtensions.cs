@@ -6,14 +6,6 @@ namespace Storyblok.Extensions;
 
 public static class ServiceCollectionExtensions
 {
-    public static IServiceCollection AddStoryblok(this IServiceCollection services)
-    {
-        services.AddHttpClient();
-        services.AddScoped<StoryblokStoryClient>();
-        services.AddMemoryCache();
-        return services;
-    }
-
     public static IServiceCollection AddStoryblok(this IServiceCollection services, IConfigurationSection? configurationSection, Action<StoryblokOptions>? configure = null)
     {
         StoryblokOptions options = new();
@@ -22,15 +14,8 @@ public static class ServiceCollectionExtensions
 
         services.Configure<StoryblokOptions>(storyblokOptions =>
         {
-            if (storyblokOptions is not null)
-            {
-                configurationSection?.Bind(storyblokOptions);
-            }
-
-            if (configure is not null && storyblokOptions is not null)
-            {
-                configure.Invoke(storyblokOptions);
-            }
+            configurationSection?.Bind(storyblokOptions);
+            configure?.Invoke(storyblokOptions);
         });
 
         return AddStoryblok(services);
@@ -39,5 +24,13 @@ public static class ServiceCollectionExtensions
     public static IServiceCollection AddStoryblok(this IServiceCollection services, Action<StoryblokOptions>? configure)
     {
         return AddStoryblok(services, null, configure);
+    }
+    
+    private static IServiceCollection AddStoryblok(this IServiceCollection services)
+    {
+        services.AddHttpClient();
+        services.AddScoped<StoryblokStoryClient>();
+        services.AddMemoryCache();
+        return services;
     }
 }
