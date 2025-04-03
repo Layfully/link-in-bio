@@ -1,25 +1,24 @@
-name: Build and Deploy Client App
+name: Azure Static Web Apps CI/CD
 
 on:
   push:
     branches:
-      - main # Or your primary deployment branch
+      - main
   pull_request:
-    types: [opened, synchronize, reopened] # Runs on PR creation/updates, but not close
+    types: [opened, synchronize, reopened, closed]
     branches:
-      - main # Or your primary deployment branch
+      - main
 
 jobs:
   build_and_deploy_job:
-    # This job runs for pushes to main OR for open/updated PRs targeting main
     if: github.event_name == 'push' || github.event.action != 'closed'
     runs-on: ubuntu-latest
     name: Build and Deploy Job
-
+    
+   # Define environment variables accessible to steps
     env:
       STORYBLOK_API_KEY_PUBLIC_VAL: ${{ secrets.STORYBLOK_API_KEY_PUBLIC }}
       STORYBLOK_API_KEY_PREVIEW_VAL: ${{ secrets.STORYBLOK_API_KEY_PREVIEW }}
-      # Define the path relative to the repository root
       APPSETTINGS_PATH: Client/wwwroot/appsettings.json
 
     steps:
@@ -30,8 +29,6 @@ jobs:
           lfs: false
 
       - name: Inject Secrets into appsettings.json
-        # Modify the appsettings.json file in the checked-out code
-        # Ensure the APPSETTINGS_PATH environment variable above points to the correct file
         run: |
           echo "Injecting secrets into ${{ env.APPSETTINGS_PATH }}..."
           if [ ! -f "${{ env.APPSETTINGS_PATH }}" ]; then
@@ -64,11 +61,9 @@ jobs:
           # --- End App Configuration ---
 
   close_pull_request_job:
-    # This job runs ONLY when a PR targeting main is closed
     if: github.event_name == 'pull_request' && github.event.action == 'closed'
     runs-on: ubuntu-latest
     name: Close Pull Request Job
     steps:
       - name: Placeholder for PR Cleanup Logic
         run: echo "PR closed. Azure SWA might automatically handle environment cleanup."
-        # Add steps here if custom cleanup is needed for PR environments
