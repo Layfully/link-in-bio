@@ -14,29 +14,79 @@ jobs:
     if: github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.action != 'closed')
     runs-on: ubuntu-latest
     name: Build and Deploy Job
+
+    # Define environment variables accessible to steps
     env:
-      Storyblok.ApiKeyPublic: ${{ secrets.STORYBLOK_API_KEY_PUBLIC }}
-      Storyblok.ApiKeyPreview: ${{ secrets.STORYBLOK_API_KEY_PREVIEW }}
+      # Values to inject (using secrets) - Use names suitable for shell variable access
+      STORYBLOK_API_KEY_PUBLIC_VAL: ${{ secrets.STORYBLOK_API_KEY_PUBLIC }}
+      STORYBLOK_API_KEY_PREVIEW_VAL: ${{ secrets.STORYBLOK_API_KEY_PREVIEW }}
+
+      # Configuration paths
+      APP_SOURCE_PATH: "Client"       # Source code of your Blazor app
+      BUILD_OUTPUT_PATH: "./publish"  # Temporary directory for build artifacts
+
     steps:
       - uses: actions/checkout@v3
         with:
           submodules: true
           lfs: false
-      - name: Build And Deploy
+
+      # Step 1: Setup .NET SDK (Required for dotnet publish)
+      - name: Setup .NET SDK
+        uses: actions/setup-dotnet@v3
+        with:
+          # --- IMPORTANT: Change this to your project's target .NET version ---
+          dotnet-version: '7.0.x' # e.g., '6.0.x', '8.0.x'
+
+      # Step 2: Build the Blazor App
+      - name: Build Blazor Application
+        run: dotnet publish ${{ env.APP_SOURCE_PATH }} --configuration Release --output ${{ env.BUILD_OUTPUT_PATH }}
+        # This builds the app and places output in BUILD_OUTPUT_PATH (e.g., ./publish)
+
+      # Step 3: Replace Placeholders in appsettings.json within the build output
+      - name: Replace AppSettings Placeholders
+        run: |
+          # The appsettings file is inside the wwwroot of the build output
+          APPSETTINGS_FILE="${{ env.BUILD_OUTPUT_PATH }}/wwwroot/appsettings.json"
+
+          echo "Target file for replacement: ${APPSETTINGS_FILE}"
+
+          # Check if file exists before attempting replacement
+          if [ -f "$APPSETTINGS_FILE" ]; then
+            echo "Replacing placeholders..."
+            # Use sed; '|' is delimiter to avoid issues if keys have '/'
+            sed -i "s|__STORYBLOK_API_KEY_PUBLIC__|${STORYBLOK_API_KEY_PUBLIC_VAL}|g" $APPSETTINGS_FILE
+            sed -i "s|__STORYBLOK_API_KEY_PREVIEW__|${STORYBLOK_API_KEY_PREVIEW_VAL}|g" $APPSETTINGS_FILE
+            echo "Replacement complete. File content:"
+            cat $APPSETTINGS_FILE # Optional: view the result in logs
+          else
+            echo "ERROR: ${APPSETTINGS_FILE} not found!"
+            exit 1 # Fail the step if the file isn't found
+          fi
+
+      # Step 4: Deploy the MODIFIED build output
+      - name: Build And Deploy (using pre-built app)
         id: builddeploy
         uses: Azure/static-web-apps-deploy@v1
         with:
           azure_static_web_apps_api_token: ${{ secrets.AZURE_STATIC_WEB_APPS_API_TOKEN_GRAY_TREE_0C2E88D03 }}
           repo_token: ${{ secrets.GITHUB_TOKEN }} # Used for Github integrations (i.e. PR comments)
           action: "upload"
-          ###### Repository/Build Configurations - These values can be configured to match your app requirements. ######
-          # For more information regarding Static Web App workflow configurations, please visit: https://aka.ms/swaworkflowconfig
-          app_location: "Client" # App source code path
-          api_location: "" # Api source code path - optional
-          output_location: "wwwroot" # Built app content directory - optional
-          ###### End of Repository/Build Configurations ######
+
+          ###### Modified Repository/Build Configurations ######
+          # Point app_location to the FOLDER CONTAINING the final web assets (wwwroot inside our build output)
+          app_location: "${{ env.BUILD_OUTPUT_PATH }}/wwwroot"
+
+          # api_location: remains the same (optional Azure Functions path)
+          api_location: ""
+
+          # output_location: MUST BE EMPTY ("") because app_location points to the already built content.
+          # The deploy action should NOT try to build anything itself now.
+          output_location: ""
+          ###### End of Modified Configurations ######
 
   close_pull_request_job:
+    # This job remains unchanged
     if: github.event_name == 'pull_request' && github.event.action == 'closed'
     runs-on: ubuntu-latest
     name: Close Pull Request Job
