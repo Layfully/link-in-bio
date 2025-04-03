@@ -36,7 +36,7 @@ jobs:
         uses: actions/setup-dotnet@v3
         with:
           # --- IMPORTANT: Change this to your project's target .NET version ---
-          dotnet-version: '7.0.x' # e.g., '6.0.x', '8.0.x'
+          dotnet-version: '9.0.x' # e.g., '6.0.x', '8.0.x'
 
       # Step 2: Build the Blazor App
       - name: Build Blazor Application
