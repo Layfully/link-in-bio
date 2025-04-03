@@ -18,8 +18,8 @@ jobs:
     # Define environment variables accessible to steps
     env:
       # Values to inject (using secrets) - Use names suitable for shell variable access
-      STORYBLOK_API_KEY_PUBLIC_VAL: ${{ secrets.STORYBLOK_API_KEY_PUBLIC }}
-      STORYBLOK_API_KEY_PREVIEW_VAL: ${{ secrets.STORYBLOK_API_KEY_PREVIEW }}
+      STORYBLOK_API_KEY_PUBLIC_VAL: 123123
+      STORYBLOK_API_KEY_PREVIEW_VAL: 123123
 
       # Configuration paths
       APP_SOURCE_PATH: "Client"       # Source code of your Blazor app
