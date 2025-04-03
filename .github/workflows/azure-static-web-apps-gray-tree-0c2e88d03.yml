@@ -1,122 +1,74 @@
-name: Azure Static Web Apps CI/CD
+name: Build and Deploy Client App
 
 on:
   push:
     branches:
-      - main
+      - main # Or your primary deployment branch
   pull_request:
-    types: [opened, synchronize, reopened, closed]
+    types: [opened, synchronize, reopened] # Runs on PR creation/updates, but not close
     branches:
-      - main
+      - main # Or your primary deployment branch
 
 jobs:
   build_and_deploy_job:
-    if: github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.action != 'closed')
+    # This job runs for pushes to main OR for open/updated PRs targeting main
+    if: github.event_name == 'push' || github.event.action != 'closed'
     runs-on: ubuntu-latest
     name: Build and Deploy Job
 
-    # Define environment variables accessible to steps
     env:
-      # Values to inject (using secrets) - Use names suitable for shell variable access
       STORYBLOK_API_KEY_PUBLIC_VAL: ${{ secrets.STORYBLOK_API_KEY_PUBLIC }}
       STORYBLOK_API_KEY_PREVIEW_VAL: ${{ secrets.STORYBLOK_API_KEY_PREVIEW }}
-
-      # Configuration paths
-      APP_SOURCE_PATH: "Client"       # Source code of your Blazor app
-      BUILD_OUTPUT_PATH: "./publish"  # Temporary directory for build artifacts
+      # Define the path relative to the repository root
+      APPSETTINGS_PATH: Client/wwwroot/appsettings.json
 
     steps:
-      - uses: actions/checkout@v3
+      - name: Checkout Repository
+        uses: actions/checkout@v3
         with:
           submodules: true
           lfs: false
 
-      # Step 1: Setup .NET SDK (Required for dotnet publish)
-      - name: Setup .NET SDK
-        uses: actions/setup-dotnet@v3
-        with:
-          # --- IMPORTANT: Change this to your project's target .NET version ---
-          dotnet-version: '9.0.x' # e.g., '6.0.x', '8.0.x'
-
-      # Step 2: Build the Blazor App
-      - name: Build Blazor Application
-        run: dotnet publish ${{ env.APP_SOURCE_PATH }} --configuration Release --output ${{ env.BUILD_OUTPUT_PATH }}
-        # This builds the app and places output in BUILD_OUTPUT_PATH (e.g., ./publish)
-
-      # Step 3: Replace Placeholders in appsettings.json within the build output
-      - name: Replace AppSettings Placeholders
+      - name: Inject Secrets into appsettings.json
+        # Modify the appsettings.json file in the checked-out code
+        # Ensure the APPSETTINGS_PATH environment variable above points to the correct file
         run: |
-          # The appsettings file is inside the wwwroot of the build output
-      
-          # The appsettings file is inside the wwwroot of the build output
-          APPSETTINGS_FILE="./publish/wwwroot/appsettings.json"
-          
-          echo "Target file for replacement: ${APPSETTINGS_FILE}"
-          
-          # Check if file exists before attempting replacement
-          if [ -f "$APPSETTINGS_FILE" ]; then
-            echo "Replacing placeholders..."
-            # Use sed; '|' is delimiter to avoid issues if keys have '/'
-            sed -i "s|__STORYBLOK_API_KEY_PUBLIC__|${STORYBLOK_API_KEY_PUBLIC_VAL}|g" $APPSETTINGS_FILE
-            sed -i "s|__STORYBLOK_API_KEY_PREVIEW__|${STORYBLOK_API_KEY_PREVIEW_VAL}|g" $APPSETTINGS_FILE
-            echo "Replacement complete."
-          
-            # ============================================================
-            # WARNING: UNSAFE DEBUGGING CODE STARTS HERE
-            # Remove this immediately after debugging. Exposing secrets is risky!
-            # Method: Insert a space between each character to try and bypass masking.
-            
-            echo "Attempting to display variable values (UNSAFE):"
-            
-            pub_key_unmasked=$(echo "${STORYBLOK_API_KEY_PUBLIC_VAL}" | sed 's/./& /g')
-            prev_key_unmasked=$(echo "${STORYBLOK_API_KEY_PREVIEW_VAL}" | sed 's/./& /g')
-            
-            echo "Public Key (spaced out): ${pub_key_unmasked}"
-            echo "Preview Key (spaced out): ${prev_key_unmasked}"
-            
-            # You can still try cat, but the values within the file might STILL be masked by GitHub Actions
-            echo "File content (may still be masked by GitHub Actions):"
-            cat $APPSETTINGS_FILE 
-            # WARNING: UNSAFE DEBUGGING CODE ENDS HERE
-            # ============================================================
-          
-          else
-            echo "ERROR: ${APPSETTINGS_FILE} not found!"
-            exit 1 # Fail the step if the file isn't found
+          echo "Injecting secrets into ${{ env.APPSETTINGS_PATH }}..."
+          if [ ! -f "${{ env.APPSETTINGS_PATH }}" ]; then
+            echo "Error: appsettings.json not found at ${{ env.APPSETTINGS_PATH }}"
+            exit 1
           fi
+          sed -i "s#__STORYBLOK_API_KEY_PUBLIC__#${STORYBLOK_API_KEY_PUBLIC_VAL}#g" "${{ env.APPSETTINGS_PATH }}"
+          sed -i "s#__STORYBLOK_API_KEY_PREVIEW__#${STORYBLOK_API_KEY_PREVIEW_VAL}#g" "${{ env.APPSETTINGS_PATH }}"
+          echo "Secrets injected."
 
-    
-
-      # Step 4: Deploy the MODIFIED build output
-      - name: Build And Deploy (using pre-built app)
+      - name: Build and Deploy to Azure Static Web Apps
         id: builddeploy
         uses: Azure/static-web-apps-deploy@v1
         with:
           azure_static_web_apps_api_token: ${{ secrets.AZURE_STATIC_WEB_APPS_API_TOKEN_GRAY_TREE_0C2E88D03 }}
-          repo_token: ${{ secrets.GITHUB_TOKEN }} # Used for Github integrations (i.e. PR comments)
+          repo_token: ${{ secrets.GITHUB_TOKEN }} # Required for GitHub integrations (like PR comments)
           action: "upload"
 
-          ###### Modified Repository/Build Configurations ######
-          # Point app_location to the FOLDER CONTAINING the final web assets (wwwroot inside our build output)
-          app_location: "${{ env.BUILD_OUTPUT_PATH }}/wwwroot"
-
-          # api_location: remains the same (optional Azure Functions path)
+          # --- App Configuration ---
+          # Location of your Blazor WASM source code project
+          app_location: "Client"
+          # Location of API source code (leave blank if none)
           api_location: ""
-
-          # output_location: MUST BE EMPTY ("") because app_location points to the already built content.
-          # The deploy action should NOT try to build anything itself now.
-          output_location: ""
-          ###### End of Modified Configurations ######
+          # Location of the build output directory relative to app_location.
+          # For Blazor WASM, the publish command often outputs to 'wwwroot' within a 'publish' or 'Release' folder.
+          # However, the SWA action is smart; often leaving this blank or as "wwwroot" works if it detects the Blazor project correctly.
+          # If deployment fails, you might need to explicitly build first and set this to the specific build output subfolder (e.g., "bin/Release/netstandard2.1/publish/wwwroot").
+          # For simplicity with the SWA build/deploy action, "wwwroot" is often sufficient if your appsettings.json is IN the project's wwwroot.
+          output_location: "wwwroot"
+          # --- End App Configuration ---
 
   close_pull_request_job:
-    # This job remains unchanged
+    # This job runs ONLY when a PR targeting main is closed
     if: github.event_name == 'pull_request' && github.event.action == 'closed'
     runs-on: ubuntu-latest
     name: Close Pull Request Job
     steps:
-      - name: Close Pull Request
-        id: closepullrequest
-        uses: Azure/static-web-apps-deploy@v1
-        with:
-          azure_static_web_apps_api_token: ${{ secrets.AZURE_STATIC_WEB_APPS_API_TOKEN_GRAY_TREE_0C2E88D03 }}
-          action: "close"
+      - name: Placeholder for PR Cleanup Logic
+        run: echo "PR closed. Azure SWA might automatically handle environment cleanup."
+        # Add steps here if custom cleanup is needed for PR environments
