@@ -13,6 +13,7 @@
   <ItemGroup>
     <PackageReference Include="Microsoft.Extensions.Http" VersionOverride="9.0.9" />
     <PackageReference Include="Microsoft.NET.ILLink.Tasks" />
+  <PackageReference Include="Microsoft.NET.Sdk.WebAssembly.Pack" />
     <ProjectReference Include="..\Storyblok\Storyblok.csproj" />
   </ItemGroup>
 </Project>
