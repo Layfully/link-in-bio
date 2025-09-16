@@ -3,8 +3,8 @@
     <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
   </PropertyGroup>
   <ItemGroup>
-    <PackageVersion Include="Microsoft.Extensions.Caching.Abstractions" Version="9.0.3" />
-    <PackageVersion Include="Microsoft.Extensions.Caching.Memory" Version="9.0.3" />
+    <PackageVersion Include="Microsoft.Extensions.Caching.Abstractions" Version="9.0.9" />
+    <PackageVersion Include="Microsoft.Extensions.Caching.Memory" Version="9.0.9" />
     <PackageVersion Include="Microsoft.Extensions.Options" Version="9.0.9" />
     <PackageVersion Include="Microsoft.Extensions.Http" Version="9.0.9" />
     <PackageVersion Include="Markdig" Version="0.42.0" />
