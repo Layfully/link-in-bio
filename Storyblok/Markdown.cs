@@ -17,7 +17,7 @@ public class Markdown
     {
         get
         {
-            MarkdownPipeline pipeline = new MarkdownPipelineBuilder().UseAdvancedExtensions().Build();
+            MarkdownPipeline pipeline = new MarkdownPipeline().UseAllExtensions();
 
             return Markdig.Markdown.ToHtml(Value ?? string.Empty, pipeline);
         }
