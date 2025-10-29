@@ -1,0 +1,7 @@
+<Solution>
+  <Folder Name="/SolutionFiles/">
+    <File Path="Directory.Packages.props" />
+  </Folder>
+  <Project Path="Client/Client.csproj" />
+  <Project Path="Storyblok/Storyblok.csproj" />
+</Solution>
