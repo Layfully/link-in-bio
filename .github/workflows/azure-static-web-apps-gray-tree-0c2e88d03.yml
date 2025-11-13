@@ -17,8 +17,7 @@ jobs:
     if: github.event_name == 'push' || github.event.action != 'closed'
     runs-on: ubuntu-latest
     name: Build and Deploy Job
-    
-   # Define environment variables accessible to steps
+
     env:
       STORYBLOK_API_KEY_PUBLIC_VAL: ${{ secrets.STORYBLOK_API_KEY_PUBLIC }}
       STORYBLOK_API_KEY_PREVIEW_VAL: ${{ secrets.STORYBLOK_API_KEY_PREVIEW }}
@@ -31,6 +30,11 @@ jobs:
           submodules: true
           lfs: false
 
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@v3
+        with:
+          dotnet-version: '10.0.x'
+
       - name: Inject Secrets into appsettings.json
         run: |
           echo "Injecting secrets into ${{ env.APPSETTINGS_PATH }}..."
@@ -41,27 +45,29 @@ jobs:
           sed -i "s#__STORYBLOK_API_KEY_PUBLIC__#${STORYBLOK_API_KEY_PUBLIC_VAL}#g" "${{ env.APPSETTINGS_PATH }}"
           sed -i "s#__STORYBLOK_API_KEY_PREVIEW__#${STORYBLOK_API_KEY_PREVIEW_VAL}#g" "${{ env.APPSETTINGS_PATH }}"
           echo "Secrets injected."
-
+      - name: Restore and publish Blazor WASM
+        working-directory: Client
+        run: |
+          dotnet restore
+          dotnet publish -c Release -o ./bin/Release/net10/publish
+      - name: Verify publish output
+        working-directory: Client/bin/Release/net10/publish/wwwroot
+        run: |
+          echo "Listing published wwwroot files:"
+          ls -la
+          echo "Check index.html exists:"
+          test -f index.html && echo "index.html FOUND" || (echo "index.html MISSING" && exit 1)
       - name: Build and Deploy to Azure Static Web Apps
         id: builddeploy
-        uses: Azure/static-web-apps-deploy@v1
+        uses: Azure/static-web-apps-deploy@latest
         with:
           azure_static_web_apps_api_token: ${{ secrets.AZURE_STATIC_WEB_APPS_API_TOKEN_GRAY_TREE_0C2E88D03 }}
-          repo_token: ${{ secrets.GITHUB_TOKEN }} # Required for GitHub integrations (like PR comments)
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
           action: "upload"
-
-          # --- App Configuration ---
-          # Location of your Blazor WASM source code project
-          app_location: "Client"
-          # Location of API source code (leave blank if none)
+          app_location: "Client/bin/Release/net10/publish/wwwroot"
           api_location: ""
-          # Location of the build output directory relative to app_location.
-          # For Blazor WASM, the publish command often outputs to 'wwwroot' within a 'publish' or 'Release' folder.
-          # However, the SWA action is smart; often leaving this blank or as "wwwroot" works if it detects the Blazor project correctly.
-          # If deployment fails, you might need to explicitly build first and set this to the specific build output subfolder (e.g., "bin/Release/netstandard2.1/publish/wwwroot").
-          # For simplicity with the SWA build/deploy action, "wwwroot" is often sufficient if your appsettings.json is IN the project's wwwroot.
-          output_location: "wwwroot"
-          # --- End App Configuration ---
+          output_location: "" 
+          skip_app_build: 'true'
 
   close_pull_request_job:
     if: github.event_name == 'pull_request' && github.event.action == 'closed'
