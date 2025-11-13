@@ -45,6 +45,10 @@ jobs:
           sed -i "s#__STORYBLOK_API_KEY_PUBLIC__#${STORYBLOK_API_KEY_PUBLIC_VAL}#g" "${{ env.APPSETTINGS_PATH }}"
           sed -i "s#__STORYBLOK_API_KEY_PREVIEW__#${STORYBLOK_API_KEY_PREVIEW_VAL}#g" "${{ env.APPSETTINGS_PATH }}"
           echo "Secrets injected."
+      
+      - name: Install wasm-tools workload
+        run: dotnet workload install wasm-tools
+        
       - name: Restore and publish Blazor WASM
         working-directory: Client
         run: |
@@ -76,3 +80,4 @@ jobs:
     steps:
       - name: Placeholder for PR Cleanup Logic
         run: echo "PR closed. Azure SWA might automatically handle environment cleanup."
+
