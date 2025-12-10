@@ -1,6 +1,6 @@
 # link-in-bio
 
-Welcome to the Instagram Profile Hub, a versatile project designed to showcase your profiles seamlessly across various platforms. Built with the power of .NET 9 and utilizing the dynamic capabilities of Blazor on the frontend, this project offers a sleek and responsive user interface.
+Welcome to the Instagram Profile Hub, a versatile project designed to showcase your profiles seamlessly across various platforms. Built with the power of .NET 10 and utilizing the dynamic capabilities of Blazor on the frontend, this project offers a sleek and responsive user interface.
 
 # Key Features:
 
