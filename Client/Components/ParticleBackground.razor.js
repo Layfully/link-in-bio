@@ -1,6 +1,6 @@
 // The particle background behind the pages (tsParticles slim, loaded in index.html).
 
-import { whenLoaded } from '../js/cdn-scripts.js';
+import { whenLoaded } from '../js/deferred-scripts.js';
 
 // The same look as the earlier particles.js setup: 40 small white dots with faint links, pushed away on hover, more on click.
 // With reduced motion the dots stand still and don't react to the pointer: the same picture, without movement.

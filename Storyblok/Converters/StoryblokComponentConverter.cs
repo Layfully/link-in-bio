@@ -1,64 +1,46 @@
-﻿using Storyblok.Client;
-using System.Text.Json;
+﻿using System.Text.Json;
 using System.Text.Json.Serialization;
 
 namespace Storyblok.Converters;
 
-public class StoryblokComponentConverter : JsonConverter<StoryblokComponent>
+/// <summary>
+/// Reads a Storyblok block into the class registered for its <c>component</c> name.
+/// System.Text.Json's own polymorphism can't do this: it needs the type name as the object's first property and the
+/// derived classes declared on the base class, while Storyblok puts <c>component</c> anywhere and the classes live in the app.
+/// </summary>
+internal sealed class StoryblokComponentConverter(StoryblokComponentTypes componentTypes) : JsonConverter<StoryblokComponent>
 {
     public override StoryblokComponent Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
     {
-        // performance is probably abysmal, but System.Text.Json does not support polymorphic deserialization very well
-        // https://github.com/dotnet/corefx/issues/38650
         using JsonDocument document = JsonDocument.ParseValue(ref reader);
-        if (document.RootElement.TryGetProperty("component", out var componentElement))
+        JsonElement block = document.RootElement;
+
+        if (block.ValueKind != JsonValueKind.Object)
         {
-            string? componentName = componentElement.GetString();
-
-            if (!string.IsNullOrWhiteSpace(componentName))
-            {
-                IDictionary<string, StoryblokMappings.Mapping> componentMappings = StoryblokMappings.Mappings;
-
-                if (componentMappings.TryGetValue(componentName, out StoryblokMappings.Mapping? value))
-                {
-                    var mapping = value;
-
-                    string rawText = document.RootElement.GetRawText();
-
-                    try
-                    {
-                        if (JsonSerializer.Deserialize(rawText, mapping.Type, options) is not StoryblokComponent component)
-                        {
-                            throw new Exception($"Unable to serialize {rawText}");
-                        }
-
-                        // we don't want the "editable" property set at all, when we're not in editor
-                        // this makes it easier for the client, so he does not have to check if in the editor on each component, he just has to render the "editable" stuff into it
-                        if (!StoryblokBaseClient.IsInEditor)
-                        {
-                            component.Editable = null;
-                        }
-
-                        component.IsInEditor = StoryblokBaseClient.IsInEditor;
-
-                        return component;
-                    }
-                    catch (JsonException ex)
-                    {
-                        throw new Exception($"Unable to deserialize ({ex.Message}): {rawText}", ex);
-                    }
-                }
-            }
+            throw new JsonException($"A Storyblok component must be a JSON object, not {block.ValueKind}.");
         }
 
-        // don't call JsonSerializer.Deserizalize, because we'll get a stack overlow
+        string? name = StringProperty(block, "component");
+
+        if (name is not null && componentTypes.TryGetType(name, out Type? type))
+        {
+            // This converter only handles StoryblokComponent itself, never a class derived from it, so the registered
+            // class is read with the normal property mapping instead of coming back here.
+            return block.Deserialize(type, options) as StoryblokComponent
+                ?? throw new JsonException($"The Storyblok component \"{name}\" could not be read into {type}.");
+        }
+
+        // A block the app has no class for, such as one added in Storyblok before the site knows it. Pages pick their
+        // blocks by type, so it is skipped rather than failing the whole story.
         return new StoryblokComponent
         {
-            Uuid = document.RootElement.GetProperty("_uid").GetGuid(),
-            Component = document.RootElement.GetProperty("component").GetString() ?? string.Empty,
-            IsInEditor = StoryblokBaseClient.IsInEditor
+            Uuid = Guid.TryParse(StringProperty(block, "_uid"), out Guid uuid) ? uuid : Guid.Empty,
+            Component = name ?? string.Empty,
         };
     }
 
-    public override void Write(Utf8JsonWriter writer, StoryblokComponent value, JsonSerializerOptions options) => throw new NotImplementedException();
+    public override void Write(Utf8JsonWriter writer, StoryblokComponent value, JsonSerializerOptions options) => throw new NotSupportedException();
+
+    private static string? StringProperty(JsonElement element, string name) =>
+        element.TryGetProperty(name, out JsonElement value) && value.ValueKind == JsonValueKind.String ? value.GetString() : null;
 }

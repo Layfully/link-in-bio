@@ -1,18 +1,8 @@
 ﻿namespace Storyblok.Attributes;
 
-[AttributeUsage(AttributeTargets.Class)]
-public class StoryblokComponentAttribute : Attribute
+/// <summary>Marks the class a Storyblok component is read into, by the component's technical name.</summary>
+[AttributeUsage(AttributeTargets.Class, Inherited = false)]
+public sealed class StoryblokComponentAttribute(string name) : Attribute
 {
-    public string Name { get; }
-
-    /// <summary>
-    /// If this component is detected as the "root" of a story, this is the view that will be returned by the middleware.
-    /// </summary>
-    public string? View { get; set; }
-
-    public StoryblokComponentAttribute(string name, string? view = null)
-    {
-        Name = name;
-        View = view;
-    }
+    public string Name { get; } = name;
 }

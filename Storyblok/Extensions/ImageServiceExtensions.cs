@@ -19,33 +19,11 @@ public static partial class ImageServiceExtensions
             : image.Url;
     }
 
-    public static string? ResizeByHeight(this IImageService image, int newHeight)
-    {
-        return image.IsSupported()
-            ? image.Url + $"/m/0x{newHeight}"
-            : image.Url;
-    }
-
     public static string? Resize(this IImageService image, int newWidth, int newHeight, bool smart = true)
     {
         return image.IsSupported()
             ? image.Url + $"/m/{newWidth}x{newHeight}{(smart ? "/smart" : "")}"
             : image.Url;
-    }
-
-    public static string? FitIn(this IImageService image, int newWidth, int newHeight, string? fillWithColor = null)
-    {
-        if (!image.IsSupported())
-        {
-            return image.Url;
-        }
-
-        if (!string.IsNullOrWhiteSpace(fillWithColor))
-        {
-            return $"/m/fit-in/{newWidth}x{newHeight}/filters:fill({fillWithColor})";
-        }
-
-        return $"/m/fit-in/{newWidth}x{newHeight}/filters:fill(transparent):format(png)";
     }
 
     public static bool IsSupported(this IImageService image)

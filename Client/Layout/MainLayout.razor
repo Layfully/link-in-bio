@@ -19,9 +19,12 @@
                 </Actions>
             </Notice>
         </main>
-        <ParticleBackground />
     </ErrorContent>
 </ErrorBoundary>
+
+@* One background for the whole visit: it keeps running across navigation instead of restarting with every page,
+   and stays behind the error message too. *@
+<ParticleBackground />
 
 @code {
     private ErrorBoundary? _errorBoundary;

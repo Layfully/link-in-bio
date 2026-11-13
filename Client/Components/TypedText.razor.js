@@ -3,7 +3,7 @@
 // "^" followed by digits pauses for that many milliseconds, and text in backticks appears at once; both markers vanish.
 // Only the animated line is affected; the screen reader copy shows the tagline as written.
 
-import { whenLoaded } from '../js/cdn-scripts.js';
+import { whenLoaded } from '../js/deferred-scripts.js';
 
 const TYPED_OPTIONS = {
     typeSpeed: 50,
