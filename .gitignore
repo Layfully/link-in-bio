@@ -396,3 +396,12 @@ FodyWeavers.xsd
 
 # JetBrains Rider
 *.sln.iml
+
+# Local Storyblok tokens for the dev server
+Client/wwwroot/appsettings.Development.json
+
+# Personal Claude Code settings (the shared .claude/settings.json is committed)
+.claude/settings.local.json
+
+# Environment files with secrets
+*.env

@@ -1,0 +1,71 @@
+<Project>
+  <!--
+    The build writes an import map into index.html as an inline script. Its content lists fingerprinted file names, so it
+    changes with every build. The Content Security Policy in staticwebapp.config.json allows exactly that script by its
+    SHA-256 hash; this step computes the hash after each publish and writes the published config with it.
+  -->
+  <UsingTask TaskName="SetImportMapCspHash" TaskFactory="RoslynCodeTaskFactory" AssemblyFile="$(MSBuildToolsPath)\Microsoft.Build.Tasks.Core.dll">
+    <ParameterGroup>
+      <IndexHtml ParameterType="System.String" Required="true" />
+      <SourceConfig ParameterType="System.String" Required="true" />
+      <OutputConfig ParameterType="System.String" Required="true" />
+    </ParameterGroup>
+    <Task>
+      <Using Namespace="System.IO" />
+      <Using Namespace="System.Security.Cryptography" />
+      <Using Namespace="System.Text" />
+      <Using Namespace="System.Text.RegularExpressions" />
+      <Code Type="Fragment" Language="cs"><![CDATA[
+        const string Placeholder = "'sha256-IMPORTMAP-HASH-SET-AT-PUBLISH'";
+
+        string html = File.ReadAllText(IndexHtml);
+        Match importMap = Regex.Match(html, "<script type=\"importmap\">(.*?)</script>", RegexOptions.Singleline);
+        if (!importMap.Success)
+        {
+            Log.LogError("No import map found in {0}; the Content Security Policy hash can't be computed.", IndexHtml);
+            return false;
+        }
+
+        // Browsers hash the script text after the HTML parser has turned every CR LF and lone CR into LF,
+        // so the file's Windows line endings must be normalized the same way first.
+        string scriptText = importMap.Groups[1].Value.Replace("\r\n", "\n").Replace("\r", "\n");
+
+        // Inline tasks compile against .NET Standard, which has no SHA256.HashData.
+        string hash;
+        using (SHA256 sha = SHA256.Create())
+        {
+            hash = Convert.ToBase64String(sha.ComputeHash(Encoding.UTF8.GetBytes(scriptText)));
+        }
+
+        // Always start from the project's config, which holds the placeholder, so republishing never depends on what an
+        // earlier publish left behind. Only the placeholder is replaced; any other hash in the policy stays as it is.
+        string config = File.ReadAllText(SourceConfig);
+        if (!config.Contains(Placeholder))
+        {
+            Log.LogError("The Content Security Policy in {0} has no {1} source to fill in.", SourceConfig, Placeholder);
+            return false;
+        }
+
+        File.WriteAllText(OutputConfig, config.Replace(Placeholder, "'sha256-" + hash + "'"));
+
+        // Publish compresses every static file, this config included, before this step runs. Those copies still hold the
+        // placeholder and a config is never served compressed, so they are removed rather than left with a wrong policy.
+        foreach (string compressed in new[] { OutputConfig + ".br", OutputConfig + ".gz" })
+        {
+            if (File.Exists(compressed))
+            {
+                File.Delete(compressed);
+            }
+        }
+
+        Log.LogMessage(MessageImportance.High, "Content Security Policy: allowed the import map with sha256-{0}", hash);
+      ]]></Code>
+    </Task>
+  </UsingTask>
+
+  <Target Name="SetImportMapCspHash" AfterTargets="Publish">
+    <SetImportMapCspHash IndexHtml="$(PublishDir)wwwroot/index.html"
+                         SourceConfig="$(MSBuildProjectDirectory)/wwwroot/staticwebapp.config.json"
+                         OutputConfig="$(PublishDir)wwwroot/staticwebapp.config.json" />
+  </Target>
+</Project>

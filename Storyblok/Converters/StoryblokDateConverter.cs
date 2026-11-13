@@ -15,7 +15,7 @@ public class StoryblokDateConverter : JsonConverter<DateTime>
             return parsedDate;
         }
 
-        if (DateTime.TryParse(@string, out parsedDate))
+        if (DateTime.TryParse(@string, CultureInfo.InvariantCulture, DateTimeStyles.None, out parsedDate))
         {
             return parsedDate;
         }
@@ -36,7 +36,7 @@ public class StoryblokNullableDateConverter : JsonConverter<DateTime?>
             return parsedDate;
         }
 
-        if (DateTime.TryParse(@string, out parsedDate))
+        if (DateTime.TryParse(@string, CultureInfo.InvariantCulture, DateTimeStyles.None, out parsedDate))
         {
             return parsedDate;
         }

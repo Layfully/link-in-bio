@@ -1,0 +1,31 @@
+@implements IAsyncDisposable
+@inject IJSRuntime Js
+@inject ILogger<ParticleBackground> Logger
+
+@* The particle background behind the page's content. The content's fade-in is pure CSS (the reveal utility). *@
+<div @ref="_container" id="@_containerId" aria-hidden="true" class="fixed inset-0 z-10"></div>
+
+@code {
+    // tsParticles tracks its running backgrounds by id and replaces the one with the same id on a new load.
+    // During navigation the old page's background is still running when the new one starts, so each needs its own id.
+    private readonly string _containerId = $"particles-{Guid.NewGuid():N}";
+    private ElementReference _container;
+    private ParticleBackgroundInterop? _interop;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            _interop = new ParticleBackgroundInterop(Js, Logger);
+            await _interop.StartParticlesAsync(_container);
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_interop is not null)
+        {
+            await _interop.DisposeAsync();
+        }
+    }
+}

@@ -91,4 +91,8 @@ public class StoryblokStoryContainer
 {
     [JsonPropertyName("story")]
     public StoryblokStory Story { get; set; } = new();
+
+    /// <summary>The cache version Storyblok returned with this response. It is passed back as <c>cv</c> on later requests.</summary>
+    [JsonPropertyName("cv")]
+    public long CacheVersion { get; set; }
 }

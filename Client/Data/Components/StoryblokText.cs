@@ -5,7 +5,7 @@ using System.Text.Json.Serialization;
 namespace Client.Data.Components;
 
 [StoryblokComponent("text")]
-public class StoryblokText : StoryblokComponent
+public sealed class StoryblokText : StoryblokComponent
 {
     [JsonPropertyName("text")]
     public string? Text { get; set; }

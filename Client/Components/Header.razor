@@ -1,16 +1,24 @@
-﻿@using Client.Data.Components
+﻿@using Storyblok.Extensions
 
-<header class="flex flex-col items-center z-20 translate-y-12 opacity-0 transition-all translate-y-12 ease-out duration-1000" data-replace="{ 'translate-y-12': 'translate-y-0', 'opacity-0': 'opacity-100' }">
-    <div class="relative">
-        <div class="absolute top-0 left-0 w-32 h-32 p-1 ring-4 rounded-full ring-purple-600 dark:ring-purple-600 animate-pulse"></div>
-        <img class="w-32 h-32 p-1 object-cover object-bottom rounded-full" src="@Model?.Profile?.Url" alt="@Model?.Profile?.Alt">
-    </div>
-    <a href="@Model?.ProfileLink?.Url" class="mt-6 bg-purple-100 text-purple-800 text-lg font-bold me-2 px-4 py-0.5 rounded-full ring-2 ring-purple-700 transition-transform duration-200 transform hover:scale-105">@Model?.ProfileLink?.Label</a>
+<header class="flex flex-col items-center z-20 reveal">
+    @* Each part renders only when Storyblok has its data, so a header without a photo or link has no empty shapes. *@
+    @if (Model?.Profile is { Url.Length: > 0 } profile)
+    {
+        <div class="relative">
+            <div class="absolute inset-0 ring-4 rounded-full ring-purple-600 animate-pulse motion-reduce:animate-none" aria-hidden="true"></div>
+            @* Shown at 128 px; Storyblok's image service delivers 256 x 384 (2x for sharp screens, the photo's 2:3 ratio) instead of the original. *@
+            <img class="w-32 h-32 p-1 object-cover object-bottom rounded-full" src="@profile.Resize(256, 384, smart: false)" width="128" height="128"
+                 alt="@(string.IsNullOrWhiteSpace(profile.Alt) ? "Profile picture" : profile.Alt)" fetchpriority="high">
+        </div>
+    }
+    @if (Model?.ProfileLink is { Url.Length: > 0, Label.Length: > 0 } profileLink)
+    {
+        <a href="@profileLink.Url" rel="me" class="mt-6 bg-purple-100 text-purple-800 text-lg font-bold px-4 py-0.5 rounded-full ring-2 ring-purple-700 transition-transform duration-200 motion-safe:hover:scale-105">@profileLink.Label</a>
+    }
     <TypedText Model="@Model?.TypedTexts" />
 </header>
 
 @code {
-
     [Parameter]
     public StoryblokHeader? Model { get; set; }
 }

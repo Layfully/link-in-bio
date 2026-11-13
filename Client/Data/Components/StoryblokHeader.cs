@@ -5,16 +5,16 @@ using System.Text.Json.Serialization;
 namespace Client.Data.Components;
 
 [StoryblokComponent("header")]
-public class StoryblokHeader : StoryblokComponent
+public sealed class StoryblokHeader : StoryblokComponent
 {
     [JsonPropertyName("profile")]
     public StoryblokAsset? Profile { get; set; }
 
     [JsonPropertyName("header_link")]
-    public List<StoryblokLink>? Links { get; set; }
+    public IReadOnlyList<StoryblokLink>? Links { get; set; }
 
     [JsonPropertyName("typed_texts")]
-    public List<StoryblokText>? TypedTexts { get; set; }
+    public IReadOnlyList<StoryblokText>? TypedTexts { get; set; }
 
     public StoryblokLink? ProfileLink => Links?.FirstOrDefault();
 }

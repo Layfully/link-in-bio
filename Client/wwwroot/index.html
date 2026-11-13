@@ -1,48 +1,109 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" class="bg-gray-900">
     <head>
-        <script async src="https://www.googletagmanager.com/gtag/js?id=G-BCKR10P1MJ"></script>
-        <script>
-            window.dataLayer = window.dataLayer || [];
-            function gtag() { dataLayer.push(arguments); }
-            gtag('js', new Date());
-    
-            gtag('config', 'G-BCKR10P1MJ');
-        </script>
         <meta charset="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1.0" />
         <title>Adrian Gaborek - Links</title>
+        <meta name="description"
+            content="Adrian Gaborek, computer science student and developer. Find me on GitHub, LinkedIn, Facebook, Instagram and my portfolio." />
+        <meta name="theme-color" content="#111827" />
+        <meta name="color-scheme" content="dark" />
+        <link rel="canonical" href="https://adriangaborek.dev/" />
+
+        <meta property="og:type" content="website" />
+        <meta property="og:url" content="https://adriangaborek.dev/" />
+        <meta property="og:title" content="Adrian Gaborek - Links" />
+        <meta property="og:description"
+            content="Computer science student and developer. Find me on GitHub, LinkedIn, Facebook, Instagram and my portfolio." />
+        <meta property="og:image" content="https://a.storyblok.com/f/268473/608x912/b7730a2cf6/profile.jpg/m/600x600/smart" />
+        <meta property="og:image:width" content="600" />
+        <meta property="og:image:height" content="600" />
+        <meta property="og:image:alt" content="Profile picture of Adrian Gaborek" />
+        <meta name="twitter:card" content="summary" />
+
+        <script type="application/ld+json">
+            {
+                "@context": "https://schema.org",
+                "@type": "ProfilePage",
+                "url": "https://adriangaborek.dev/",
+                "mainEntity": {
+                    "@type": "Person",
+                    "name": "Adrian Gaborek",
+                    "alternateName": "adrian.gaborek",
+                    "url": "https://adriangaborek.dev/",
+                    "image": "https://a.storyblok.com/f/268473/608x912/b7730a2cf6/profile.jpg/m/600x600/smart",
+                    "description": "Computer science student and developer.",
+                    "sameAs": [
+                        "https://www.instagram.com/adrian.gaborek/",
+                        "https://github.com/Layfully",
+                        "https://www.facebook.com/adrian.gaborek",
+                        "https://www.linkedin.com/in/adrian-gaborek/",
+                        "https://portfolio.adriangaborek.dev"
+                    ]
+                }
+            }
+        </script>
+
         <base href="/" />
+        <link rel="preconnect" href="https://api.storyblok.com" crossorigin />
+        <link rel="preconnect" href="https://a.storyblok.com" />
         <link rel="preload" id="webassembly" />
         <link rel="stylesheet" href="css/app.css" />
-        <link rel="stylesheet" href="css/blazor.css" />
-        <link rel="icon" type="image/png" href="favicon.png" />
-        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/7.0.1/css/all.min.css" integrity="sha512-2SwdPD6INVrV/lHTZbO2nodKhrnDdJK9/kg2XD1r9uGqPo1cUbujc+IYdlYdEErWNu69gVcYgdxlmVmzTWnetw==" crossorigin="anonymous" referrerpolicy="no-referrer" />
-        <script defer src="https://cdn.jsdelivr.net/particles.js/2.0.0/particles.min.js"></script>
+        <link rel="icon" type="image/png" sizes="32x32" href="favicon.png" />
+        <link rel="icon" type="image/svg+xml" href="favicon.svg" />
+        <link rel="apple-touch-icon" href="icons/icon-180.png" />
+        <link rel="manifest" href="site.webmanifest" />
+        <!-- Icons are only needed once the app has rendered: the stylesheet downloads early without blocking the first paint, and js/deferred-styles.js applies it. -->
+        <link rel="preload" as="style" data-deferred-style href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/7.3.1/css/all.min.css"
+            integrity="sha512-QeR2VH+lsBE5LSAe1Q5EnTBbe7XTBubt8dG93Y7gidSgdMCr8nVqKcfKAMyN96SV8KDbZVTDXChatu5G2KQGzg=="
+            crossorigin="anonymous" referrerpolicy="no-referrer" />
+        <script defer src="js/deferred-styles.js"></script>
+        <script defer src="https://cdn.jsdelivr.net/npm/@tsparticles/slim@4.5.0/tsparticles.slim.bundle.min.js"></script>
         <script defer src="https://unpkg.com/typed.js@2.1.0/dist/typed.umd.js"></script>
         <script type="importmap"></script>
     </head>
     <body>
+        <noscript>
+            <div
+                class="fixed inset-0 z-50 flex flex-col items-center justify-center gap-y-4 bg-gray-900 px-8 text-center text-white">
+                <p class="text-2xl font-bold">This page needs JavaScript</p>
+                <p class="text-neutral-400">Please enable JavaScript in your browser and reload to see the links.</p>
+            </div>
+        </noscript>
+
         <div id="app">
-            <svg class="loading-progress">
-                <circle r="40%" cx="50%" cy="50%" />
-                <circle r="40%" cx="50%" cy="50%" />
+            <svg class="relative mx-auto mt-[35vh] mb-4 block h-32 w-32">
+                <circle r="40%" cx="50%" cy="50%" class="origin-center -rotate-90 fill-none stroke-gray-800 [stroke-width:0.5rem]" />
+                <circle r="40%" cx="50%" cy="50%" class="origin-center -rotate-90 fill-none stroke-purple-600 [stroke-width:0.5rem] [stroke-linecap:round] [stroke-dasharray:calc(3.141*var(--blazor-load-percentage,0%)*0.8),500%] transition-[stroke-dasharray] duration-50 ease-in-out drop-shadow-[0_0_6px_rgb(147_51_234/0.6)]" />
             </svg>
-            <div class="loading-progress-text"></div>
+            <div class="absolute inset-x-0 top-[calc(35vh+3.25rem)] text-center font-bold text-white after:content-[var(--blazor-load-percentage-text,'Loading')]"></div>
         </div>
-        
-        <div id="blazor-error-ui">
+
+        <div id="analytics-consent" hidden class="fixed inset-x-0 bottom-0 z-50 flex justify-center px-4 pb-4">
+            <div class="flex w-full max-w-xl flex-col gap-3 rounded-lg bg-gray-800 p-4 text-sm text-neutral-300 shadow-lg ring-1 ring-purple-600 sm:flex-row sm:items-center"
+                role="dialog" aria-label="Analytics consent">
+                <p class="flex-1">May this site use Google Analytics cookies to count visits? Nothing is sent to Google unless
+                    you allow it.</p>
+                <div class="flex justify-end gap-2">
+                    <button type="button" data-consent="denied"
+                        class="cursor-pointer rounded-lg px-3 py-1.5 font-bold text-neutral-300 hover:text-white">No
+                        thanks</button>
+                    <button type="button" data-consent="granted"
+                        class="cursor-pointer rounded-lg px-3 py-1.5 font-bold text-white ring-1 ring-purple-600 hover:ring-2 hover:ring-white">Allow</button>
+                </div>
+            </div>
+        </div>
+        <button type="button" id="analytics-settings"
+            class="fixed bottom-2 left-3 z-40 cursor-pointer text-xs text-neutral-500 hover:text-neutral-300">Analytics
+            settings</button>
+
+        <div id="blazor-error-ui" class="fixed inset-x-0 bottom-0 z-[1000] hidden bg-gray-800 py-2.5 pr-12 pl-5 text-white shadow-[0_-2px_0_var(--color-purple-600)]">
             An unhandled error has occurred.
-            <a href="" class="reload">Reload</a>
-            <a class="dismiss">🗙</a>
+            <a href="" class="reload ml-2 text-purple-400 underline">Reload</a>
+            <button type="button" class="dismiss absolute top-2 right-3 cursor-pointer" aria-label="Dismiss">🗙</button>
         </div>
-        <script src="//app.storyblok.com/f/storyblok-v2-latest.js"></script>
-        <script>
-            const storyblokInstance = new StoryblokBridge();
-            storyblokInstance.on(["change", "published"], () => {
-                window.location.reload();
-            });
-        </script>
+        <script src="js/analytics-consent.js"></script>
+        <script src="js/storyblok-bridge.js"></script>
         <script src="_framework/blazor.webassembly#[.{fingerprint}].js"></script>
     </body>
 </html>

@@ -1,0 +1,46 @@
+@* A centered message in the site's style: purple icon, headline, explanation and optional actions. *@
+<div class="z-20 flex flex-col items-center gap-y-4 px-8 text-center text-white">
+    <i class="fa-solid @Icon text-4xl text-purple-600" aria-hidden="true"></i>
+    @* Only the message is a live region, so screen readers announce it without reading out the buttons as well. *@
+    <div class="flex flex-col items-center gap-y-4" role="@(Kind == NoticeKind.Problem ? "alert" : "status")">
+        @if (IsPageHeading)
+        {
+            <h1 class="text-2xl font-bold outline-hidden" tabindex="-1">@Title</h1>
+        }
+        else
+        {
+            <h2 class="text-2xl font-bold">@Title</h2>
+        }
+        <p class="text-neutral-400">@Text</p>
+    </div>
+    @if (Actions is not null)
+    {
+        <div class="flex flex-wrap justify-center gap-3">
+            @Actions
+        </div>
+    }
+</div>
+
+@code {
+    /// <summary>The Font Awesome icon class, such as <c>fa-cloud-bolt</c>.</summary>
+    [Parameter, EditorRequired]
+    public string Icon { get; set; } = string.Empty;
+
+    [Parameter, EditorRequired]
+    public string Title { get; set; } = string.Empty;
+
+    [Parameter, EditorRequired]
+    public string Text { get; set; } = string.Empty;
+
+    /// <summary>Buttons or links shown under the text, side by side and wrapping on narrow screens.</summary>
+    [Parameter]
+    public RenderFragment? Actions { get; set; }
+
+    /// <summary>True when the notice is the whole page, so its title is the page's h1 and receives focus after navigation.</summary>
+    [Parameter]
+    public bool IsPageHeading { get; set; }
+
+    /// <summary>A problem is announced immediately; information when the screen reader is idle.</summary>
+    [Parameter]
+    public NoticeKind Kind { get; set; } = NoticeKind.Problem;
+}

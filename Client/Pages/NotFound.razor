@@ -1,6 +1,19 @@
 ﻿@page "/not-found"
 @layout MainLayout
 
-<PageTitle>Not found</PageTitle>
-
-<p role="alert">Sorry, there's nothing at this address.</p>
+<PageTitle>Adrian Gaborek - Not found</PageTitle>
+<HeadContent>
+    <meta name="robots" content="noindex" />
+</HeadContent>
+<main class="flex flex-col items-center justify-center bg-gray-900 min-h-screen">
+    <div class="z-20 reveal">
+        <Notice Icon="fa-link-slash" Title="Page not found"
+                Text="There's nothing at this address. The link may be mistyped or the page may have moved."
+                IsPageHeading="true" Kind="NoticeKind.Information">
+            <Actions>
+                <a href="" class="action-button">Back to the links</a>
+            </Actions>
+        </Notice>
+    </div>
+</main>
+<ParticleBackground />

@@ -1,37 +1,74 @@
 ﻿@using Client.Data.Components
-
+@implements IAsyncDisposable
 @inject IJSRuntime Js
+@inject ILogger<TypedText> Logger
 
-<h1 id="typed-output" class="text-center text-2xl font-bold text-white h-32 flex items-center px-8 outline-none"></h1>
-
-<script>
-    window.setupTyped = (list) => {
-        var options = {
-            strings: list,
-            typeSpeed: 50,
-            backSpeed: 30,
-            backDelay: 1500,
-            startDelay: 500,
-            showCursor: false,
-            loop: true
-        };
-
-        var typed = new Typed("#typed-output", options);
-    }
-</script>
+@if (_texts.Length > 0)
+{
+    @* Screen readers get every tagline as its own paragraph; the animated line would only ever offer a half-typed fragment. *@
+    <div class="sr-only">
+        @foreach (string text in _texts)
+        {
+            <p>@text</p>
+        }
+    </div>
+    @* A fixed height, because the line is typed and deleted letter by letter and the header shouldn't move with it. *@
+    <p @ref="_output" class="text-center text-2xl font-bold text-white h-32 flex items-center px-8" aria-hidden="true"></p>
+}
 
 @code {
-
     [Parameter]
-    public List<StoryblokText>? Model { get; set; }
+    public IReadOnlyList<StoryblokText>? Model { get; set; }
 
-    protected override async Task OnParametersSetAsync()
+    private ElementReference _output;
+    private TypedTextInterop? _interop;
+    private IReadOnlyList<StoryblokText>? _textsSource;
+    private string[] _texts = [];
+    private bool _textsChanged;
+
+    // The header re-renders with the same list, so only a new list restarts the animation.
+    // Blank taglines are left out of both the animation and the screen reader copy.
+    protected override void OnParametersSet()
     {
-        if(Model is not null)
+        if (ReferenceEquals(Model, _textsSource))
         {
-            await Js.InvokeVoidAsync("setupTyped", Model.Select(e => e.Text).ToList());
+            return;
         }
 
-        await base.OnParametersSetAsync();
+        _textsSource = Model;
+        _texts = [.. (Model ?? []).Select(text => text.Text?.Trim()).OfType<string>().Where(text => text.Length > 0)];
+        _textsChanged = true;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!_textsChanged)
+        {
+            return;
+        }
+
+        _textsChanged = false;
+
+        if (_texts.Length == 0)
+        {
+            // The line is gone from the page; an animation started for earlier texts must not keep running.
+            if (_interop is not null)
+            {
+                await _interop.StopAsync();
+            }
+
+            return;
+        }
+
+        _interop ??= new TypedTextInterop(Js, Logger);
+        await _interop.StartAsync(_output, _texts);
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_interop is not null)
+        {
+            await _interop.DisposeAsync();
+        }
     }
 }

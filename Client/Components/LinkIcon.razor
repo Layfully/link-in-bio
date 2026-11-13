@@ -1,0 +1,15 @@
+@* The Font Awesome icon in front of a link label. Renders nothing without an icon class, so the label stays centred. *@
+@if (!string.IsNullOrWhiteSpace(CssClass))
+{
+    <i class="@CssClass mr-2 @(Animated ? "transition-transform ease-in-out duration-200 motion-safe:group-hover:scale-125 motion-safe:group-focus-visible:scale-125 motion-reduce:transition-none" : "")" aria-hidden="true"></i>
+}
+
+@code {
+    /// <summary>The Font Awesome classes from Storyblok, such as <c>fab fa-github</c>.</summary>
+    [Parameter]
+    public string? CssClass { get; set; }
+
+    /// <summary>Grows with its link on hover and keyboard focus.</summary>
+    [Parameter]
+    public bool Animated { get; set; }
+}

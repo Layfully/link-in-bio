@@ -1,71 +1,83 @@
-﻿@using Storyblok
-@using Storyblok.Client
-@using Client.Components
-@using Client.Data.Components
-@using Client.Data.Extensions
-
-@inject IJSRuntime Js
+﻿@implements IAsyncDisposable
 @inject StoryblokStoryClient StoryblokClient
 @page "/"
 
 <PageTitle>Adrian Gaborek - Links</PageTitle>
 <main class="flex flex-col items-center justify-center bg-gray-900 min-h-screen">
-    <Header Model="@_header" />
-    <LinkList Model="@_linkList" />
+    <h1 class="sr-only" tabindex="-1">Adrian Gaborek - Links</h1>
+    @switch (_state)
+    {
+        case Loaded loaded:
+            if (loaded.Header is not null)
+            {
+                <Header Model="@loaded.Header" />
+            }
+            if (loaded.Links is { Count: > 0 })
+            {
+                <LinkList Model="@loaded.Links" />
+            }
+            break;
+
+        case NothingPublished:
+            <Notice Icon="fa-circle-question" Title="Nothing here yet" Text="The links haven't been published yet. Please check back a little later." Kind="NoticeKind.Information" />
+            break;
+    }
+    <StoryblokStatus Status="@ContentStatus" Subject="links" Message="The links can't be loaded right now.">
+        <Placeholder>
+            <LinksSkeleton />
+        </Placeholder>
+    </StoryblokStatus>
 </main>
-<div id="particles-js" class="absolute top-0 left-0 w-full h-full z-10"></div>
-
-<script>
-    window.replaceData = () => {
-        var replacers = document.querySelectorAll('[data-replace]');
-
-        for (var i = 0; i < replacers.length; i++) {
-            let replaceClasses = JSON.parse(replacers[i].dataset.replace.replace(/'/g, '"'));
-            Object.keys(replaceClasses).forEach(function (key) {
-                replacers[i].classList.remove(key);
-                replacers[i].classList.add(replaceClasses[key]);
-            });
-        }
-    }
-
-    window.setupParticles = () => {
-        particlesJS('particles-js', {
-            particles: {
-                number: { value: 40, density: { enable: true, value_area: 800 } },
-                color: { value: '#ffffff' },
-                shape: { type: 'circle', stroke: { width: 0, color: '#4B5563' } },
-                opacity: { value: 0.2, random: false, anim: { enable: false, speed: 1, opacity_min: 0.1, sync: false } },
-                size: { value: 2, random: true, anim: { enable: false, speed: 20, size_min: 0.1, sync: false } },
-                line_linked: { enable: true, distance: 150, color: '#ffffff', opacity: 0.2, width: 1 },
-                move: { enable: true, speed: 4, direction: 'none', random: false, straight: false, out_mode: 'out', bounce: false, attract: { enable: false, rotateX: 600, rotateY: 1200 } }
-            },
-            interactivity: {
-                detect_on: 'canvas',
-                events: { onhover: { enable: true, mode: 'repulse' }, onclick: { enable: true, mode: 'push' }, resize: true },
-                modes: { grab: { distance: 200, line_linked: { opacity: 0.2 } }, bubble: { distance: 400, size: 40, duration: 2, opacity: 8, speed: 3 }, repulse: { distance: 100, duration: 0.4 }, push: { particles_nb: 4 }, remove: { particles_nb: 2 } }
-            },
-            retina_detect: true
-        });
-    }
-</script>
+<ParticleBackground />
 
 @code {
-    private StoryblokHeader? _header;
-    private List<StoryblokLink>? _linkList;
+    // The page is in exactly one of these states; each state carries only the data it needs.
+    private union PageState(Loading, Loaded, Unavailable, NothingPublished);
+    private sealed record Loading;
+    private sealed record Loaded(StoryblokHeader? Header, IReadOnlyList<StoryblokLink>? Links);
+    private sealed record Unavailable;
+    private sealed record NothingPublished;
+
+    private readonly CancellationTokenSource _cts = new();
+    private PageState _state = new Loading();
+
+    private ContentStatus ContentStatus => _state switch
+    {
+        Loading => ContentStatus.Loading,
+        Unavailable => ContentStatus.Unavailable,
+        _ => ContentStatus.Done,
+    };
 
     protected override async Task OnInitializedAsync()
     {
-        var story = await StoryblokClient.Story().WithSlug("/home").ResolveLinks(ResolveLinksType.None).Load<StoryblokPage>();
+        // Leaving the page cancels the request; Blazor ignores the resulting cancellation.
+        StoryLoadResult<StoryblokPage> result = await StoryblokClient.Story()
+            .WithSlug("/home")
+            .ResolveLinks(ResolveLinksType.None)
+            .TryLoad<StoryblokPage>(_cts.Token);
 
-        if (story?.Content?.Body is not null)
+        _state = result switch
         {
-            _header = story.Content.Body[0] as StoryblokHeader;
-            _linkList = story.Content.Body[1].ToList<StoryblokLink>();
-        }
+            StoryblokStory<StoryblokPage> story => FromBlocks(story.Content?.Body),
+            StoryNotFound => new NothingPublished(),
+            StoryblokUnavailable => new Unavailable(),
+            null => new Unavailable(),
+        };
+    }
 
-        await Js.InvokeVoidAsync("replaceData");
-        await Js.InvokeVoidAsync("setupParticles");
+    // Blocks are picked by type, so reordering or adding blocks in Storyblok can't break the page.
+    // A story with neither block counts as nothing published, instead of rendering an empty header.
+    private static PageState FromBlocks(StoryblokComponent[]? body)
+    {
+        StoryblokHeader? header = body?.OfType<StoryblokHeader>().FirstOrDefault();
+        IReadOnlyList<StoryblokLink>? links = body?.OfType<StoryblokList>().FirstOrDefault()?.EntriesOf<StoryblokLink>();
 
-        await base.OnInitializedAsync();
+        return header is null && links is not { Count: > 0 } ? new NothingPublished() : new Loaded(header, links);
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        await _cts.CancelAsync();
+        _cts.Dispose();
     }
 }

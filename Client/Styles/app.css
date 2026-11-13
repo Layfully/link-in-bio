@@ -1,3 +1,48 @@
-﻿@tailwind base;
-@tailwind components;
-@tailwind utilities;
+﻿@import "tailwindcss";
+
+@theme {
+    --animate-shimmer: shimmer 1.8s ease-in-out infinite;
+
+    @keyframes shimmer {
+        from { background-position: 100% 0; }
+        to { background-position: -100% 0; }
+    }
+}
+
+/* The outlined purple button used for actions such as "Try again" or "Back to the links". */
+@utility action-button {
+    @apply mt-2 px-4 py-2 rounded-lg font-bold text-white ring-1 ring-purple-600 transition-all ease-in-out duration-200 cursor-pointer hover:ring-2 hover:ring-white motion-safe:hover:scale-105;
+}
+
+/* Content that fades in and rises into place when it appears on the page. @starting-style needs no script, and
+   browsers without it simply show the content at once. With reduced motion it only fades. */
+@utility reveal {
+    transition-property: opacity, translate;
+    transition-duration: 1000ms;
+    transition-timing-function: var(--ease-out);
+
+    @starting-style {
+        opacity: 0;
+    }
+
+    @media (prefers-reduced-motion: no-preference) {
+        @starting-style {
+            translate: 0 calc(var(--spacing) * 12);
+        }
+    }
+}
+
+/* Placeholder surface for content that is still loading: dark gray with a faint purple sheen sweeping across. */
+@utility skeleton {
+    background-color: var(--color-gray-800);
+    background-image: linear-gradient(90deg,
+        var(--color-gray-800) 25%,
+        color-mix(in oklab, var(--color-purple-600) 22%, var(--color-gray-800)) 50%,
+        var(--color-gray-800) 75%);
+    background-size: 200% 100%;
+    animation: var(--animate-shimmer);
+
+    @media (prefers-reduced-motion: reduce) {
+        animation: none;
+    }
+}

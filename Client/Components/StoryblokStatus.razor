@@ -1,0 +1,101 @@
+@implements IDisposable
+@inject NavigationManager Navigation
+
+@* The screen reader's view of the loading hint, announced politely (role="status"). It stays on the page and gets its
+   text only after the first second: screen readers often skip a live region that arrives together with its text,
+   and a load that finishes within a second isn't worth announcing. *@
+<p class="sr-only" role="status">@(Status == ContentStatus.Loading && _secondsWaiting > 0 ? LoadingHint : null)</p>
+
+@if (Status == ContentStatus.Loading)
+{
+    @* The status line hangs below the placeholder without taking up layout space: the page centres its content
+       vertically, so a line that disappears on load would shift the real content compared with the placeholder.
+       It is hidden from screen readers, which hear the same text from the live region above. *@
+    <div class="relative z-20 flex w-full flex-col items-center">
+        @Placeholder
+        <p class="absolute inset-x-0 top-full mt-8 flex items-center justify-center gap-x-3 px-8 text-center text-sm text-neutral-400" aria-hidden="true">
+            <span class="inline-flex gap-x-1">
+                <span class="h-1.5 w-1.5 rounded-full bg-purple-600 animate-bounce motion-reduce:animate-none"></span>
+                <span class="h-1.5 w-1.5 rounded-full bg-purple-600 animate-bounce motion-reduce:animate-none [animation-delay:150ms]"></span>
+                <span class="h-1.5 w-1.5 rounded-full bg-purple-600 animate-bounce motion-reduce:animate-none [animation-delay:300ms]"></span>
+            </span>
+            @LoadingHint
+        </p>
+    </div>
+}
+else if (Status == ContentStatus.Unavailable)
+{
+    <Notice Icon="fa-cloud-bolt" Title="@Message" Text="The content service isn't responding at the moment. Please try again in a little while.">
+        <Actions>
+            <button type="button" class="action-button" @onclick="Retry">Try again</button>
+        </Actions>
+    </Notice>
+}
+
+@code {
+    /// <summary>Where the page's content is. While loading, a placeholder and hint; when unavailable, a notice; otherwise nothing.</summary>
+    [Parameter, EditorRequired]
+    public ContentStatus Status { get; set; }
+
+    /// <summary>What is being loaded, in the plural or with an article, such as "links" or "the certificate".</summary>
+    [Parameter]
+    public string Subject { get; set; } = "content";
+
+    /// <summary>The headline shown when the content is unavailable.</summary>
+    [Parameter]
+    public string Message { get; set; } = "This content can't be loaded right now.";
+
+    /// <summary>A placeholder in the shape of the content, shown while it loads.</summary>
+    [Parameter]
+    public RenderFragment? Placeholder { get; set; }
+
+    private PeriodicTimer? _waitingTimer;
+    private int _secondsWaiting;
+
+    // Loading usually takes well under a second; the hint only changes when it doesn't, so visitors know the page isn't stuck.
+    private string LoadingHint => _secondsWaiting switch
+    {
+        < 3 => $"Loading {Subject}…",
+        < 8 => "Still loading. The content service is a little slow right now.",
+        _ => "This is taking longer than usual. Hang tight, it's still trying.",
+    };
+
+    // Each load counts from zero. A page can load again without being recreated (another certificate, say).
+    protected override void OnParametersSet()
+    {
+        if (Status == ContentStatus.Loading)
+        {
+            if (_waitingTimer is null)
+            {
+                _secondsWaiting = 0;
+                _waitingTimer = new PeriodicTimer(TimeSpan.FromSeconds(1));
+                _ = CountWaitingSecondsAsync(_waitingTimer);
+            }
+        }
+        else
+        {
+            StopWaitingTimer();
+        }
+    }
+
+    // Ends on its own once the timer is disposed: WaitForNextTickAsync then returns false.
+    private async Task CountWaitingSecondsAsync(PeriodicTimer timer)
+    {
+        while (await timer.WaitForNextTickAsync())
+        {
+            _secondsWaiting++;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private void StopWaitingTimer()
+    {
+        _waitingTimer?.Dispose();
+        _waitingTimer = null;
+    }
+
+    // A full reload starts the app over, including the Storyblok client's cached state, rather than repeating one request.
+    private void Retry() => Navigation.NavigateTo(Navigation.Uri, forceLoad: true);
+
+    public void Dispose() => StopWaitingTimer();
+}

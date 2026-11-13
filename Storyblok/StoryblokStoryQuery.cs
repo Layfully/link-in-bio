@@ -48,14 +48,23 @@ public class StoryblokStoryQuery
         return this;
     }
 
-    public async Task<StoryblokStory<T>?> Load<T>() where T : StoryblokComponent
+    public async Task<StoryblokStory<T>?> Load<T>(CancellationToken cancellationToken = default) where T : StoryblokComponent
     {
-        return await _client.LoadStory<T>(_culture, _slug, _resolveLinks, _resolveAssets, _resolveRelations);
+        return await _client.LoadStory<T>(_culture, _slug, _resolveLinks, _resolveAssets, _resolveRelations, cancellationToken);
     }
 
-    public async Task<StoryblokStory?> Load()
+    /// <summary>
+    /// Loads the story like <see cref="Load{T}"/>, but reports a Storyblok outage as <see cref="StoryblokUnavailable"/> instead of throwing,
+    /// so a page can still render without its content.
+    /// </summary>
+    public Task<StoryLoadResult<T>> TryLoad<T>(CancellationToken cancellationToken = default) where T : StoryblokComponent
     {
-        return await _client.LoadStory(_culture, _slug, _resolveLinks, _resolveAssets, _resolveRelations);
+        return _client.TryLoadStory<T>(_culture, _slug, _resolveLinks, _resolveAssets, _resolveRelations, cancellationToken);
+    }
+
+    public async Task<StoryblokStory?> Load(CancellationToken cancellationToken = default)
+    {
+        return await _client.LoadStory(_culture, _slug, _resolveLinks, _resolveAssets, _resolveRelations, cancellationToken);
     }
 }
 
@@ -63,11 +72,6 @@ public enum ResolveLinksType
 {
     Url,
     Story,
+    Link,
     None
-}
-
-public enum ResolveAssetsType
-{
-    DontResolve,
-    Resolve
 }

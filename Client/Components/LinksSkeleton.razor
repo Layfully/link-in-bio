@@ -1,0 +1,29 @@
+@* Placeholder in the shape of the header and link list, shown while the links load. *@
+<div class="z-20 flex flex-col items-center w-full" aria-hidden="true">
+    <div class="relative w-32 h-32">
+        <div class="absolute inset-0 ring-4 rounded-full ring-purple-600 animate-pulse motion-reduce:animate-none"></div>
+        <div class="w-full h-full p-1">
+            <div class="w-full h-full rounded-full skeleton"></div>
+        </div>
+    </div>
+
+    <div class="mt-6 h-8 w-44 rounded-full ring-2 ring-purple-700/60 skeleton"></div>
+
+    <div class="h-32 flex items-center">
+        <div class="h-7 w-64 max-w-[70vw] rounded-md skeleton"></div>
+    </div>
+
+    <ul class="flex flex-col w-full gap-y-10">
+        @for (int i = 0; i < PlaceholderLinks; i++)
+        {
+            <li class="w-full flex justify-center">
+                <div class="w-4/5 sm:w-1/2 md:w-1/3 h-10 rounded-lg ring-1 ring-purple-600/50 skeleton"></div>
+            </li>
+        }
+    </ul>
+</div>
+
+@code {
+    // The live page currently has four links; the placeholder mirrors that so the layout doesn't jump.
+    private const int PlaceholderLinks = 4;
+}

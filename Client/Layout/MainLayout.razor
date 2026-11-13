@@ -1,3 +1,36 @@
 ﻿@inherits LayoutComponentBase
+@inject NavigationManager Navigation
 
-@Body
+@* Unexpected errors in a page show this styled message instead of Blazor's default error bar. ErrorBoundary logs the exception. *@
+<ErrorBoundary @ref="_errorBoundary">
+    <ChildContent>
+        @Body
+    </ChildContent>
+    <ErrorContent>
+        <main class="flex flex-col items-center justify-center bg-gray-900 min-h-screen">
+            <Notice Icon="fa-triangle-exclamation" Title="Something went wrong" Text="An unexpected error stopped this page. Reloading usually fixes it." IsPageHeading="true">
+                <Actions>
+                    <button type="button" class="action-button" @onclick="Reload">Reload the page</button>
+                    @* A page that fails every time can't be fixed by reloading, so offer a way to a page that works. *@
+                    @if (!IsHomePage)
+                    {
+                        <a href="" class="action-button">Back to the links</a>
+                    }
+                </Actions>
+            </Notice>
+        </main>
+        <ParticleBackground />
+    </ErrorContent>
+</ErrorBoundary>
+
+@code {
+    private ErrorBoundary? _errorBoundary;
+
+    // On the home page the link would only lead back to the failing page.
+    private bool IsHomePage => Navigation.ToBaseRelativePath(Navigation.Uri).Split('?', '#')[0].Length == 0;
+
+    // The layout receives new parameters on every navigation, so moving to another page clears a previous error.
+    protected override void OnParametersSet() => _errorBoundary?.Recover();
+
+    private void Reload() => Navigation.NavigateTo(Navigation.Uri, forceLoad: true);
+}

@@ -1,73 +1,112 @@
-﻿@using Storyblok
-@using Storyblok.Client
-@using Client.Data.Components
-
-@inject IJSRuntime Js
+﻿@using Storyblok.Extensions
+@implements IAsyncDisposable
 @inject StoryblokStoryClient StoryblokClient
+@inject NavigationManager Navigation
 @page "/Certificate/{name}"
 
-<PageTitle>Adrian Gaborek - Certificates</PageTitle>
+<PageTitle>Adrian Gaborek - @Title</PageTitle>
 <main class="flex flex-col items-center justify-center bg-gray-900 min-h-screen">
-    <section class="flex flex-col items-center z-20 translate-y-12 opacity-0 transition-all translate-y-12 ease-out duration-1000" data-replace="{ 'translate-y-12': 'translate-y-0', 'opacity-0': 'opacity-100' }">
-        <div class="relative">
-            <img class="m-auto w-10/12 sm:w-9/12 xl:w-1/2 p-1 object-cover object-bottom rounded-3xl" src="@Model?.Image?.Url" alt="@Model?.Image?.Alt">
-            <div class="absolute w-10/12 sm:w-9/12 xl:w-1/2 inset-0 m-auto p-1 ring-4 xl:ring-8 ring-purple-600 dark:ring-purple-600 animate-pulse rounded-3xl"></div>
-        </div>
-    </section>
+    <h1 class="sr-only" tabindex="-1">Adrian Gaborek - @Title</h1>
+    @if (_state is Loaded loaded)
+    {
+        @* Same box as CertificateSkeleton (width classes on the outermost element, ring as an overlay), so nothing moves
+           when the certificate replaces the placeholder. width/height let the browser reserve the image's space before it arrives. *@
+        <figure class="z-20 relative w-10/12 sm:w-9/12 xl:w-1/2 reveal">
+            <img class="block w-full h-auto p-1 rounded-3xl" src="@loaded.ImageUrl" width="@loaded.Width" height="@loaded.Height"
+                 alt="@(loaded.Alt ?? $"Certificate: {loaded.Title}")" fetchpriority="high">
+            <div class="absolute inset-0 ring-4 xl:ring-8 ring-purple-600 rounded-3xl animate-pulse motion-reduce:animate-none" aria-hidden="true"></div>
+        </figure>
+    }
+    <StoryblokStatus Status="@ContentStatus" Subject="the certificate"
+                     Message="The certificate can't be loaded right now.">
+        <Placeholder>
+            <CertificateSkeleton />
+        </Placeholder>
+    </StoryblokStatus>
 </main>
 
-<div id="particles-js" class="absolute top-0 left-0 w-full h-full z-10"></div>
-
-<script>
-    window.replaceData = () => {
-        var replacers = document.querySelectorAll('[data-replace]');
-
-        for (var i = 0; i < replacers.length; i++) {
-            let replaceClasses = JSON.parse(replacers[i].dataset.replace.replace(/'/g, '"'));
-            Object.keys(replaceClasses).forEach(function (key) {
-                replacers[i].classList.remove(key);
-                replacers[i].classList.add(replaceClasses[key]);
-            });
-        }
-    }
-
-    window.setupParticles = () => {
-        particlesJS('particles-js', {
-            particles: {
-                number: { value: 40, density: { enable: true, value_area: 800 } },
-                color: { value: '#ffffff' },
-                shape: { type: 'circle', stroke: { width: 0, color: '#4B5563' } },
-                opacity: { value: 0.2, random: false, anim: { enable: false, speed: 1, opacity_min: 0.1, sync: false } },
-                size: { value: 2, random: true, anim: { enable: false, speed: 20, size_min: 0.1, sync: false } },
-                line_linked: { enable: true, distance: 150, color: '#ffffff', opacity: 0.2, width: 1 },
-                move: { enable: true, speed: 4, direction: 'none', random: false, straight: false, out_mode: 'out', bounce: false, attract: { enable: false, rotateX: 600, rotateY: 1200 } }
-            },
-            interactivity: {
-                detect_on: 'canvas',
-                events: { onhover: { enable: true, mode: 'repulse' }, onclick: { enable: true, mode: 'push' }, resize: true },
-                modes: { grab: { distance: 200, line_linked: { opacity: 0.2 } }, bubble: { distance: 400, size: 40, duration: 2, opacity: 8, speed: 3 }, repulse: { distance: 100, duration: 0.4 }, push: { particles_nb: 4 }, remove: { particles_nb: 2 } }
-            },
-            retina_detect: true
-        });
-    }
-</script>
+<ParticleBackground />
 
 @code {
     [Parameter]
-    public string? Name { get; init; }
+    public string? Name { get; set; }
 
-    private StoryblokCertificate? Model { get; set; }
+    // The page is in exactly one of these states. Missing hands over to the app's not-found page.
+    private union PageState(Loading, Loaded, Unavailable, Missing);
+    private sealed record Loading;
+    private sealed record Loaded(string Title, string ImageUrl, string? Alt, int? Width, int? Height);
+    private sealed record Unavailable;
+    private sealed record Missing;
 
+    private PageState _state = new Loading();
+    private CancellationTokenSource? _cts;
+    private string? _loadedName;
 
-    protected override async Task OnInitializedAsync()
+    private ContentStatus ContentStatus => _state switch
     {
-        var certificate = await StoryblokClient.Story().WithSlug($"/certificates/{Name}").ResolveLinks(ResolveLinksType.None).Load<StoryblokCertificate>();
+        Loading => ContentStatus.Loading,
+        Unavailable => ContentStatus.Unavailable,
+        _ => ContentStatus.Done,
+    };
 
-        Model = certificate?.Content;
+    private string Title => _state is Loaded loaded ? loaded.Title : "Certificate";
 
-        await Js.InvokeVoidAsync("replaceData");
-        await Js.InvokeVoidAsync("setupParticles");
+    // Runs again when the address switches to another certificate without recreating the page.
+    protected override async Task OnParametersSetAsync()
+    {
+        if (Name == _loadedName)
+        {
+            return;
+        }
 
-        await base.OnInitializedAsync();
+        _loadedName = Name;
+
+        // A previous load still in flight belongs to the old certificate.
+        if (_cts is not null)
+        {
+            await _cts.CancelAsync();
+            _cts.Dispose();
+        }
+
+        _cts = new CancellationTokenSource();
+        CancellationToken cancellationToken = _cts.Token;
+        _state = new Loading();
+
+        // The name comes from the address, so it's escaped before it becomes part of the Storyblok request.
+        StoryLoadResult<StoryblokCertificate> result = await StoryblokClient.Story()
+            .WithSlug($"/certificates/{Uri.EscapeDataString(Name ?? string.Empty)}")
+            .ResolveLinks(ResolveLinksType.None)
+            .TryLoad<StoryblokCertificate>(cancellationToken);
+
+        if (cancellationToken.IsCancellationRequested)
+        {
+            return;
+        }
+
+        _state = result switch
+        {
+            // Shown at most about 640 px wide: 1280 px keeps it sharp without downloading the original scan.
+            StoryblokStory<StoryblokCertificate> story when story.Content?.Image is { Url.Length: > 0 } image
+                => new Loaded(story.Name ?? "Certificate", image.ResizeByWidth(1280) ?? image.Url, image.Alt, image.Dimensions()?.Width, image.Dimensions()?.Height),
+            StoryblokStory<StoryblokCertificate> => new Missing(), // published without an image
+            StoryNotFound => new Missing(),
+            StoryblokUnavailable => new Unavailable(),
+            null => new Unavailable(),
+        };
+
+        // No certificate (or nothing to show) under this name: show the app's not-found page in place, at the same address.
+        if (_state is Missing)
+        {
+            Navigation.NotFound();
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_cts is not null)
+        {
+            await _cts.CancelAsync();
+            _cts.Dispose();
+        }
     }
 }

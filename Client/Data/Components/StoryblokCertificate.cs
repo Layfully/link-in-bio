@@ -5,9 +5,8 @@ using System.Text.Json.Serialization;
 namespace Client.Data.Components;
 
 [StoryblokComponent("certificate")]
-public class StoryblokCertificate : StoryblokComponent
+public sealed class StoryblokCertificate : StoryblokComponent
 {
     [JsonPropertyName("image")]
     public StoryblokAsset? Image { get; set; }
-
 }

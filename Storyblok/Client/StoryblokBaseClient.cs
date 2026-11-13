@@ -2,6 +2,7 @@
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Storyblok.Converters;
+using Storyblok.Extensions;
 using System.Globalization;
 using System.Text.Json;
 
@@ -16,11 +17,11 @@ public abstract class StoryblokBaseClient
 
     protected StoryblokBaseClient(IOptions<StoryblokOptions> settings, IHttpClientFactory clientFactory, IMemoryCache memoryCache, ILogger<StoryblokBaseClient> logger)
     {
-        Client = clientFactory.CreateClient();
+        Client = clientFactory.CreateClient(ServiceCollectionExtensions.HttpClientName);
         MemoryCache = memoryCache;
         Logger = logger;
         Settings = settings.Value;
-        IsInEditor = true;
+        IsInEditor = Settings.IsInEditor;
 
         ValidateSettings();
     }
@@ -77,7 +78,6 @@ public abstract class StoryblokBaseClient
             options.Converters.Add(new StoryblokNullableIntConverter());
             options.Converters.Add(new StoryblokStringConverter());
             options.Converters.Add(new StoryblokNullableStringConverter());
-            options.Converters.Add(new StoryblokMarkdownConverter());
             options.Converters.Add(new StoryblokAssetConverter());
             return options;
         }
