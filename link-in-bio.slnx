@@ -2,6 +2,11 @@
   <Folder Name="/SolutionFiles/">
     <File Path="Directory.Build.props" />
     <File Path="Directory.Packages.props" />
+    <File Path="README.md" />
+  </Folder>
+  <Folder Name="/.github/">
+    <File Path=".github/dependabot.yml" />
+    <File Path=".github/workflows/azure-static-web-apps-gray-tree-0c2e88d03.yml" />
   </Folder>
   <Project Path="Client/Client.csproj" />
   <Project Path="Storyblok/Storyblok.csproj" />

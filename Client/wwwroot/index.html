@@ -53,13 +53,13 @@
         <link rel="icon" type="image/svg+xml" href="favicon.svg" />
         <link rel="apple-touch-icon" href="icons/icon-180.png" />
         <link rel="manifest" href="site.webmanifest" />
+        <!-- The libraries are served from this site (wwwroot/lib, versions in the README), so no visitor's address reaches a
+             CDN before they've agreed to anything. -->
         <!-- Icons are only needed once the app has rendered: the stylesheet downloads early without blocking the first paint, and js/deferred-styles.js applies it. -->
-        <link rel="preload" as="style" data-deferred-style href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/7.3.1/css/all.min.css"
-            integrity="sha512-QeR2VH+lsBE5LSAe1Q5EnTBbe7XTBubt8dG93Y7gidSgdMCr8nVqKcfKAMyN96SV8KDbZVTDXChatu5G2KQGzg=="
-            crossorigin="anonymous" referrerpolicy="no-referrer" />
+        <link rel="preload" as="style" data-deferred-style href="lib/fontawesome-7.3.1/css/all.min.css" />
         <script defer src="js/deferred-styles.js"></script>
-        <script defer src="https://cdn.jsdelivr.net/npm/@tsparticles/slim@4.5.0/tsparticles.slim.bundle.min.js"></script>
-        <script defer src="https://unpkg.com/typed.js@2.1.0/dist/typed.umd.js"></script>
+        <script defer src="lib/tsparticles-4.5.0/tsparticles.slim.bundle.min.js"></script>
+        <script defer src="lib/typed.js-2.1.0/typed.umd.js"></script>
         <script type="importmap"></script>
     </head>
     <body>

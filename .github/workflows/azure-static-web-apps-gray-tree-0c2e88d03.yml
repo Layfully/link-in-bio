@@ -1,7 +1,6 @@
 name: Azure Static Web Apps CI/CD
 permissions:
   contents: read
-  pull-requests: write
 
 on:
   push:
@@ -18,54 +17,131 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  build_and_deploy_job:
+  # Needs no secrets, so it also runs for Dependabot's pull requests and pull requests from forks.
+  build_job:
     if: github.event_name == 'push' || github.event.action != 'closed'
     runs-on: ubuntu-latest
-    name: Build and Deploy Job
+    name: Build Job
 
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v7
 
-      - name: Setup .NET 11
+      # app.css is built by hand and committed (see README). A stale copy doesn't fail the run: it would only miss classes
+      # added since, so this warns and the deploy goes ahead with the committed file.
+      - name: Check that app.css is up to date
+        env:
+          TAILWIND_VERSION: v4.3.5
+          TAILWIND_SHA256: e47695cee3f0d90623a91f3939b08bdee610eb5ad99340adff9d4145b284d6cc
+        run: |
+          curl --fail --silent --show-error --location --output "$RUNNER_TEMP/tailwindcss" \
+            "https://github.com/tailwindlabs/tailwindcss/releases/download/$TAILWIND_VERSION/tailwindcss-linux-x64"
+          echo "$TAILWIND_SHA256  $RUNNER_TEMP/tailwindcss" | sha256sum --check --status
+          chmod +x "$RUNNER_TEMP/tailwindcss"
+          cd Client
+          "$RUNNER_TEMP/tailwindcss" --input Styles/app.css --output "$RUNNER_TEMP/app.css" --minify
+          if ! cmp --silent "$RUNNER_TEMP/app.css" wwwroot/css/app.css; then
+            echo "::warning file=Client/wwwroot/css/app.css::app.css differs from what Tailwind $TAILWIND_VERSION builds from the current sources. Rebuild it as the README describes and commit the result."
+          fi
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: '11.0.x'
+
+      # Release, like the deploy: warnings are errors there.
+      - name: Build
+        run: dotnet build link-in-bio.slnx --configuration Release
+
+  # Production gets the public token only. On pushes to main, the "editor" environment, which the Storyblok Visual Editor
+  # previews, is also built with the preview token. That token reads drafts and ships inside the app, so it must
+  # never be part of the production build.
+  build_and_deploy_job:
+    needs: build_job
+    # Dependabot's pull requests and pull requests from forks get no secrets, so they're built but not deployed.
+    # The pull request's author decides, not who started the run: a re-run of Dependabot's pull request still has no secrets.
+    if: >-
+      github.event_name == 'push' ||
+      (github.event.action != 'closed' &&
+       github.event.pull_request.user.login != 'dependabot[bot]' &&
+       github.event.pull_request.head.repo.full_name == github.repository)
+    runs-on: ubuntu-latest
+    name: Build and Deploy Job
+    permissions:
+      contents: read
+      pull-requests: write
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v7
+
+      - name: Setup .NET
         uses: actions/setup-dotnet@v6
         with:
           dotnet-version: '11.0.x'
 
       # jq writes the values as JSON strings, so characters such as & or # in a token arrive unchanged.
-      - name: Write Storyblok tokens into appsettings.json
+      - name: Publish the site with the public token
         env:
           APPSETTINGS_PATH: Client/wwwroot/appsettings.json
           STORYBLOK_API_KEY_PUBLIC: ${{ secrets.STORYBLOK_API_KEY_PUBLIC }}
-          STORYBLOK_API_KEY_PREVIEW: ${{ secrets.STORYBLOK_API_KEY_PREVIEW }}
         run: |
           if [ -z "$STORYBLOK_API_KEY_PUBLIC" ]; then
-            echo "::error::The STORYBLOK_API_KEY_PUBLIC secret is not available (pull requests from forks don't get secrets)."
+            echo "::error::The STORYBLOK_API_KEY_PUBLIC secret is not available."
             exit 1
           fi
-          jq --arg public "$STORYBLOK_API_KEY_PUBLIC" --arg preview "$STORYBLOK_API_KEY_PREVIEW" \
-            '.Storyblok.ApiKeyPublic = $public | .Storyblok.ApiKeyPreview = $preview' \
+          jq --arg public "$STORYBLOK_API_KEY_PUBLIC" '.Storyblok.ApiKeyPublic = $public' \
             "$APPSETTINGS_PATH" > "$RUNNER_TEMP/appsettings.json"
           mv "$RUNNER_TEMP/appsettings.json" "$APPSETTINGS_PATH"
-
-      - name: Publish Blazor WASM
-        run: dotnet publish Client -c Release -o Client/bin/Release/net11/publish
+          dotnet publish Client --configuration Release --output publish/site
 
       - name: Deploy to Azure Static Web Apps
-        id: builddeploy
         uses: Azure/static-web-apps-deploy@v1
         with:
           azure_static_web_apps_api_token: ${{ secrets.AZURE_STATIC_WEB_APPS_API_TOKEN_GRAY_TREE_0C2E88D03 }}
           repo_token: ${{ secrets.GITHUB_TOKEN }}
           action: "upload"
-          app_location: "Client/bin/Release/net11/publish/wwwroot"
+          app_location: "publish/site/wwwroot"
           api_location: ""
           output_location: ""
           skip_app_build: true
 
-  # Removes the pull request's staging environment; Azure doesn't do this on its own.
+      - name: Publish the editor build with the preview token
+        if: github.event_name == 'push'
+        env:
+          APPSETTINGS_PATH: Client/wwwroot/appsettings.json
+          STORYBLOK_API_KEY_PREVIEW: ${{ secrets.STORYBLOK_API_KEY_PREVIEW }}
+        run: |
+          if [ -z "$STORYBLOK_API_KEY_PREVIEW" ]; then
+            echo "::error::The STORYBLOK_API_KEY_PREVIEW secret is not available."
+            exit 1
+          fi
+          jq --arg preview "$STORYBLOK_API_KEY_PREVIEW" '.Storyblok.ApiKeyPreview = $preview' \
+            "$APPSETTINGS_PATH" > "$RUNNER_TEMP/appsettings.json"
+          mv "$RUNNER_TEMP/appsettings.json" "$APPSETTINGS_PATH"
+          dotnet publish Client --configuration Release --output publish/editor
+
+      # A named preview environment: https://<app>-editor.<region>.azurestaticapps.net. Storyblok's preview URL points here.
+      - name: Deploy the editor build
+        if: github.event_name == 'push'
+        uses: Azure/static-web-apps-deploy@v1
+        with:
+          azure_static_web_apps_api_token: ${{ secrets.AZURE_STATIC_WEB_APPS_API_TOKEN_GRAY_TREE_0C2E88D03 }}
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          action: "upload"
+          app_location: "publish/editor/wwwroot"
+          api_location: ""
+          output_location: ""
+          skip_app_build: true
+          deployment_environment: "editor"
+
+  # Removes the pull request's staging environment; Azure doesn't do this on its own. Pull requests that were never
+  # deployed (Dependabot's, forks') have none.
   close_pull_request_job:
-    if: github.event_name == 'pull_request' && github.event.action == 'closed'
+    if: >-
+      github.event_name == 'pull_request' && github.event.action == 'closed' &&
+      github.event.pull_request.user.login != 'dependabot[bot]' &&
+      github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     name: Close Pull Request Job
     steps:

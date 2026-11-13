@@ -17,7 +17,7 @@ public sealed class StoryblokUrlConverter : JsonConverter<string>
 
         if (link.ValueKind == JsonValueKind.String)
         {
-            return NonEmpty(link.GetString());
+            return NonEmpty(link.GetString())?.Trim() is { } text && IsSafe(text) ? text : null;
         }
 
         if (link.ValueKind != JsonValueKind.Object)
@@ -52,9 +52,13 @@ public sealed class StoryblokUrlConverter : JsonConverter<string>
     // Only site-relative, web and email addresses. Anything else (javascript:, data:, ...) could run code when clicked;
     // the Content Security Policy blocks that too, but this converter shouldn't depend on it.
     // Relative addresses are checked first: in the browser, "/x" would otherwise parse as an absolute file: address.
+    // "//host" and "/\host" are not site-relative: browsers read both as an address on another site.
     private static bool IsSafe(string address) =>
-        address.StartsWith('/') || address.StartsWith('#')
+        IsSitePath(address) || address.StartsWith('#')
         || (Uri.TryCreate(address, UriKind.Absolute, out Uri? uri) && uri.Scheme is "https" or "http" or "mailto");
+
+    private static bool IsSitePath(string address) =>
+        address.StartsWith('/') && !address.StartsWith("//", StringComparison.Ordinal) && !address.StartsWith("/\\", StringComparison.Ordinal);
 
     public override void Write(Utf8JsonWriter writer, string value, JsonSerializerOptions options) => throw new NotSupportedException();
 

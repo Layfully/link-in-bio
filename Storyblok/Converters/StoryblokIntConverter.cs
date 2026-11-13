@@ -4,45 +4,39 @@ using System.Text.Json.Serialization;
 
 namespace Storyblok.Converters;
 
-public class StoryblokIntConverter : JsonConverter<int>
+/// <summary>Reads Storyblok numbers, which number fields send as text (<c>"42"</c>). Anything else is read as 0.</summary>
+internal sealed class StoryblokIntConverter : JsonConverter<int>
 {
-    public override int Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
-    {
-        if (reader.TokenType == JsonTokenType.Number)
-        {
-            return reader.GetInt32();
-        }
+    public override int Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options) =>
+        StoryblokInt.Parse(ref reader) ?? default;
 
-        string? @string = reader.GetString();
-
-        if (int.TryParse(@string, NumberStyles.Any, CultureInfo.InvariantCulture, out var @int))
-        {
-            return @int;
-        }
-
-        return default;
-    }
-
-    public override void Write(Utf8JsonWriter writer, int value, JsonSerializerOptions options) => throw new NotImplementedException();
+    public override void Write(Utf8JsonWriter writer, int value, JsonSerializerOptions options) => throw new NotSupportedException();
 }
 
-public class StoryblokNullableIntConverter : JsonConverter<int?>
+/// <summary>Reads Storyblok numbers, which number fields send as text (<c>"42"</c>). Anything else, an empty field included, is read as no number.</summary>
+internal sealed class StoryblokNullableIntConverter : JsonConverter<int?>
 {
-    public override int? Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+    public override int? Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options) =>
+        StoryblokInt.Parse(ref reader);
+
+    public override void Write(Utf8JsonWriter writer, int? value, JsonSerializerOptions options) => throw new NotSupportedException();
+}
+
+internal static class StoryblokInt
+{
+    public static int? Parse(ref Utf8JsonReader reader)
     {
-        if (reader.TokenType == JsonTokenType.Number)
+        switch (reader.TokenType)
         {
-            return reader.GetInt32();
-        }
+            case JsonTokenType.Number:
+                return reader.TryGetInt32(out int number) ? number : null;
 
-        string? @string = reader.GetString();
-        if (int.TryParse(@string, NumberStyles.Any, CultureInfo.InvariantCulture, out var @int))
-        {
-            return @int;
-        }
+            case JsonTokenType.String:
+                return int.TryParse(reader.GetString(), NumberStyles.Integer, CultureInfo.InvariantCulture, out int parsed) ? parsed : null;
 
-        return null;
+            default:
+                reader.Skip(); // a converter must finish on the value's last token, also for an object or a list
+                return null;
+        }
     }
-
-    public override void Write(Utf8JsonWriter writer, int? value, JsonSerializerOptions options) => throw new NotImplementedException();
 }

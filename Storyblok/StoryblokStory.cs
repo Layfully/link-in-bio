@@ -21,8 +21,8 @@ public class StoryblokStory<T> : StoryblokStory where T : StoryblokComponent
         DefaultFullSlug = story.DefaultFullSlug;
         TagList = story.TagList;
 
-        T? castContent = story.Content as T;
-        Content = castContent ?? throw new Exception($"A component of type \"{story.Content.GetType()}\" cannot be cast to \"{typeof(T)}\"");
+        Content = story.Content as T
+            ?? throw new InvalidOperationException($"The story's content is a \"{story.Content.Component}\" component ({story.Content.GetType()}), not {typeof(T)}.");
     }
 
     [JsonPropertyName("content")]
@@ -63,7 +63,6 @@ public class StoryblokStory
 
     [JsonPropertyName("tag_list")]
     public List<string>? TagList { get; set; }
-    public DateTime LoadedAt { get; set; }
 
     public override string ToString()
     {
@@ -81,16 +80,10 @@ public class StoryblokTranslatedSlug
     public string? Language { get; set; }
 }
 
-public class StoryblokStoriesContainer
-{
-    [JsonPropertyName("stories")]
-    public IEnumerable<StoryblokStory> Stories { get; init; } = [];
-}
-
 public class StoryblokStoryContainer
 {
     [JsonPropertyName("story")]
-    public StoryblokStory Story { get; set; } = new();
+    public StoryblokStory? Story { get; set; }
 
     /// <summary>The cache version Storyblok returned with this response. It is passed back as <c>cv</c> on later requests.</summary>
     [JsonPropertyName("cv")]

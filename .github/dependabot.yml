@@ -1,11 +1,19 @@
-# To get started with Dependabot version updates, you'll need to specify which
-# package ecosystems to update and where the package manifests are located.
-# Please see the documentation for all configuration options:
-# https://docs.github.com/code-security/dependabot/dependabot-version-updates/configuration-options-for-the-dependabot.yml-file
-
+# Dependabot's pull requests get no repository secrets, so CI builds them but doesn't deploy them.
+# The libraries in Client/wwwroot/lib are not covered; the README says how to update them.
 version: 2
 updates:
-  - package-ecosystem: "nuget" # See documentation for possible values
-    directory: "/" # Location of package manifests
+  - package-ecosystem: "nuget"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    groups:
+      # .NET's packages are released together, so they arrive as one pull request.
+      dotnet:
+        patterns:
+          - "Microsoft.AspNetCore.*"
+          - "Microsoft.Extensions.*"
+
+  - package-ecosystem: "github-actions"
+    directory: "/"
     schedule:
       interval: "weekly"

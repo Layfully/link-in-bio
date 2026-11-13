@@ -1,4 +1,4 @@
-// Libraries that index.html loads from a CDN with defer. Blazor starts without waiting for deferred scripts,
+// Libraries that index.html loads with defer (tsParticles, typed.js). Blazor starts without waiting for deferred scripts,
 // so on a slow connection a component can render before its library exists.
 
 // Resolves once the library is available: at once if it already is, otherwise when its script tag finishes loading.

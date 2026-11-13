@@ -6,8 +6,9 @@
       "/css/*",
       "/js/*",
       "/icons/*",
+      "/lib/*",
       "/Images/*",
-      "*.{css,js,mjs,map,json,webmanifest,wasm,dat,br,gz,ico,png,jpg,jpeg,gif,svg,webp}"
+      "*.{css,js,mjs,map,json,webmanifest,wasm,dat,br,gz,ico,png,jpg,jpeg,gif,svg,webp,woff2}"
     ]
   },
   "routes": [
@@ -18,13 +19,21 @@
     {
       "route": "/_framework/*",
       "headers": { "cache-control": "public, max-age=31536000, immutable" }
+    },
+    {
+      "route": "/lib/*",
+      "headers": { "cache-control": "public, max-age=31536000, immutable" }
+    },
+    {
+      "route": "/*",
+      "headers": { "cache-control": "no-cache" }
     }
   ],
   "mimeTypes": {
     ".webmanifest": "application/manifest+json"
   },
   "globalHeaders": {
-    "Content-Security-Policy": "default-src 'self'; script-src 'self' 'wasm-unsafe-eval' 'sha256-IMPORTMAP-HASH-SET-AT-PUBLISH' https://cdn.jsdelivr.net https://unpkg.com https://www.googletagmanager.com https://app.storyblok.com; style-src 'self' https://cdnjs.cloudflare.com; font-src 'self' https://cdnjs.cloudflare.com; img-src 'self' data: https://a.storyblok.com https://*.google-analytics.com https://*.googletagmanager.com; connect-src 'self' https://api.storyblok.com https://app.storyblok.com https://*.google-analytics.com https://*.analytics.google.com https://*.googletagmanager.com; frame-ancestors 'self' https://app.storyblok.com; object-src 'none'; base-uri 'self'; form-action 'self'",
+    "Content-Security-Policy": "default-src 'self'; script-src 'self' 'wasm-unsafe-eval' 'sha256-IMPORTMAP-HASH-SET-AT-PUBLISH' https://www.googletagmanager.com https://app.storyblok.com; style-src 'self'; font-src 'self'; img-src 'self' data: https://a.storyblok.com https://*.google-analytics.com https://*.googletagmanager.com; connect-src 'self' https://api.storyblok.com https://app.storyblok.com https://*.google-analytics.com https://*.analytics.google.com https://*.googletagmanager.com; frame-ancestors 'self' https://app.storyblok.com; object-src 'none'; base-uri 'self'; form-action 'self'",
     "X-Content-Type-Options": "nosniff",
     "Referrer-Policy": "strict-origin-when-cross-origin",
     "Permissions-Policy": "camera=(), microphone=(), geolocation=(), payment=()",
