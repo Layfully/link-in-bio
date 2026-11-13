@@ -1,6 +1,7 @@
 ﻿@using Storyblok.Extensions
 
-<header class="flex flex-col items-center z-20 reveal">
+@* Full width, so the typed line growing letter by letter never changes the header's size and re-centres the photo. *@
+<header class="flex w-full flex-col items-center z-20 reveal">
     @* Each part renders only when Storyblok has its data, so a header without a photo or link has no empty shapes. *@
     @if (Model?.Profile is { Url.Length: > 0 } profile)
     {

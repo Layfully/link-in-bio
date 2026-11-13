@@ -12,8 +12,9 @@
             <p>@text</p>
         }
     </div>
-    @* A fixed height, because the line is typed and deleted letter by letter and the header shouldn't move with it. *@
-    <p @ref="_output" class="text-center text-2xl font-bold text-white h-32 flex items-center px-8" aria-hidden="true"></p>
+    @* A fixed size, because the line is typed and deleted letter by letter and the header shouldn't move with it:
+       the height for wrapped lines, the full width so the header's width doesn't follow the text. *@
+    <p @ref="_output" class="flex h-32 w-full items-center justify-center px-8 text-center text-2xl font-bold text-white" aria-hidden="true"></p>
 }
 
 @code {
