@@ -7,7 +7,7 @@
       "/js/*",
       "/icons/*",
       "/lib/*",
-      "*.{css,js,mjs,map,json,webmanifest,wasm,dat,br,gz,ico,png,jpg,jpeg,gif,svg,webp,woff2}"
+      "*.{css,js,mjs,map,json,webmanifest,wasm,dat,br,gz,ico,png,jpg,jpeg,gif,svg,webp,woff2,txt,xml}"
     ]
   },
   "routes": [
