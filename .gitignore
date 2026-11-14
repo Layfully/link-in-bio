@@ -405,3 +405,6 @@ Client/wwwroot/appsettings.Development.json
 
 # Environment files with secrets
 *.env
+
+# Rider and other JetBrains IDEs
+.idea/
