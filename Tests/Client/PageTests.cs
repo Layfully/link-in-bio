@@ -164,6 +164,21 @@ public sealed class PageTests : IDisposable
         Assert.DoesNotContain("can't be loaded", page.Markup, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void Coming_back_to_the_home_page_shows_the_newest_links_at_once_without_asking_again()
+    {
+        _prerendered.AddAll($$"""{ "home": {{HomeWithLink("GitHub")}} }""");
+        _storyblok.Answer(HttpStatusCode.OK, HomeWithLink("GitLab"));
+        IRenderedComponent<Home> first = _context.Render<Home>();
+        first.WaitForAssertion(() => Assert.Contains("GitLab", first.Find("nav li a").TextContent));
+
+        // Back on the page later in the same visit, such as after a certificate.
+        IRenderedComponent<Home> again = _context.Render<Home>();
+
+        Assert.Contains("GitLab", again.Find("nav li a").TextContent);
+        Assert.Single(_storyblok.Requests);
+    }
+
     private static string HomeWithLink(string label) => Story("Home", $$"""
         { "_uid": "11111111-1111-1111-1111-111111111111", "component": "page", "body": [
             { "_uid": "22222222-2222-2222-2222-222222222222", "component": "list", "entries": [

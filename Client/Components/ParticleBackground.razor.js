@@ -28,10 +28,11 @@ export function startParticles(container) {
 
     // Sized to the container in CSS pixels, with a backing store scaled for sharp dots on high-density screens.
     // The number of dots follows the area; dots added by clicks beyond it go on a resize.
-    function resize() {
-        const previous = { width, height };
-        ({ width, height } = container.getBoundingClientRect());
-        rescale(particles, previous.width, previous.height, width, height);
+    // The size comes from a ResizeObserver, which reports it after the browser's own layout: measuring the container
+    // directly right after the page changed would make the browser lay the page out early (a forced reflow).
+    function resize(size) {
+        rescale(particles, width, height, size.width, size.height);
+        ({ width, height } = size);
         const ratio = window.devicePixelRatio || 1;
         canvas.width = Math.round(width * ratio);
         canvas.height = Math.round(height * ratio);
@@ -91,8 +92,9 @@ export function startParticles(container) {
     const onPointerLeave = () => { pointer = null; };
     const onClick = event => addParticles(particles, event.offsetX, event.offsetY, PUSH_COUNT, 2 * particleCount(width, height));
 
-    window.addEventListener('resize', resize);
-    resize();
+    // Also fires once right away, with the first size: the first dots are placed and drawn then.
+    const observer = new ResizeObserver(([entry]) => resize(entry.contentRect));
+    observer.observe(container);
 
     if (!reduceMotion) {
         canvas.addEventListener('pointermove', onPointerMove);
@@ -104,7 +106,7 @@ export function startParticles(container) {
     return {
         stop() {
             cancelAnimationFrame(frame);
-            window.removeEventListener('resize', resize);
+            observer.disconnect();
             canvas.remove();
         }
     };

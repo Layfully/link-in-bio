@@ -71,8 +71,12 @@ public sealed class PrerenderedStories
         return responses.ToJsonString();
     }
 
-    /// <summary>True when the page came with this story's response (<c>"/home"</c>, as callers pass slugs).</summary>
-    public bool Contains(string slug) => StoryblokStoryClient.ToStoryPath(slug) is { } path && _responses.ContainsKey(path);
+    /// <summary>
+    /// True when the page came with this story's response (<c>"/home"</c>, as callers pass slugs) and its first load is
+    /// still to come. Later in the visit the story is in the client's cache like any other.
+    /// </summary>
+    public bool Contains(string slug) =>
+        StoryblokStoryClient.ToStoryPath(slug) is { } path && _responses.ContainsKey(path) && !_used.Contains(path);
 
     /// <summary>The response for the first load of the story; false for every later one.</summary>
     internal bool TryTake(string path, out string response) =>
