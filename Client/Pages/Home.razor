@@ -60,6 +60,11 @@
         // loads without a request, so this first render shows the same content, and without fading it in a second time.
         bool prerendered = Prerendered.Contains(Slug);
 
+        // Content that is in the HTML from the start doesn't fade in either: that's the deploy rendering this page right
+        // now (IsRecording). Chrome doesn't count an image first painted fully transparent as the largest contentful
+        // paint, so a fading photo would make the page's LCP wait for Blazor's copy of it seconds later.
+        bool reveal = !prerendered && !Prerendered.IsRecording;
+
         // Leaving the page cancels the request; Blazor ignores the resulting cancellation.
         StoryLoadResult<StoryblokPage> result = await StoryblokClient.Story()
             .WithSlug(Slug)
@@ -67,7 +72,7 @@
 
         _state = result switch
         {
-            StoryblokStory<StoryblokPage> story => FromBlocks(story.Content.Body, reveal: !prerendered),
+            StoryblokStory<StoryblokPage> story => FromBlocks(story.Content.Body, reveal),
             StoryNotFound => new NothingPublished(),
             StoryblokUnavailable => new Unavailable(),
             StoryUnreadable => new Unreadable(),
