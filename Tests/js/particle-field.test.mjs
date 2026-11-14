@@ -1,7 +1,7 @@
 // Tests for the particle background's movement rules. Run with: node --test Tests/js/
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { particleCount, step, linkOpacity, repulse, addParticles, MAX_STEP } from '../../Client/wwwroot/js/particle-field.js';
+import { particleCount, step, linkOpacity, repulse, addParticles, rescale, MAX_STEP } from '../../Client/wwwroot/js/particle-field.js';
 
 const dot = (x, y, vx = 0, vy = 0) => ({ x, y, vx, vy, radius: 1 });
 
@@ -52,4 +52,16 @@ test('clicks add dots at the pointer, and the oldest go once the limit is reache
     addParticles(particles, 50, 60, 4, 5);
     assert.equal(particles.length, 5);
     assert.deepEqual(particles.map(p => [p.x, p.y]), [[3, 3], [50, 60], [50, 60], [50, 60], [50, 60]]);
+});
+
+test('dots keep their place relative to the screen when it changes size, such as a phone turned sideways', () => {
+    const particles = [dot(195, 800), dot(390, 422)];
+    rescale(particles, 390, 844, 844, 390);
+    assert.deepEqual(particles.map(p => [p.x, p.y]), [[422, 800 * 390 / 844], [844, 195]]);
+});
+
+test('dots placed before the screen had a size stay where they are', () => {
+    const particles = [dot(10, 20)];
+    rescale(particles, 0, 0, 1000, 800);
+    assert.deepEqual([particles[0].x, particles[0].y], [10, 20]);
 });

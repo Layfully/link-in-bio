@@ -3,7 +3,7 @@
 
 import {
     COLOR, DOT_OPACITY, LINK_DISTANCE, MAX_FPS, PUSH_COUNT,
-    addParticles, createParticle, linkOpacity, particleCount, repulse, step
+    addParticles, createParticle, linkOpacity, particleCount, repulse, rescale, step
 } from '../js/particle-field.js';
 
 // Starts the particle background inside the container and returns a handle whose stop() ends it, or null when the
@@ -29,7 +29,9 @@ export function startParticles(container) {
     // Sized to the container in CSS pixels, with a backing store scaled for sharp dots on high-density screens.
     // The number of dots follows the area; dots added by clicks beyond it go on a resize.
     function resize() {
+        const previous = { width, height };
         ({ width, height } = container.getBoundingClientRect());
+        rescale(particles, previous.width, previous.height, width, height);
         const ratio = window.devicePixelRatio || 1;
         canvas.width = Math.round(width * ratio);
         canvas.height = Math.round(height * ratio);
