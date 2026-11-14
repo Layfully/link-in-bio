@@ -25,7 +25,9 @@ jobs:
 
     steps:
       - name: Checkout Repository
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       # app.css is built by hand and committed (see README). A stale copy doesn't fail the run: it would only miss classes
       # added since, so this warns and the deploy goes ahead with the committed file.
@@ -45,13 +47,18 @@ jobs:
           fi
 
       - name: Setup .NET
-        uses: actions/setup-dotnet@v6
+        uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
         with:
-          dotnet-version: '11.0.x'
+          global-json-file: global.json
 
-      # Release, like the deploy: warnings are errors there.
-      - name: Build
-        run: dotnet build link-in-bio.slnx --configuration Release
+      # Release, like the deploy: warnings are errors there. Builds the whole solution, then runs the tests.
+      - name: Build and test
+        run: dotnet test --solution link-in-bio.slnx --configuration Release
+
+      # Publishing does more than building: trimming, fingerprinting and the Content Security Policy hash (Csp.targets).
+      # Done here as well, without tokens, so a pull request that breaks it fails before it is merged, Dependabot's included.
+      - name: Check that the site publishes
+        run: dotnet publish Client --configuration Release --output "$RUNNER_TEMP/publish"
 
   # Production gets the public token only. On pushes to main, the "editor" environment, which the Storyblok Visual Editor
   # previews, is also built with the preview token. That token reads drafts and ships inside the app, so it must
@@ -73,12 +80,14 @@ jobs:
 
     steps:
       - name: Checkout Repository
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Setup .NET
-        uses: actions/setup-dotnet@v6
+        uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
         with:
-          dotnet-version: '11.0.x'
+          global-json-file: global.json
 
       # jq writes the values as JSON strings, so characters such as & or # in a token arrive unchanged.
       - name: Publish the site with the public token
@@ -96,7 +105,7 @@ jobs:
           dotnet publish Client --configuration Release --output publish/site
 
       - name: Deploy to Azure Static Web Apps
-        uses: Azure/static-web-apps-deploy@v1
+        uses: Azure/static-web-apps-deploy@1a947af9992250f3bc2e68ad0754c0b0c11566c9 # v1
         with:
           azure_static_web_apps_api_token: ${{ secrets.AZURE_STATIC_WEB_APPS_API_TOKEN_GRAY_TREE_0C2E88D03 }}
           repo_token: ${{ secrets.GITHUB_TOKEN }}
@@ -124,7 +133,7 @@ jobs:
       # A named preview environment: https://<app>-editor.<region>.azurestaticapps.net. Storyblok's preview URL points here.
       - name: Deploy the editor build
         if: github.event_name == 'push'
-        uses: Azure/static-web-apps-deploy@v1
+        uses: Azure/static-web-apps-deploy@1a947af9992250f3bc2e68ad0754c0b0c11566c9 # v1
         with:
           azure_static_web_apps_api_token: ${{ secrets.AZURE_STATIC_WEB_APPS_API_TOKEN_GRAY_TREE_0C2E88D03 }}
           repo_token: ${{ secrets.GITHUB_TOKEN }}
@@ -146,7 +155,7 @@ jobs:
     name: Close Pull Request Job
     steps:
       - name: Close staging environment
-        uses: Azure/static-web-apps-deploy@v1
+        uses: Azure/static-web-apps-deploy@1a947af9992250f3bc2e68ad0754c0b0c11566c9 # v1
         with:
           azure_static_web_apps_api_token: ${{ secrets.AZURE_STATIC_WEB_APPS_API_TOKEN_GRAY_TREE_0C2E88D03 }}
           action: "close"
