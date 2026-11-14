@@ -40,11 +40,28 @@ try
 
     new PublishedSite(wwwroot).WriteHome(html, services.GetRequiredService<PrerenderedStories>().ToJson());
     Console.WriteLine($"Prerendered the home page into index.html; every other route now falls back to {PublishedSite.ShellFile}.");
-    return 0;
 }
 catch (Exception exception)
 {
     return Skip(exception.Message);
+}
+
+// Only after a prerender: the icons of the links come from the rendered page. An icon added in Storyblok after this
+// deploy stays blank until the next one.
+try
+{
+    string page = File.ReadAllText(Path.Combine(wwwroot, "index.html"));
+    HashSet<string> icons = [.. FontAwesomeSubset.ComponentIcons, .. FontAwesomeSubset.IconsIn(page)];
+
+    Console.WriteLine(new FontAwesomeSubset().Apply(wwwroot, icons)
+        ? $"Cut Font Awesome down to {icons.Count} icons."
+        : "::warning::Font Awesome wasn't cut down: pyftsubset (fonttools) isn't installed. The site ships it whole.");
+    return 0;
+}
+catch (Exception exception)
+{
+    Console.WriteLine($"::warning::Font Awesome wasn't cut down: {exception.Message} The site ships it whole.");
+    return 0;
 }
 
 // A GitHub Actions warning: visible on the run, but the deploy goes on.
