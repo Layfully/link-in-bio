@@ -168,6 +168,13 @@ production and pull request builds, after `dotnet publish`, run the `Prerender` 
   which a test keeps complete), fonts included (`pyftsubset` from fonttools). The copy goes to
   `lib/fontawesome-7.3.1-<content hash>`. An icon added to a link in Storyblok stays blank until the next deploy.
 
+On the prerendered home page, .NET doesn't start right away: starting it takes about a second of the browser's main
+thread, and the page has nothing it needs it for at first. `index.html` loads Blazor with `autostart="false"`, and
+`Client/wwwroot/js/blazor-start.js` starts it on the visitor's first interaction (pointer, touch, scroll, keyboard,
+focus) or 5 seconds after the page has loaded. Until then the typed line shows its first tagline (from `data-first`,
+through CSS) and the particles wait. Links are plain links, so a click before then is an ordinary page load. Every
+other page, and every build without prerendering, starts Blazor at once.
+
 A change published in Storyblok reaches the first HTML only with the next deploy; until then visitors see it a moment
 after the page has loaded. The editor build is never prerendered (it shows drafts). Whatever goes wrong while
 prerendering (no token, Storyblok down, no content, a render error) shows as a warning on the run, and the site

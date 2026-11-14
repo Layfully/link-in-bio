@@ -20,6 +20,9 @@ const TYPED_OPTIONS = {
 export async function start(element, texts) {
     if (!element?.isConnected) return null;
 
+    // From now on the element's own text is the line; CSS stops showing the first tagline from data-first.
+    element.dataset.started = '';
+
     // With reduced motion the first tagline simply stands there; screen readers get all of them from the hidden copy.
     if (matchMedia('(prefers-reduced-motion: reduce)').matches) {
         element.textContent = texts[0] ?? '';

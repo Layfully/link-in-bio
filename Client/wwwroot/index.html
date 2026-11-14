@@ -103,6 +103,8 @@
             <button type="button" class="dismiss absolute top-2 right-3 cursor-pointer" aria-label="Dismiss">🗙</button>
         </div>
         <script defer src="js/analytics-consent.js"></script>
-        <script src="_framework/blazor.webassembly#[.{fingerprint}].js"></script>
+        <!-- Started by js/blazor-start.js: at once, or on the prerendered home page when the visitor first interacts. -->
+        <script src="_framework/blazor.webassembly#[.{fingerprint}].js" autostart="false"></script>
+        <script src="js/blazor-start.js"></script>
     </body>
 </html>
