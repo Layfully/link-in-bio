@@ -1,28 +1,32 @@
 ﻿@* A navigation landmark, so screen-reader users can jump straight to the profile links. *@
-<nav aria-label="Profiles" class="w-full z-20 reveal">
-    @* role="list": Safari stops announcing a list as a list once CSS removes its bullets, as Tailwind does. *@
-    <ul role="list" class="flex flex-col w-full gap-y-10">
+<nav aria-label="Profiles" class="mt-2 flex w-full justify-center z-20 reveal">
+    @* role="list": Safari stops announcing a list as a list once CSS removes its bullets, as Tailwind does.
+       One width for every card, with a margin on narrow screens. *@
+    <ul role="list" class="flex w-full max-w-md flex-col gap-y-3.5 px-6">
         @* Entries without a label would render as empty buttons, so they're skipped. *@
         @foreach (StoryblokLink link in Model?.Where(link => !string.IsNullOrWhiteSpace(link.Label)) ?? [])
         {
-            <li @key="link" class="w-full flex justify-center">
+            <li @key="link">
                 @if (string.IsNullOrEmpty(link.Url))
                 {
-                    @* An entry without a URL is plain text, not a link to the current page: dimmed, with a dashed outline,
-                       but still readable (neutral-400 on the dark background is about 7:1). *@
-                    <span class="w-4/5 sm:w-1/2 md:w-1/3 py-2 text-center font-bold text-neutral-400 rounded-lg outline-1 outline-dashed outline-purple-600/60">
-                        <LinkIcon CssClass="@link.CssClass" />@link.Label<span class="sr-only"> (not available)</span>
+                    @* An entry without a URL is plain text, not a link to the current page: a dashed card in muted text,
+                       still readable (neutral-400 on the dark card is above 6:1). *@
+                    <span class="card flex min-h-16 w-full items-center gap-x-4 border-dashed px-3.5 py-3 text-neutral-400">
+                        <LinkIcon CssClass="@link.CssClass" Muted="true" />
+                        <span class="min-w-0 flex-1 text-center font-semibold break-words">@link.Label<span class="sr-only"> (not available)</span></span>
+                        <span class="size-9 shrink-0" aria-hidden="true"></span>
                     </span>
                 }
                 else
                 {
                     @* rel="me": these profiles belong to the person this page is about (used by Mastodon, IndieWeb and search engines).
-                       Keyboard focus gets the same ring and lift as hover; the lift is only added when the visitor allows motion (motion-safe), which is more reliable than undoing it afterwards. *@
-                    <a href="@link.Url" rel="me" class="group w-4/5 sm:w-1/2 md:w-1/3 py-2 text-center font-bold text-white rounded-lg ring-1 ring-purple-600 transition-all ease-in-out duration-200
-                                                        hover:ring-2 hover:ring-white motion-safe:hover:scale-110
-                                                        focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-white motion-safe:focus-visible:scale-110
-                                                        motion-reduce:transition-none">
-                        <LinkIcon CssClass="@link.CssClass" Animated="true" />@link.Label
+                       Hover and keyboard focus look the same; the arrow slides in only when the visitor allows motion. *@
+                    <a href="@link.Url" rel="me" class="group card card-interactive flex min-h-16 w-full items-center gap-x-4 px-3.5 py-3 text-white">
+                        <LinkIcon CssClass="@link.CssClass" />
+                        <span class="min-w-0 flex-1 text-center font-semibold tracking-tight break-words">@link.Label</span>
+                        <span class="flex size-9 shrink-0 items-center justify-center text-sm text-purple-300 opacity-0 transition duration-200 group-hover:opacity-100 group-focus-visible:opacity-100 motion-safe:-translate-x-1 motion-safe:group-hover:translate-x-0 motion-safe:group-focus-visible:translate-x-0" aria-hidden="true">
+                            <i class="fa-solid fa-arrow-right"></i>
+                        </span>
                     </a>
                 }
             </li>

@@ -5,16 +5,15 @@
 @page "/Certificate/{name}"
 
 <PageTitle>Adrian Gaborek - @Title</PageTitle>
-<main class="flex flex-col items-center justify-center bg-gray-900 min-h-screen">
+<main class="flex flex-col items-center justify-center bg-gray-900 min-h-screen py-16">
     <h1 class="sr-only" tabindex="-1">Adrian Gaborek - @Title</h1>
     @if (_state is Loaded loaded)
     {
-        @* Same box as CertificateSkeleton (width classes on the outermost element, ring as an overlay), so nothing moves
-           when the certificate replaces the placeholder. width/height let the browser reserve the image's space before it arrives. *@
-        <figure class="z-20 relative w-10/12 sm:w-9/12 xl:w-1/2 reveal">
-            <img class="block w-full h-auto p-1 rounded-3xl" src="@loaded.ImageUrl" width="@loaded.Width" height="@loaded.Height"
+        @* Same card as CertificateSkeleton (width and padding on the outermost element), so nothing moves when the
+           certificate replaces the placeholder. width/height let the browser reserve the image's space before it arrives. *@
+        <figure class="card z-20 relative w-10/12 sm:w-9/12 xl:w-1/2 p-2 sm:p-3 reveal">
+            <img class="block w-full h-auto rounded-xl" src="@loaded.ImageUrl" width="@loaded.Width" height="@loaded.Height"
                  alt="@(loaded.Alt ?? $"Certificate: {loaded.Title}")" fetchpriority="high">
-            <div class="absolute inset-0 ring-4 xl:ring-8 ring-purple-600 rounded-3xl animate-pulse motion-reduce:animate-none" aria-hidden="true"></div>
         </figure>
     }
     <StoryblokStatus Status="@ContentStatus" Subject="the certificate"

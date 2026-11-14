@@ -1,5 +1,9 @@
 ﻿@import "tailwindcss";
 
+/* The vendored libraries contain words such as "blur" or "transition" in their code, which Tailwind would otherwise
+   turn into unused classes. */
+@source not "../wwwroot/lib";
+
 @theme {
     --animate-shimmer: shimmer 1.8s ease-in-out infinite;
 
@@ -9,9 +13,75 @@
     }
 }
 
-/* The outlined purple button used for actions such as "Try again" or "Back to the links". */
+/* The site's surface: a dark, slightly see-through card with a thin purple edge, which lifts the content off the
+   particles without hiding them. The border width and colour are set here, its style is left to the element, so a
+   card can be made dashed with border-dashed. */
+@utility card {
+    border-width: 1px;
+    border-color: color-mix(in oklab, var(--color-purple-400) 36%, transparent);
+    border-radius: var(--radius-2xl);
+    background-color: color-mix(in oklab, var(--color-gray-800) 55%, transparent);
+    backdrop-filter: blur(8px);
+    box-shadow:
+        inset 0 1px 0 0 rgb(255 255 255 / 0.05),
+        0 12px 32px -16px rgb(0 0 0 / 0.7);
+}
+
+/* A card that is a link or button: on hover and keyboard focus its edge brightens and it glows purple; it also rises a
+   little unless the visitor prefers reduced motion. Keyboard focus adds a white outline that stands out from the glow. */
+@utility card-interactive {
+    transition-property: border-color, background-color, box-shadow, translate;
+    transition-duration: 200ms;
+    transition-timing-function: var(--ease-out);
+
+    &:hover,
+    &:focus-visible {
+        border-color: color-mix(in oklab, var(--color-purple-300) 70%, transparent);
+        background-color: color-mix(in oklab, var(--color-gray-800) 75%, transparent);
+        box-shadow:
+            inset 0 1px 0 0 rgb(255 255 255 / 0.08),
+            0 0 0 1px color-mix(in oklab, var(--color-purple-500) 35%, transparent),
+            0 14px 36px -12px color-mix(in oklab, var(--color-purple-600) 65%, transparent);
+    }
+
+    &:focus-visible {
+        outline: 2px solid var(--color-white);
+        outline-offset: 3px;
+    }
+
+    @media (prefers-reduced-motion: no-preference) {
+        &:hover,
+        &:focus-visible {
+            translate: 0 -2px;
+        }
+    }
+}
+
+/* The ring around the profile photo: a purple to fuchsia gradient with a soft glow. The element's padding is the
+   ring's width. */
+@utility avatar-ring {
+    border-radius: calc(infinity * 1px);
+    background-image: linear-gradient(135deg, var(--color-purple-400), var(--color-fuchsia-500) 50%, var(--color-purple-700));
+    box-shadow:
+        0 0 0 1px rgb(255 255 255 / 0.06),
+        0 0 48px -8px color-mix(in oklab, var(--color-purple-500) 75%, transparent);
+}
+
+/* Depth behind everything: a purple glow above the middle of the page and darker edges. It sits below the particles. */
+@utility backdrop-glow {
+    position: fixed;
+    inset: 0;
+    z-index: 0;
+    pointer-events: none;
+    background:
+        radial-gradient(48rem 34rem at 50% 22%, color-mix(in oklab, var(--color-purple-600) 24%, transparent), transparent 70%),
+        radial-gradient(ellipse at 50% 45%, transparent 55%, rgb(0 0 0 / 0.5) 100%);
+}
+
+/* The filled purple button used for actions such as "Try again" or "Back to the links". White on purple-600 keeps a
+   contrast above 4.5:1, so hover only adds glow instead of lightening the button. */
 @utility action-button {
-    @apply mt-2 px-4 py-2 rounded-lg font-bold text-white ring-1 ring-purple-600 transition-all ease-in-out duration-200 cursor-pointer hover:ring-2 hover:ring-white motion-safe:hover:scale-105;
+    @apply mt-2 inline-flex items-center justify-center gap-x-2 rounded-xl bg-purple-600 px-5 py-2.5 font-semibold text-white shadow-lg shadow-purple-900/50 ring-1 ring-purple-400/40 transition duration-200 ease-out cursor-pointer hover:shadow-purple-500/50 hover:ring-purple-300/70 focus-visible:outline-2 focus-visible:outline-offset-3 focus-visible:outline-white motion-safe:hover:-translate-y-0.5;
 }
 
 /* Content that fades in and rises into place when it appears on the page. @starting-style needs no script, and
