@@ -49,6 +49,13 @@ message. Run them with:
 dotnet test --solution link-in-bio.slnx
 ```
 
+The particle background's movement rules (`Client/wwwroot/js/particle-field.js`) have tests of their own in `Tests/js`,
+run with Node's built-in test runner, no packages needed:
+
+```bash
+node --test "Tests/js/*.test.mjs"
+```
+
 `global.json` switches `dotnet test` to Microsoft Testing Platform, which xunit v3 needs on .NET 10 and later. It also pins
 the SDK: CI installs the same one, and Dependabot proposes newer ones as pull requests. CI runs the tests in Release on
 every push and pull request, before anything is deployed.
@@ -73,14 +80,13 @@ CI rebuilds it the same way and warns when the committed file differs.
 
 ## Third-party libraries
 
-Font Awesome, tsParticles and typed.js are served from `Client/wwwroot/lib` rather than a CDN. That way no visitor's
+Font Awesome and typed.js are served from `Client/wwwroot/lib` rather than a CDN. That way no visitor's
 address goes to a third party before they've agreed to anything, and the Content Security Policy only allows the site's
 own origin.
 
 | Folder | Package | Files taken from it |
 | --- | --- | --- |
 | `fontawesome-7.3.1` | `@fortawesome/fontawesome-free@7.3.1` | `css/all.min.css`, `webfonts/*.woff2`, `LICENSE.txt` |
-| `tsparticles-4.5.0` | `@tsparticles/slim@4.5.0` | `tsparticles.slim.bundle.min.js`, `LICENSE` |
 | `typed.js-2.1.0` | `typed.js@2.1.0` | `dist/typed.umd.js` and its `.map`, `LICENSE.txt` |
 
 The version is part of each folder's name, so a file's address changes whenever its content does. That is what lets
@@ -92,8 +98,11 @@ Dependabot doesn't see these files. To update one:
    `dist.integrity` (`npm view <package>@<version> dist.integrity`).
 2. Copy the files listed above into a **new** folder named after the new version, and delete the old folder. Never
    change files inside an existing folder: browsers that cached them would keep the old copies for a year.
-3. Update the paths in `Client/wwwroot/index.html` and this table, then check the icons, the particle background and
-   the typed taglines.
+3. Update the paths in `Client/wwwroot/index.html` and this table, then check the icons and the typed taglines.
+
+The particle background used tsParticles until November 2026; it is now drawn by the site's own script
+(`Client/Components/ParticleBackground.razor.js`), which saves every visitor 160 KB and about a third of a second of
+script.
 
 ## Caching
 

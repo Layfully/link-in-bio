@@ -60,6 +60,10 @@ jobs:
       - name: Build and test
         run: dotnet test --solution link-in-bio.slnx --configuration Release
 
+      # The particle background's movement rules; Node comes with the runner, the tests need no packages.
+      - name: Test the JavaScript
+        run: node --test "Tests/js/*.test.mjs"
+
       # Publishing does more than building: trimming, fingerprinting and the Content Security Policy hash (Csp.targets).
       # Done here as well, without tokens, so a pull request that breaks it fails before it is merged, Dependabot's included.
       - name: Check that the site publishes

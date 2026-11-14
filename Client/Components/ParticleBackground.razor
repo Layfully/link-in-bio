@@ -3,12 +3,9 @@
 @inject ILogger<ParticleBackground> Logger
 
 @* The particle background behind the page's content. The content's fade-in is pure CSS (the reveal utility). *@
-<div @ref="_container" id="@_containerId" aria-hidden="true" class="fixed inset-0 z-10"></div>
+<div @ref="_container" aria-hidden="true" class="fixed inset-0 z-10"></div>
 
 @code {
-    // tsParticles tracks its running backgrounds by id and replaces the one with the same id on a new load.
-    // A unique id keeps this background independent of any other, such as one still stopping while a new one starts.
-    private readonly string _containerId = $"particles-{Guid.NewGuid():N}";
     private ElementReference _container;
     private ParticleBackgroundInterop? _interop;
 

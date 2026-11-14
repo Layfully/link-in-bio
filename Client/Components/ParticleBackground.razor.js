@@ -1,70 +1,109 @@
-// The particle background behind the pages (tsParticles slim, loaded in index.html).
+// The particle background behind the pages: dots on a canvas, moved by the rules in js/particle-field.js.
+// A few dozen lines instead of tsParticles, whose 160 KB took about a third of a second of script on every visit.
 
-import { whenLoaded } from '../js/deferred-scripts.js';
+import {
+    COLOR, DOT_OPACITY, LINK_DISTANCE, MAX_FPS, PUSH_COUNT,
+    addParticles, createParticle, linkOpacity, particleCount, repulse, step
+} from '../js/particle-field.js';
 
-// 40 small dots in a pale purple with faint links, pushed away on hover, more on click (the earlier particles.js setup, tinted).
-// With reduced motion the dots stand still and don't react to the pointer: the same picture, without movement.
-// tsParticles doesn't check prefers-reduced-motion itself.
-function particlesOptions(reduceMotion) {
-    return {
-        fullScreen: { enable: false },
-        // A decorative background gains nothing from 120 frames a second on fast screens; 60 halves the work.
-        fpsLimit: 60,
-        detectRetina: true,
-        particles: {
-            // particles.js' value_area 800 meant 800,000 px² per 40 particles; tsParticles takes that area as width × height.
-            number: { value: 40, density: { enable: true, width: 1000, height: 800 } },
-            color: { value: '#e9d5ff' }, // purple-200: white with a hint of the accent
-            shape: { type: 'circle' },
-            opacity: { value: 0.25 },
-            size: { value: { min: 0.5, max: 2 } },
-            links: { enable: true, distance: 150, color: '#e9d5ff', opacity: 0.12, width: 1 },
-            move: { enable: !reduceMotion, speed: 4, direction: 'none', random: false, straight: false, outModes: 'out' }
-        },
-        interactivity: {
-            detectsOn: 'canvas',
-            events: {
-                onHover: { enable: !reduceMotion, mode: 'repulse' },
-                onClick: { enable: !reduceMotion, mode: 'push' },
-                resize: { enable: true }
-            },
-            modes: {
-                repulse: { distance: 100, duration: 0.4 },
-                push: { quantity: 4 }
-            }
-        }
-    };
-}
-
-// The slim preset registers its shapes and interactions once per page load.
-let slimLoaded;
-
-// Starts the particle background inside the container and returns a handle whose stop() ends it,
-// or null when the page was left before or during the start. The motion setting is read here, so a change applies
-// from the next page on.
-export async function startParticles(container) {
+// Starts the particle background inside the container and returns a handle whose stop() ends it, or null when the
+// container is no longer on the page. With reduced motion the dots are drawn once and stand still, without reacting
+// to the pointer: the same picture, without movement. The motion setting is read here, so a change applies from the
+// next page load on.
+export function startParticles(container) {
     if (!container?.isConnected) return null;
 
-    await whenLoaded('tsparticles', () => typeof tsParticles !== 'undefined' && typeof loadSlim !== 'undefined');
-    if (!container.isConnected) return null;
+    const canvas = document.createElement('canvas');
+    canvas.className = 'block size-full';
+    container.append(canvas);
 
-    slimLoaded ??= loadSlim(tsParticles);
-    await slimLoaded;
-
+    const context = canvas.getContext('2d');
     const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const particles = [];
+    let width = 0;
+    let height = 0;
+    let pointer = null;
+    let frame = 0;
+    let lastTime = null;
 
-    // The element itself rather than an id lookup, which fails or finds nothing once the page is gone.
-    const particles = await tsParticles.load({ id: container.id, element: container, options: particlesOptions(reduceMotion) });
+    // Sized to the container in CSS pixels, with a backing store scaled for sharp dots on high-density screens.
+    // The number of dots follows the area; dots added by clicks beyond it go on a resize.
+    function resize() {
+        ({ width, height } = container.getBoundingClientRect());
+        const ratio = window.devicePixelRatio || 1;
+        canvas.width = Math.round(width * ratio);
+        canvas.height = Math.round(height * ratio);
+        context.setTransform(ratio, 0, 0, ratio, 0, 0);
 
-    // Left while loading: nothing would ever stop this animation, so stop it now.
-    if (!container.isConnected) {
-        particles?.destroy();
-        return null;
+        const count = particleCount(width, height);
+        while (particles.length < count) {
+            particles.push(createParticle(Math.random() * width, Math.random() * height));
+        }
+        particles.length = count;
+        draw();
+    }
+
+    function draw() {
+        context.clearRect(0, 0, width, height);
+        context.strokeStyle = COLOR;
+        context.fillStyle = COLOR;
+        context.lineWidth = 1;
+
+        for (let i = 0; i < particles.length; i++) {
+            const a = particles[i];
+            for (let j = i + 1; j < particles.length; j++) {
+                const b = particles[j];
+                const distance = Math.hypot(a.x - b.x, a.y - b.y);
+                if (distance >= LINK_DISTANCE) continue;
+
+                context.globalAlpha = linkOpacity(distance);
+                context.beginPath();
+                context.moveTo(a.x, a.y);
+                context.lineTo(b.x, b.y);
+                context.stroke();
+            }
+        }
+
+        context.globalAlpha = DOT_OPACITY;
+        for (const p of particles) {
+            context.beginPath();
+            context.arc(p.x, p.y, p.radius, 0, 2 * Math.PI);
+            context.fill();
+        }
+    }
+
+    // Animation frames stop in background tabs; step() limits how far dots move on the first frame back.
+    function animate(time) {
+        frame = requestAnimationFrame(animate);
+        if (lastTime !== null && time - lastTime < 1000 / MAX_FPS - 1) return;
+
+        const seconds = lastTime === null ? 0 : (time - lastTime) / 1000;
+        lastTime = time;
+        step(particles, seconds, width, height);
+        if (pointer) repulse(particles, pointer.x, pointer.y, seconds);
+        draw();
+    }
+
+    // The canvas sits behind the content, so it only notices the pointer where no content covers it, as before.
+    const onPointerMove = event => { pointer = { x: event.offsetX, y: event.offsetY }; };
+    const onPointerLeave = () => { pointer = null; };
+    const onClick = event => addParticles(particles, event.offsetX, event.offsetY, PUSH_COUNT, 2 * particleCount(width, height));
+
+    window.addEventListener('resize', resize);
+    resize();
+
+    if (!reduceMotion) {
+        canvas.addEventListener('pointermove', onPointerMove);
+        canvas.addEventListener('pointerleave', onPointerLeave);
+        canvas.addEventListener('click', onClick);
+        frame = requestAnimationFrame(animate);
     }
 
     return {
         stop() {
-            particles?.destroy();
+            cancelAnimationFrame(frame);
+            window.removeEventListener('resize', resize);
+            canvas.remove();
         }
     };
 }
