@@ -1,117 +1,54 @@
-// The particle background behind the pages: dots on a canvas, moved by the rules in particle-field.js. A few dozen
-// lines instead of tsParticles, whose 160 KB took about a third of a second of script on every visit.
-// index.html loads it as a module and it starts itself in the page's #particles element, outside Blazor's #app: the
-// dots move from the first paint on every page, whether .NET has started yet or not, and Blazor never replaces them.
+// The particle background behind the pages. index.html loads this module, and it starts itself in the page's
+// #particles element, outside Blazor's #app: the dots move from the first paint on every page, whether .NET has
+// started or not, and Blazor never replaces them.
+//
+// The drawing (particle-scene.js) runs in a worker, particle-worker.js, on a canvas handed over with
+// transferControlToOffscreen: when the page's main thread is busy, as it is for about a second while .NET starts, the
+// dots keep moving instead of freezing and then jumping. Browsers that can't hand a canvas to a worker draw on the page
+// as before. Either way this script only tells the scene what happens on the page: size, pointer, clicks.
+//
+// With reduced motion the dots are drawn once and stand still, without reacting to the pointer. The setting is read
+// here, so a change applies from the next page load on.
 
-import {
-    COLOR, DOT_OPACITY, LINK_DISTANCE, MAX_FPS, PUSH_COUNT,
-    addParticles, createParticle, linkOpacity, particleCount, repulse, rescale, step
-} from './particle-field.js';
+import { createScene } from './particle-scene.js';
 
-// Starts the particle background inside the container and returns a handle whose stop() ends it, or null when the
-// container is no longer on the page. With reduced motion the dots are drawn once and stand still, without reacting
-// to the pointer: the same picture, without movement. The motion setting is read here, so a change applies from the
-// next page load on.
-export function startParticles(container) {
-    if (!container?.isConnected) return null;
-
+function startParticles(container) {
     const canvas = document.createElement('canvas');
     canvas.className = 'block size-full';
     container.append(canvas);
 
-    const context = canvas.getContext('2d');
     const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
-    const particles = [];
-    let width = 0;
-    let height = 0;
-    let pointer = null;
-    let frame = 0;
-    let lastTime = null;
+    const send = connect(canvas, reduceMotion);
 
-    // Sized to the container in CSS pixels, with a backing store scaled for sharp dots on high-density screens.
-    // The number of dots follows the area; dots added by clicks beyond it go on a resize.
     // The size comes from a ResizeObserver, which reports it after the browser's own layout: measuring the container
-    // directly right after the page changed would make the browser lay the page out early (a forced reflow).
-    function resize(size) {
-        rescale(particles, width, height, size.width, size.height);
-        ({ width, height } = size);
-        const ratio = window.devicePixelRatio || 1;
-        canvas.width = Math.round(width * ratio);
-        canvas.height = Math.round(height * ratio);
-        context.setTransform(ratio, 0, 0, ratio, 0, 0);
+    // right after the page changed would make the browser lay it out early (a forced reflow). It also fires once at
+    // the start, with the first size; the first dots are placed and drawn then.
+    new ResizeObserver(([entry]) => send({
+        type: 'resize',
+        width: entry.contentRect.width,
+        height: entry.contentRect.height,
+        ratio: window.devicePixelRatio || 1
+    })).observe(container);
 
-        const count = particleCount(width, height);
-        while (particles.length < count) {
-            particles.push(createParticle(Math.random() * width, Math.random() * height));
-        }
-        particles.length = count;
-        draw();
-    }
-
-    function draw() {
-        context.clearRect(0, 0, width, height);
-        context.strokeStyle = COLOR;
-        context.fillStyle = COLOR;
-        context.lineWidth = 1;
-
-        for (let i = 0; i < particles.length; i++) {
-            const a = particles[i];
-            for (let j = i + 1; j < particles.length; j++) {
-                const b = particles[j];
-                const distance = Math.hypot(a.x - b.x, a.y - b.y);
-                if (distance >= LINK_DISTANCE) continue;
-
-                context.globalAlpha = linkOpacity(distance);
-                context.beginPath();
-                context.moveTo(a.x, a.y);
-                context.lineTo(b.x, b.y);
-                context.stroke();
-            }
-        }
-
-        context.globalAlpha = DOT_OPACITY;
-        for (const p of particles) {
-            context.beginPath();
-            context.arc(p.x, p.y, p.radius, 0, 2 * Math.PI);
-            context.fill();
-        }
-    }
-
-    // Animation frames stop in background tabs; step() limits how far dots move on the first frame back.
-    function animate(time) {
-        frame = requestAnimationFrame(animate);
-        if (lastTime !== null && time - lastTime < 1000 / MAX_FPS - 1) return;
-
-        const seconds = lastTime === null ? 0 : (time - lastTime) / 1000;
-        lastTime = time;
-        step(particles, seconds, width, height);
-        if (pointer) repulse(particles, pointer.x, pointer.y, seconds);
-        draw();
-    }
-
-    // The canvas sits behind the content, so it only notices the pointer where no content covers it, as before.
-    const onPointerMove = event => { pointer = { x: event.offsetX, y: event.offsetY }; };
-    const onPointerLeave = () => { pointer = null; };
-    const onClick = event => addParticles(particles, event.offsetX, event.offsetY, PUSH_COUNT, 2 * particleCount(width, height));
-
-    // Also fires once right away, with the first size: the first dots are placed and drawn then.
-    const observer = new ResizeObserver(([entry]) => resize(entry.contentRect));
-    observer.observe(container);
-
+    // The canvas sits behind the content, so it only notices the pointer where no content covers it.
     if (!reduceMotion) {
-        canvas.addEventListener('pointermove', onPointerMove);
-        canvas.addEventListener('pointerleave', onPointerLeave);
-        canvas.addEventListener('click', onClick);
-        frame = requestAnimationFrame(animate);
+        canvas.addEventListener('pointermove', event => send({ type: 'pointermove', x: event.offsetX, y: event.offsetY }));
+        canvas.addEventListener('pointerleave', () => send({ type: 'pointerleave' }));
+        canvas.addEventListener('click', event => send({ type: 'click', x: event.offsetX, y: event.offsetY }));
+    }
+}
+
+// Returns how to tell the scene something: by message to the worker, or by calling it here.
+function connect(canvas, reduceMotion) {
+    if (typeof canvas.transferControlToOffscreen === 'function' && typeof Worker === 'function') {
+        const worker = new Worker(new URL('./particle-worker.js', import.meta.url), { type: 'module' });
+        const offscreen = canvas.transferControlToOffscreen();
+        worker.postMessage({ type: 'start', canvas: offscreen, reduceMotion }, [offscreen]);
+        return message => worker.postMessage(message);
     }
 
-    return {
-        stop() {
-            cancelAnimationFrame(frame);
-            observer.disconnect();
-            canvas.remove();
-        }
-    };
+    const scene = createScene(canvas, { reduceMotion, requestFrame: callback => requestAnimationFrame(callback) });
+    return message => scene.handle(message);
 }
 
 const container = document.getElementById('particles');
