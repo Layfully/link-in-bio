@@ -26,7 +26,7 @@ public static class HomeRenderer
     {
         services.AddLogging();
         services.AddSingleton(new PrerenderedStories { IsRecording = true });
-        services.AddStoryblok(storyblok, ComponentJson.Default, typeof(App).Assembly);
+        services.AddStoryblok(storyblok, typeof(App).Assembly);
         services.AddSingleton(TimeProvider.System);
         services.AddSingleton<NavigationManager>(new SiteNavigationManager());
         services.AddSingleton<IJSRuntime, NoJavaScript>();
