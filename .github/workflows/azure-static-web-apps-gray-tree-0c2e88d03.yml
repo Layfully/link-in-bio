@@ -118,6 +118,15 @@ jobs:
           mv "$RUNNER_TEMP/appsettings.json" "$APPSETTINGS_PATH"
           dotnet publish Client --configuration Release --output publish/site
 
+      # Puts the home page's content into the published index.html and cuts Font Awesome down to the icons in use (the
+      # Prerender project, see the README's Deployment section). It never fails the deploy: whatever goes wrong, it warns
+      # and leaves the site as published. fonttools (pyftsubset) comes through pipx, which the runner image has.
+      - name: Prerender the home page
+        run: |
+          pipx install fonttools==4.55.0 && pipx inject fonttools brotli==1.1.0 \
+            || echo "::warning::fonttools couldn't be installed; Font Awesome ships whole."
+          dotnet run --project Prerender --configuration Release -- publish/site/wwwroot
+
       - name: Deploy to Azure Static Web Apps
         uses: Azure/static-web-apps-deploy@1a947af9992250f3bc2e68ad0754c0b0c11566c9 # v1
         with:

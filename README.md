@@ -12,7 +12,8 @@ hosted on Azure Static Web Apps.
 | --- | --- |
 | `Client` | The Blazor WebAssembly app: pages, components, styles and the static files in `wwwroot`. |
 | `Storyblok` | A small client for Storyblok's Content Delivery API v2 that reads stories into the app's component classes. |
-| `Tests` | Unit tests for the Storyblok client, the link converter and the pages. |
+| `Prerender` | A console app the deploy runs after publishing: it puts the home page's content into the HTML (see [Prerendering](#prerendering)). |
+| `Tests` | Unit tests for the Storyblok client, the link converter, the pages and the prerendering. |
 
 ## Running it locally
 
@@ -147,6 +148,32 @@ The workflow needs these repository secrets:
 | `STORYBLOK_API_KEY_PUBLIC` | Published content, in every build. |
 | `STORYBLOK_API_KEY_PREVIEW` | Drafts, in the `editor` build only. |
 | `AZURE_STATIC_WEB_APPS_API_TOKEN_GRAY_TREE_0C2E88D03` | Deploying to Azure Static Web Apps. |
+
+### Prerendering
+
+A Blazor WebAssembly page shows nothing of its own until .NET has started in the browser, which takes seconds. So the
+production and pull request builds, after `dotnet publish`, run the `Prerender` project on the published site:
+
+- It loads the home story with the app's own Storyblok client and renders the home page with the app's own components
+  (`HtmlRenderer`), and writes the result into the published `index.html` in place of the loading indicator (between
+  the `<!--prerender-->` markers). Visitors see the photo and the links in the first HTML.
+- Storyblok's response goes into the same page, in `<script type="application/json" id="storyblok-prerendered">`. The
+  app reads it on start (`Client/Program.cs`), so its first render shows the same content instead of a placeholder,
+  without fading it in a second time. It then asks Storyblok whether the story has changed since the deploy and shows
+  the newer one if so. An outage at that point keeps the content the page came with.
+- The page as published is kept as `app-shell.html`, and the published config's navigation fallback points there, so
+  certificate pages and unknown addresses get the plain page, never the home page's content.
+- Font Awesome is cut down to the icons in the prerendered page and in the components (`FontAwesomeSubset.ComponentIcons`,
+  which a test keeps complete), fonts included (`pyftsubset` from fonttools). The copy goes to
+  `lib/fontawesome-7.3.1-<content hash>`. An icon added to a link in Storyblok stays blank until the next deploy.
+
+A change published in Storyblok reaches the first HTML only with the next deploy; until then visitors see it a moment
+after the page has loaded. The editor build is never prerendered (it shows drafts). Whatever goes wrong while
+prerendering (no token, Storyblok down, no content, a render error) shows as a warning on the run, and the site
+deploys as published, which works as before, only without content in the first HTML.
+
+To try it locally, publish, put the public token into the published `appsettings.json`, and run
+`dotnet run --project Prerender -- <publish folder>/wwwroot`. Without fonttools installed, Font Awesome stays whole.
 
 ### Content Security Policy
 
