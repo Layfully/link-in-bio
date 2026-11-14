@@ -50,7 +50,8 @@ message. Run them with:
 dotnet test --solution link-in-bio.slnx
 ```
 
-The particle background's movement rules (`Client/wwwroot/js/particle-field.js`) have tests of their own in `Tests/js`,
+The particle background's movement rules and drawing (`particle-field.js`, `particle-scene.js`) and when Blazor starts
+(`blazor-start.js`), all in `Client/wwwroot/js`, have tests of their own in `Tests/js`,
 run with Node's built-in test runner, no packages needed:
 
 ```bash
@@ -173,8 +174,11 @@ thread, and the page has nothing it needs it for at first. `index.html` loads Bl
 `Client/wwwroot/js/blazor-start.js` starts it 5 seconds after the page has loaded, at an idle moment: after the first
 look, and after page-speed tests have finished measuring. Nothing visible waits for it:
 
-- The particles don't belong to Blazor. `js/particle-background.js` draws them in `#particles`, outside `#app`, from
-  the first paint on every page, and Blazor never replaces them.
+- The particles don't belong to Blazor. `js/particle-background.js` puts them in `#particles`, outside `#app`, from
+  the first paint on every page, and Blazor never replaces them. The drawing (`js/particle-scene.js`) runs in a worker
+  (`js/particle-worker.js`) on a canvas handed over with `transferControlToOffscreen`, so the dots keep moving while
+  .NET's start keeps the main thread busy, instead of freezing for a second. Browsers that can't do that draw on the
+  page.
 - The typed line shows its first tagline from the start (`data-first`, through CSS). When the typing starts, that
   tagline becomes the element's text, and typed.js carries on from it: it deletes it after the usual pause and types
   the next one, so nothing jumps.
