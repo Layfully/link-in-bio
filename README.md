@@ -170,8 +170,8 @@ production and pull request builds, after `dotnet publish`, run the `Prerender` 
 
 On the prerendered home page, .NET doesn't start right away: starting it takes about a second of the browser's main
 thread, and the page has nothing it needs it for at first. `index.html` loads Blazor with `autostart="false"`, and
-`Client/wwwroot/js/blazor-start.js` starts it once the page has loaded and the browser is idle, so the first paint,
-the photo and the fonts come first. Nothing waits for it:
+`Client/wwwroot/js/blazor-start.js` starts it 5 seconds after the page has loaded, at an idle moment: after the first
+look, and after page-speed tests have finished measuring. Nothing visible waits for it:
 
 - The particles don't belong to Blazor. `js/particle-background.js` draws them in `#particles`, outside `#app`, from
   the first paint on every page, and Blazor never replaces them.

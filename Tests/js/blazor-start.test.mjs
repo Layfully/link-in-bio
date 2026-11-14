@@ -19,7 +19,8 @@ function load({ prerendered, parsed = true, loaded = false, idleCallbacks = true
             for (const listener of [...(listeners.get(type) ?? [])]) listener();
         },
         runIdle() { for (const callback of idle.splice(0)) callback(); },
-        runTimers() { for (const callback of timers.splice(0)) callback(); }
+        runTimers() { for (const { callback } of timers.splice(0)) callback(); },
+        get delays() { return timers.map(timer => timer.delay); }
     };
     const window = {
         Blazor: { start: () => { page.starts++; return Promise.resolve(); } },
@@ -29,7 +30,7 @@ function load({ prerendered, parsed = true, loaded = false, idleCallbacks = true
         },
         addEventListener: (type, listener) => listeners.set(type, [...(listeners.get(type) ?? []), listener]),
         removeEventListener: (type, listener) => listeners.set(type, (listeners.get(type) ?? []).filter(l => l !== listener)),
-        setTimeout: callback => { timers.push(callback); }
+        setTimeout: (callback, delay) => { timers.push({ callback, delay }); }
     };
     if (idleCallbacks) window.requestIdleCallback = callback => { idle.push(callback); };
     vm.runInNewContext(script, { window, ...window });
@@ -48,11 +49,14 @@ test('a page without prerendered content starts as soon as it is parsed', () => 
     assert.equal(page.starts, 1);
 });
 
-test('the prerendered home page starts once it has loaded and the browser is idle', () => {
+test('the prerendered home page starts 5 seconds after it has loaded, when the browser is idle', () => {
     const page = load({ prerendered: true });
 
-    assert.equal(page.starts, 0);
     page.fire('load');
+    assert.deepEqual(page.delays, [5000]);
+    page.runIdle();
+    assert.equal(page.starts, 0);
+    page.runTimers();
     assert.equal(page.starts, 0);
     page.runIdle();
     assert.equal(page.starts, 1);
@@ -61,15 +65,18 @@ test('the prerendered home page starts once it has loaded and the browser is idl
 test('a prerendered page that had loaded before the script decided starts when idle', () => {
     const page = load({ prerendered: true, loaded: true });
 
+    page.runTimers();
     page.runIdle();
     assert.equal(page.starts, 1);
 });
 
-test('without idle callbacks, as in Safari, it starts shortly after loading', () => {
+test('without idle callbacks, as in Safari, a short pause stands in for the idle moment', () => {
     const page = load({ prerendered: true, idleCallbacks: false });
 
     page.fire('load');
+    page.runTimers();
     assert.equal(page.starts, 0);
+    assert.deepEqual(page.delays, [100]);
     page.runTimers();
     assert.equal(page.starts, 1);
 });
@@ -82,6 +89,7 @@ test('a data block further down the page than the script still counts', () => {
     page.runIdle();
     assert.equal(page.starts, 0);
     page.fire('load');
+    page.runTimers();
     page.runIdle();
     assert.equal(page.starts, 1);
 });
