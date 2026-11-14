@@ -1,6 +1,5 @@
 using Storyblok;
 using Storyblok.Attributes;
-using System.Text.Json.Serialization;
 
 namespace LinkInBio.Tests.Storyblok;
 
@@ -42,15 +41,6 @@ public sealed class StoryblokComponentTypesTests
         Assert.True(types.TryGetType("teaser", out _));
     }
 
-    [Fact]
-    public void A_class_the_json_metadata_doesnt_know_is_refused()
-    {
-        InvalidOperationException error = Assert.Throws<InvalidOperationException>(
-            () => new StoryblokComponentTypes([typeof(JsonKnownComponent), typeof(JsonUnknownComponent)], OnlyKnownComponentJson.Default));
-
-        Assert.Contains(nameof(JsonUnknownComponent), error.Message);
-    }
-
     [StoryblokComponent("teaser")]
     private sealed class Teaser : StoryblokComponent;
 
@@ -65,13 +55,3 @@ public sealed class StoryblokComponentTypesTests
     [StoryblokComponent("abstract")]
     private abstract class AbstractComponent : StoryblokComponent;
 }
-
-// Source-generated JSON metadata must reach the types it describes, so these can't be private nested classes.
-[StoryblokComponent("json_known")]
-public sealed class JsonKnownComponent : StoryblokComponent;
-
-[StoryblokComponent("json_unknown")]
-public sealed class JsonUnknownComponent : StoryblokComponent;
-
-[JsonSerializable(typeof(JsonKnownComponent))]
-internal sealed partial class OnlyKnownComponentJson : JsonSerializerContext;

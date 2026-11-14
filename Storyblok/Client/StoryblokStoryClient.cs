@@ -5,7 +5,6 @@ using Storyblok.Converters;
 using Storyblok.Extensions;
 using System.Net;
 using System.Text.Json;
-using System.Text.Json.Serialization.Metadata;
 
 namespace Storyblok.Client;
 
@@ -45,8 +44,6 @@ public sealed class StoryblokStoryClient : IDisposable
 
         _jsonOptions = new JsonSerializerOptions
         {
-            // The library's types, then the app's components; without the app's metadata they are read by reflection.
-            TypeInfoResolver = JsonTypeInfoResolver.Combine(StoryblokJson.Default, componentTypes.Json ?? new DefaultJsonTypeInfoResolver()),
             Converters =
             {
                 new StoryblokComponentConverter(componentTypes),

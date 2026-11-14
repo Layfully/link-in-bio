@@ -1,5 +1,4 @@
 using Client;
-using Client.Data.Components;
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Web;
 using Microsoft.AspNetCore.Components.WebAssembly.Hosting;
@@ -14,7 +13,7 @@ builder.RootComponents.Add<HeadOutlet>("head::after");
 // The clock behind the loading hints (StoryblokStatus); tests replace it to move time forward.
 builder.Services.AddSingleton(TimeProvider.System);
 
-builder.Services.AddStoryblok(builder.Configuration.GetSection("Storyblok"), ComponentJson.Default, typeof(App).Assembly);
+builder.Services.AddStoryblok(builder.Configuration.GetSection("Storyblok"), typeof(App).Assembly);
 
 // Drafts are loaded only inside the Visual Editor, and only by the editor build, the one deployment that has the preview
 // token. Production ships without it, so "?_storyblok" there shows the published content like any other visit.
