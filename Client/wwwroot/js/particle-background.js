@@ -1,10 +1,12 @@
-// The particle background behind the pages: dots on a canvas, moved by the rules in js/particle-field.js.
-// A few dozen lines instead of tsParticles, whose 160 KB took about a third of a second of script on every visit.
+// The particle background behind the pages: dots on a canvas, moved by the rules in particle-field.js. A few dozen
+// lines instead of tsParticles, whose 160 KB took about a third of a second of script on every visit.
+// index.html loads it as a module and it starts itself in the page's #particles element, outside Blazor's #app: the
+// dots move from the first paint on every page, whether .NET has started yet or not, and Blazor never replaces them.
 
 import {
     COLOR, DOT_OPACITY, LINK_DISTANCE, MAX_FPS, PUSH_COUNT,
     addParticles, createParticle, linkOpacity, particleCount, repulse, rescale, step
-} from '../js/particle-field.js';
+} from './particle-field.js';
 
 // Starts the particle background inside the container and returns a handle whose stop() ends it, or null when the
 // container is no longer on the page. With reduced motion the dots are drawn once and stand still, without reacting
@@ -111,3 +113,6 @@ export function startParticles(container) {
         }
     };
 }
+
+const container = document.getElementById('particles');
+if (container) startParticles(container);

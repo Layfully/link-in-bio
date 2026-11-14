@@ -1,5 +1,4 @@
 using Client.Interop;
-using Microsoft.AspNetCore.Components;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.JSInterop;
 
@@ -99,22 +98,5 @@ public sealed class InteropTests : IAsyncDisposable
 
         Assert.Equal(2, _js.Imports.Count);
         Assert.Equal(["start"], _module.Calls);
-    }
-
-    [Fact]
-    public async Task Particles_that_finish_starting_after_the_page_was_left_are_stopped()
-    {
-        TaskCompletionSource<object?> start = new();
-        _module.OnCall = method => method == "startParticles" ? start.Task : Task.FromResult<object?>(null);
-        FakeJsObject particles = new();
-        ParticleBackgroundInterop interop = new(_js, NullLogger.Instance);
-
-        ValueTask starting = interop.StartParticlesAsync(default(ElementReference));
-        await interop.DisposeAsync();
-        start.SetResult(particles);
-        await starting;
-
-        Assert.Equal(["stop"], particles.Calls);
-        Assert.True(particles.IsReleased);
     }
 }

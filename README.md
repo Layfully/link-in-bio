@@ -42,7 +42,7 @@ the .NET runtime into a smaller file. A local publish works without them, only w
 `Tests` holds the unit tests (xunit v3): the Storyblok client against a fake Storyblok (how each answer becomes a result,
 how Storyblok's values are read, how slugs are escaped, what is cached), the retries and timeouts of its requests, the
 component registry, the image addresses, the link converter's safety rules, the Visual Editor check, the JavaScript
-interop (a typing animation or particle background that finishes starting too late is stopped), and with
+interop (a typing animation that finishes starting too late is stopped), and with
 [bUnit](https://bunit.dev) the pages (what each answer from Storyblok shows), the loading hints and the layout's error
 message. Run them with:
 
@@ -103,7 +103,7 @@ Dependabot doesn't see these files. To update one:
 3. Update the paths in `Client/wwwroot/index.html` and this table, then check the icons and the typed taglines.
 
 The particle background used tsParticles until November 2026; it is now drawn by the site's own script
-(`Client/Components/ParticleBackground.razor.js`), which saves every visitor 160 KB and about a third of a second of
+(`Client/wwwroot/js/particle-background.js`), which saves every visitor 160 KB and about a third of a second of
 script.
 
 ## Caching
@@ -170,10 +170,16 @@ production and pull request builds, after `dotnet publish`, run the `Prerender` 
 
 On the prerendered home page, .NET doesn't start right away: starting it takes about a second of the browser's main
 thread, and the page has nothing it needs it for at first. `index.html` loads Blazor with `autostart="false"`, and
-`Client/wwwroot/js/blazor-start.js` starts it on the visitor's first interaction (pointer, touch, scroll, keyboard,
-focus) or 5 seconds after the page has loaded. Until then the typed line shows its first tagline (from `data-first`,
-through CSS) and the particles wait. Links are plain links, so a click before then is an ordinary page load. Every
-other page, and every build without prerendering, starts Blazor at once.
+`Client/wwwroot/js/blazor-start.js` starts it once the page has loaded and the browser is idle, so the first paint,
+the photo and the fonts come first. Nothing waits for it:
+
+- The particles don't belong to Blazor. `js/particle-background.js` draws them in `#particles`, outside `#app`, from
+  the first paint on every page, and Blazor never replaces them.
+- The typed line shows its first tagline from the start (`data-first`, through CSS). When the typing starts, that
+  tagline becomes the element's text, and typed.js carries on from it: it deletes it after the usual pause and types
+  the next one, so nothing jumps.
+
+Every other page, and every build without prerendering, starts Blazor at once.
 
 A change published in Storyblok reaches the first HTML only with the next deploy; until then visitors see it a moment
 after the page has loaded. The editor build is never prerendered (it shows drafts). Whatever goes wrong while

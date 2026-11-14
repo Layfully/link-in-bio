@@ -20,25 +20,31 @@ const TYPED_OPTIONS = {
 export async function start(element, texts) {
     if (!element?.isConnected) return null;
 
-    // From now on the element's own text is the line; CSS stops showing the first tagline from data-first.
+    // Until now CSS showed the first tagline (data-first). It becomes the element's own text, so nothing changes on
+    // screen, and the typing carries on from it instead of starting over.
+    element.textContent = texts[0] ?? '';
     element.dataset.started = '';
 
+    const standingStill = { stop() { element.textContent = ''; } };
+
     // With reduced motion the first tagline simply stands there; screen readers get all of them from the hidden copy.
-    if (matchMedia('(prefers-reduced-motion: reduce)').matches) {
-        element.textContent = texts[0] ?? '';
-        return {
-            stop() {
-                element.textContent = '';
-            }
-        };
-    }
+    // A single tagline stands there too: typing the text that is already shown would be motion without anything new.
+    if (texts.length < 2 || matchMedia('(prefers-reduced-motion: reduce)').matches) return standingStill;
 
     await whenLoaded('typed.js', () => typeof Typed !== 'undefined');
     if (!element.isConnected) return null;
 
-    // Several taglines take turns forever. A single one is typed once and stays: typed.js only deletes
-    // the last string when it loops, and retyping the same text would be motion without anything new.
-    const typed = new Typed(element, { ...TYPED_OPTIONS, strings: texts, loop: texts.length > 1 });
+    // typed.js takes text already in the element as its first string and starts by deleting it, so it gets only the
+    // other taglines: the first stays for the usual pause, goes, and the second is typed, as if it had all been typed.
+    // It then remembers where that first text ended; reset that before each round, or the first tagline would come
+    // back half-deleted. They take turns forever.
+    const typed = new Typed(element, {
+        ...TYPED_OPTIONS,
+        startDelay: TYPED_OPTIONS.backDelay,
+        strings: texts.slice(1),
+        loop: true,
+        onLastStringBackspaced: () => { typed.strPos = 0; }
+    });
 
     return {
         stop() {

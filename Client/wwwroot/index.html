@@ -69,6 +69,10 @@
             </div>
         </noscript>
 
+        <!-- The particle background, drawn by js/particle-background.js from the first paint; outside #app, so Blazor never
+             replaces it and it doesn't wait for .NET. -->
+        <div id="particles" aria-hidden="true" class="fixed inset-0 z-10"></div>
+
         <div id="app">
             <!--prerender-->
             <svg class="relative mx-auto mt-[35vh] mb-4 block h-32 w-32">
@@ -103,6 +107,7 @@
             <button type="button" class="dismiss absolute top-2 right-3 cursor-pointer" aria-label="Dismiss">🗙</button>
         </div>
         <script defer src="js/analytics-consent.js"></script>
+        <script type="module" src="js/particle-background.js"></script>
         <!-- Started by js/blazor-start.js: at once, or on the prerendered home page when the visitor first interacts. -->
         <script src="_framework/blazor.webassembly#[.{fingerprint}].js" autostart="false"></script>
         <script src="js/blazor-start.js"></script>
