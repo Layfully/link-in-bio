@@ -82,6 +82,18 @@ export function addParticles(particles, x, y, count, max, random = Math.random) 
     }
 }
 
+// Keeps every dot at the same place relative to the screen when its size changes. Without it, turning a phone sideways
+// would leave the dots below the new height off screen, and with reduced motion nothing would ever bring them back.
+// Before the first size is known (0 x 0) there is nothing to scale from.
+export function rescale(particles, oldWidth, oldHeight, newWidth, newHeight) {
+    if (oldWidth <= 0 || oldHeight <= 0) return;
+
+    for (const p of particles) {
+        p.x = p.x * newWidth / oldWidth;
+        p.y = p.y * newHeight / oldHeight;
+    }
+}
+
 function wrap(value, size) {
     return size > 0 ? ((value % size) + size) % size : value;
 }
