@@ -22,7 +22,7 @@ public sealed class StoryblokOptions
     public string BaseUrl { get; set; } = "https://api.storyblok.com/v2/cdn";
 
     /// <summary>
-    /// The duration (in seconds) that all loaded stories will be cached locally.
+    /// The duration (in seconds) that all loaded stories will be cached locally. 0 turns caching off.
     /// </summary>
     public int CacheDurationSeconds { get; set; } = 60 * 15;
 }

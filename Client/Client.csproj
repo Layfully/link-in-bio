@@ -2,7 +2,6 @@
   <PropertyGroup>
     <OverrideHtmlAssetPlaceholders>true</OverrideHtmlAssetPlaceholders>
     <InvariantGlobalization>true</InvariantGlobalization>
-    <PredefinedCulturesOnly>false</PredefinedCulturesOnly>
   </PropertyGroup>
 
   <ItemGroup>
@@ -12,6 +11,12 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Storyblok\Storyblok.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- The local tokens for the dev server (git ignores the file). The README suggests putting the preview token there, and
+         everything in a published wwwroot can be downloaded, so a publish must never carry it. -->
+    <Content Update="wwwroot\appsettings.Development.json" CopyToPublishDirectory="Never" />
   </ItemGroup>
   <Import Project="Csp.targets" />
 </Project>

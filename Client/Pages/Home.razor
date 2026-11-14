@@ -3,38 +3,41 @@
 @page "/"
 
 <PageTitle>Adrian Gaborek - Links</PageTitle>
-<main class="flex flex-col items-center justify-center bg-gray-900 min-h-screen py-16 overflow-x-clip">
-    <h1 class="sr-only" tabindex="-1">Adrian Gaborek - Links</h1>
-    @switch (_state)
-    {
-        case Loaded loaded:
-            if (loaded.Header is not null)
-            {
-                <Header Model="@loaded.Header" />
-            }
-            if (loaded.Links is { Count: > 0 })
-            {
-                <LinkList Model="@loaded.Links" />
-            }
-            break;
+@* Each page sets its own canonical address; one in index.html would claim every page is a copy of the home page. *@
+<HeadContent>
+    <link rel="canonical" href="@($"{Site.Url}/")" />
+</HeadContent>
+<h1 class="sr-only" tabindex="-1">Adrian Gaborek - Links</h1>
+@switch (_state)
+{
+    case Loaded loaded:
+        if (loaded.Header is not null)
+        {
+            <Header Model="@loaded.Header" />
+        }
+        if (loaded.Links is { Count: > 0 })
+        {
+            <LinkList Model="@loaded.Links" />
+        }
+        break;
 
-        case NothingPublished:
-            <Notice Icon="fa-circle-question" Title="Nothing here yet" Text="The links haven't been published yet. Please check back a little later." Kind="NoticeKind.Information" />
-            break;
-    }
-    <StoryblokStatus Status="@ContentStatus" Subject="links" Message="The links can't be loaded right now.">
-        <Placeholder>
-            <LinksSkeleton />
-        </Placeholder>
-    </StoryblokStatus>
-</main>
+    case NothingPublished:
+        <Notice Icon="fa-circle-question" Title="Nothing here yet" Text="The links haven't been published yet. Please check back a little later." Kind="NoticeKind.Information" />
+        break;
+}
+<StoryblokStatus Status="@ContentStatus" Subject="links" Message="The links can't be loaded right now.">
+    <Placeholder>
+        <LinksSkeleton />
+    </Placeholder>
+</StoryblokStatus>
 
 @code {
     // The page is in exactly one of these states; each state carries only the data it needs.
-    private union PageState(Loading, Loaded, Unavailable, NothingPublished);
+    private union PageState(Loading, Loaded, Unavailable, Unreadable, NothingPublished);
     private sealed record Loading;
     private sealed record Loaded(StoryblokHeader? Header, IReadOnlyList<StoryblokLink>? Links);
     private sealed record Unavailable;
+    private sealed record Unreadable;
     private sealed record NothingPublished;
 
     private readonly CancellationTokenSource _cts = new();
@@ -44,6 +47,7 @@
     {
         Loading => ContentStatus.Loading,
         Unavailable => ContentStatus.Unavailable,
+        Unreadable => ContentStatus.Unreadable,
         _ => ContentStatus.Done,
     };
 
@@ -52,14 +56,14 @@
         // Leaving the page cancels the request; Blazor ignores the resulting cancellation.
         StoryLoadResult<StoryblokPage> result = await StoryblokClient.Story()
             .WithSlug("/home")
-            .ResolveLinks(ResolveLinksType.None)
             .TryLoad<StoryblokPage>(_cts.Token);
 
         _state = result switch
         {
-            StoryblokStory<StoryblokPage> story => FromBlocks(story.Content?.Body),
+            StoryblokStory<StoryblokPage> story => FromBlocks(story.Content.Body),
             StoryNotFound => new NothingPublished(),
             StoryblokUnavailable => new Unavailable(),
+            StoryUnreadable => new Unreadable(),
             null => new Unavailable(),
         };
     }

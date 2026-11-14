@@ -4,7 +4,6 @@ using Microsoft.Extensions.Options;
 using Storyblok.Converters;
 using Storyblok.Extensions;
 using System.Net;
-using System.Net.Http.Json;
 using System.Text.Json;
 
 namespace Storyblok.Client;
@@ -60,52 +59,92 @@ public sealed class StoryblokStoryClient
 
     public StoryblokStoryQuery Story() => new(this);
 
-    internal async Task<StoryLoadResult<T>> TryLoadStory<T>(string slug, ResolveLinksType resolveLinks, CancellationToken cancellationToken) where T : StoryblokComponent
+    internal async Task<StoryLoadResult<T>> TryLoadStory<T>(string slug, CancellationToken cancellationToken) where T : StoryblokComponent
     {
+        if (ToStoryPath(slug) is not { } path)
+        {
+            _logger.LogTrace("Slug {Slug} can't name a story.", slug);
+            return new StoryNotFound();
+        }
+
+        StoryblokStory? story;
+
         try
         {
-            StoryblokStory? story = await LoadStory(slug, resolveLinks, cancellationToken);
-
-            if (story is null)
-            {
-                return new StoryNotFound();
-            }
-
-            return new StoryblokStory<T>(story);
+            story = await LoadStory(path, cancellationToken);
+        }
+        catch (JsonException exception)
+        {
+            // Storyblok answered, but with something the site can't read. Asking again would get the same answer.
+            _logger.LogError(exception, "Story {Slug} can't be read: Storyblok's response doesn't fit the site's component classes.", slug);
+            return new StoryUnreadable(exception);
         }
         catch (Exception exception) when (!cancellationToken.IsCancellationRequested)
         {
-            // Network errors, timeouts, 5xx and 401 answers and unreadable responses all mean the content can't be shown right now.
-            // A cancellation the caller asked for (the page went away) is not an outage, so it propagates instead.
+            // Network errors, timeouts and error answers (5xx, also 401 for a wrong token) mean the content can't be loaded
+            // right now. A cancellation the caller asked for (the page went away) is not an outage, so it propagates instead.
             _logger.LogError(exception, "Storyblok is unavailable, story {Slug} could not be loaded.", slug);
             return new StoryblokUnavailable(exception);
         }
-    }
 
-    private async Task<StoryblokStory?> LoadStory(string slug, ResolveLinksType resolveLinks, CancellationToken cancellationToken)
-    {
-        // Drafts in the Visual Editor must always be fresh.
-        if (LoadDrafts)
+        if (story is null)
         {
-            return await LoadStoryFromStoryblok(slug, resolveLinks, cancellationToken);
+            return new StoryNotFound();
         }
 
-        string cacheKey = $"{slug}_{resolveLinks}";
+        // A story of another kind, such as a page published under a certificate's address, or one without a content block.
+        if (story.Content is not T content)
+        {
+            InvalidOperationException exception = new(story.Content is null
+                ? $"The story has no content block, not {typeof(T)}."
+                : $"The story's content is a \"{story.Content.Component}\" component ({story.Content.GetType()}), not {typeof(T)}.");
+            _logger.LogError(exception, "Story {Slug} can't be read: its content block is of another kind.", slug);
+            return new StoryUnreadable(exception);
+        }
+
+        return new StoryblokStory<T>(story.Name, content);
+    }
+
+    /// <summary>
+    /// The slug as it goes into the request path, each segment escaped: callers pass slugs as they are, also ones built
+    /// from the page address. Null for a slug that can't name a story: an empty segment, or "." and "..", which the
+    /// address would resolve to another path than the one asked for.
+    /// </summary>
+    internal static string? ToStoryPath(string slug)
+    {
+        string[] segments = slug.Trim('/').Split('/');
+
+        return segments.Any(segment => segment is "" or "." or "..")
+            ? null
+            : string.Join('/', segments.Select(Uri.EscapeDataString));
+    }
+
+    // Takes the escaped path, which is also the cache key: "/home" and "home" are one story and one cache entry.
+    private async Task<StoryblokStory?> LoadStory(string path, CancellationToken cancellationToken)
+    {
+        // Drafts in the Visual Editor must always be fresh. A cache duration of 0 turns caching off (MemoryCache rejects
+        // an entry that expires at once).
+        if (LoadDrafts || _settings.CacheDurationSeconds <= 0)
+        {
+            return await LoadStoryFromStoryblok(path, cancellationToken);
+        }
+
+        string cacheKey = path;
         if (_cache.TryGetValue(cacheKey, out StoryblokStory? cachedStory) && cachedStory is not null)
         {
-            _logger.LogTrace("Using cached story for slug {Slug}.", slug);
+            _logger.LogTrace("Using cached story for {Path}.", path);
             return cachedStory;
         }
 
         string notFoundCacheKey = "404_" + cacheKey;
         if (_cache.TryGetValue(notFoundCacheKey, out _))
         {
-            _logger.LogTrace("Using cached 404 for slug {Slug}.", slug);
+            _logger.LogTrace("Using cached 404 for {Path}.", path);
             return null;
         }
 
         TimeSpan cacheDuration = TimeSpan.FromSeconds(_settings.CacheDurationSeconds);
-        StoryblokStory? story = await LoadStoryFromStoryblok(slug, resolveLinks, cancellationToken);
+        StoryblokStory? story = await LoadStoryFromStoryblok(path, cancellationToken);
 
         if (story is not null)
         {
@@ -113,12 +152,13 @@ public sealed class StoryblokStoryClient
             return story;
         }
 
-        _logger.LogTrace("Story not found for slug {Slug}.", slug);
+        _logger.LogTrace("Story not found for {Path}.", path);
         _cache.Set(notFoundCacheKey, true, cacheDuration);
         return null;
     }
 
-    private async Task<StoryblokStory?> LoadStoryFromStoryblok(string slug, ResolveLinksType resolveLinks, CancellationToken cancellationToken)
+    // Links are left unresolved (Storyblok's default): a link field carries the target's slug, which is all the site needs.
+    private async Task<StoryblokStory?> LoadStoryFromStoryblok(string path, CancellationToken cancellationToken)
     {
         List<string> query = [$"version={(LoadDrafts ? "draft" : "published")}"];
 
@@ -128,12 +168,7 @@ public sealed class StoryblokStoryClient
             query.Add($"cv={cacheVersion}");
         }
 
-        if (resolveLinks != ResolveLinksType.None)
-        {
-            query.Add($"resolve_links={resolveLinks.ToString().ToLowerInvariant()}");
-        }
-
-        string request = $"stories/{slug.TrimStart('/')}?{string.Join('&', query)}";
+        string request = $"stories/{path}?{string.Join('&', query)}";
 
         // Logged without the token, which is added only to the address actually requested.
         _logger.LogTrace("Loading {Request} from Storyblok.", request);

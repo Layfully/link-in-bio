@@ -11,4 +11,7 @@ public enum ContentStatus
 
     /// <summary>Storyblok couldn't deliver the content, even after retries: a notice with a retry button.</summary>
     Unavailable,
+
+    /// <summary>Storyblok delivered content the site can't read: a notice without a retry button, which wouldn't help.</summary>
+    Unreadable,
 }

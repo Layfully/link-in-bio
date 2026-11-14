@@ -8,9 +8,18 @@
     const CONSENT_LIFETIME_MS = 395 * 24 * 60 * 60 * 1000;
     const COOKIE_LIFETIME_SECONDS = 395 * 24 * 60 * 60;
 
+    // Only visits to the public site are counted. Pull request previews, the editor environment, the default
+    // azurestaticapps.net address and localhost neither load Analytics nor ask for consent.
+    const PRODUCTION_HOSTS = ['adriangaborek.dev', 'www.adriangaborek.dev'];
+
     const banner = document.getElementById('analytics-consent');
     const settings = document.getElementById('analytics-settings');
     let analyticsLoaded = false;
+
+    if (!PRODUCTION_HOSTS.includes(window.location.hostname)) {
+        settings.hidden = true;
+        return;
+    }
 
     // Stored as { choice, at }. Anything else, including an answer older than 13 months, counts as not asked yet.
     function parseChoice(stored) {

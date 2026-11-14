@@ -30,12 +30,7 @@ public static class ServiceCollectionExtensions
 
         // Retries transient failures (network errors, 408, 429, 5xx) and caps how long a page waits when Storyblok hangs.
         services.AddHttpClient(HttpClientName)
-            .AddStandardResilienceHandler(resilience =>
-            {
-                resilience.Retry.MaxRetryAttempts = 2;
-                resilience.AttemptTimeout.Timeout = TimeSpan.FromSeconds(5);
-                resilience.TotalRequestTimeout.Timeout = TimeSpan.FromSeconds(15);
-            });
+            .AddHttpMessageHandler(() => new StoryblokRetryHandler());
         services.AddScoped<StoryblokStoryClient>();
         services.AddMemoryCache();
         return services;

@@ -5,34 +5,37 @@
 @page "/Certificate/{name}"
 
 <PageTitle>Adrian Gaborek - @Title</PageTitle>
-<main class="flex flex-col items-center justify-center bg-gray-900 min-h-screen py-16 overflow-x-clip">
-    <h1 class="sr-only" tabindex="-1">Adrian Gaborek - @Title</h1>
-    @if (_state is Loaded loaded)
-    {
-        @* Same card as CertificateSkeleton (width and padding on the outermost element), so nothing moves when the
-           certificate replaces the placeholder. width/height let the browser reserve the image's space before it arrives. *@
-        <figure class="card z-20 relative w-10/12 sm:w-9/12 xl:w-1/2 p-2 sm:p-3 reveal">
-            <img class="block w-full h-auto rounded-xl" src="@loaded.ImageUrl" width="@loaded.Width" height="@loaded.Height"
-                 alt="@(loaded.Alt ?? $"Certificate: {loaded.Title}")" fetchpriority="high">
-        </figure>
-    }
-    <StoryblokStatus Status="@ContentStatus" Subject="the certificate"
-                     Message="The certificate can't be loaded right now.">
-        <Placeholder>
-            <CertificateSkeleton />
-        </Placeholder>
-    </StoryblokStatus>
-</main>
+<h1 class="sr-only" tabindex="-1">Adrian Gaborek - @Title</h1>
+@if (_state is Loaded loaded)
+{
+    @* Only for a certificate that exists: the not-found page must not claim an address. *@
+    <HeadContent>
+        <link rel="canonical" href="@($"{Site.Url}/Certificate/{Uri.EscapeDataString(Name ?? string.Empty)}")" />
+    </HeadContent>
+    @* Same card as CertificateSkeleton (width and padding on the outermost element), so nothing moves when the
+       certificate replaces the placeholder. width/height let the browser reserve the image's space before it arrives. *@
+    <figure class="card z-20 relative w-10/12 sm:w-9/12 xl:w-1/2 p-2 sm:p-3 reveal">
+        <img class="block w-full h-auto rounded-xl" src="@loaded.ImageUrl" width="@loaded.Width" height="@loaded.Height"
+             alt="@(string.IsNullOrWhiteSpace(loaded.Alt) ? $"Certificate: {loaded.Title}" : loaded.Alt)" fetchpriority="high">
+    </figure>
+}
+<StoryblokStatus Status="@ContentStatus" Subject="the certificate"
+                 Message="The certificate can't be loaded right now.">
+    <Placeholder>
+        <CertificateSkeleton />
+    </Placeholder>
+</StoryblokStatus>
 
 @code {
     [Parameter]
     public string? Name { get; set; }
 
     // The page is in exactly one of these states. Missing hands over to the app's not-found page.
-    private union PageState(Loading, Loaded, Unavailable, Missing);
+    private union PageState(Loading, Loaded, Unavailable, Unreadable, Missing);
     private sealed record Loading;
     private sealed record Loaded(string Title, string ImageUrl, string? Alt, int? Width, int? Height);
     private sealed record Unavailable;
+    private sealed record Unreadable;
     private sealed record Missing;
 
     private PageState _state = new Loading();
@@ -43,6 +46,7 @@
     {
         Loading => ContentStatus.Loading,
         Unavailable => ContentStatus.Unavailable,
+        Unreadable => ContentStatus.Unreadable,
         _ => ContentStatus.Done,
     };
 
@@ -69,10 +73,9 @@
         CancellationToken cancellationToken = _cts.Token;
         _state = new Loading();
 
-        // The name comes from the address, so it's escaped before it becomes part of the Storyblok request.
+        // The name comes from the address; the Storyblok client escapes it before it becomes part of the request.
         StoryLoadResult<StoryblokCertificate> result = await StoryblokClient.Story()
-            .WithSlug($"/certificates/{Uri.EscapeDataString(Name ?? string.Empty)}")
-            .ResolveLinks(ResolveLinksType.None)
+            .WithSlug($"/certificates/{Name}")
             .TryLoad<StoryblokCertificate>(cancellationToken);
 
         if (cancellationToken.IsCancellationRequested)
@@ -82,12 +85,11 @@
 
         _state = result switch
         {
-            // Shown at most about 640 px wide: 1280 px keeps it sharp without downloading the original scan.
-            StoryblokStory<StoryblokCertificate> story when story.Content?.Image is { Url.Length: > 0 } image
-                => new Loaded(story.Name ?? "Certificate", image.ResizeByWidth(1280) ?? image.Url, image.Alt, image.Dimensions()?.Width, image.Dimensions()?.Height),
+            StoryblokStory<StoryblokCertificate> story when story.Content.Image is { Url.Length: > 0 } image => FromImage(story.Name, image),
             StoryblokStory<StoryblokCertificate> => new Missing(), // published without an image
             StoryNotFound => new Missing(),
             StoryblokUnavailable => new Unavailable(),
+            StoryUnreadable => new Unreadable(),
             null => new Unavailable(),
         };
 
@@ -96,6 +98,13 @@
         {
             Navigation.NotFound();
         }
+    }
+
+    // Shown at most about 640 px wide: 1280 px keeps it sharp without downloading the original scan.
+    private static Loaded FromImage(string? name, StoryblokAsset image)
+    {
+        (int Width, int Height)? size = image.Dimensions();
+        return new Loaded(name ?? "Certificate", image.ResizeByWidth(1280) ?? image.Url!, image.Alt, size?.Width, size?.Height);
     }
 
     public async ValueTask DisposeAsync()
