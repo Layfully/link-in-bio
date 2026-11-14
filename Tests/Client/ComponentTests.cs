@@ -1,5 +1,6 @@
 using Bunit;
 using Client.Components;
+using Client.Data.Components;
 using Client.Layout;
 using Microsoft.AspNetCore.Components;
 using Microsoft.Extensions.DependencyInjection;
@@ -23,6 +24,18 @@ public sealed class ComponentTests : IDisposable
     }
 
     public void Dispose() => _context.Dispose();
+
+    [Fact]
+    public void The_typed_line_shows_the_first_tagline_until_typing_starts()
+    {
+        IRenderedComponent<TypedText> typed = _context.Render<TypedText>(parameters => parameters.Add(text => text.Model,
+            [new StoryblokText { Text = "  " }, new StoryblokText { Text = " Tea enthusiast " }, new StoryblokText { Text = "Developer" }]));
+
+        // The text comes from CSS (attr(data-first)) rather than the element's content, which typed.js owns.
+        AngleSharp.Dom.IElement line = typed.Find("p[aria-hidden]");
+        Assert.Equal("Tea enthusiast", line.GetAttribute("data-first"));
+        Assert.Equal(string.Empty, line.TextContent);
+    }
 
     [Fact]
     public void A_load_says_nothing_in_its_first_second_then_says_it_is_loading()

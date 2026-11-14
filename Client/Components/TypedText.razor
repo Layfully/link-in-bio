@@ -14,8 +14,10 @@
     </div>
     @* A fixed size, because the line is typed and deleted letter by letter and the header shouldn't move with it:
        the height for wrapped lines (up to four on a phone, two in the larger type from tablet width up), the full
-       width so the header's width doesn't follow the text. *@
-    <p @ref="_output" class="flex h-32 sm:h-24 w-full items-center justify-center px-8 text-center text-2xl font-bold tracking-tight text-white sm:text-3xl" aria-hidden="true"></p>
+       width so the header's width doesn't follow the text.
+       Until the typing starts, CSS shows the first tagline from data-first: on the prerendered home page Blazor, and so
+       the typing, may start only when the visitor first interacts. Not as the element's text, which typed.js owns. *@
+    <p @ref="_output" data-first="@_texts[0]" class="flex h-32 sm:h-24 w-full items-center justify-center px-8 text-center text-2xl font-bold tracking-tight text-white sm:text-3xl not-data-started:before:content-[attr(data-first)]" aria-hidden="true"></p>
 }
 
 @code {
