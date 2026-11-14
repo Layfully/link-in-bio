@@ -2,6 +2,7 @@ using Client;
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Web;
 using Microsoft.AspNetCore.Components.WebAssembly.Hosting;
+using Microsoft.JSInterop;
 using Storyblok;
 using Storyblok.Extensions;
 
@@ -20,4 +21,23 @@ builder.Services.AddOptions<StoryblokOptions>()
     .Configure<NavigationManager>((options, navigation) =>
         options.IsInEditor = !string.IsNullOrWhiteSpace(options.ApiKeyPreview) && VisualEditor.HasOpened(new Uri(navigation.Uri)));
 
-await builder.Build().RunAsync();
+WebAssemblyHost host = builder.Build();
+
+// The deployed home page carries Storyblok's response for its story (written by the Prerender project), so the app's
+// first render can show the same content the HTML already does instead of a placeholder. Read before the first render.
+// Without it, or if it can't be read, the page simply loads its content from Storyblok.
+try
+{
+    IJSInProcessRuntime js = (IJSInProcessRuntime)host.Services.GetRequiredService<IJSRuntime>();
+    using IJSInProcessObjectReference? element = js.Invoke<IJSInProcessObjectReference?>("document.getElementById", PrerenderedStories.ElementId);
+    if (element?.GetValue<string?>("textContent") is { } prerendered)
+    {
+        host.Services.GetRequiredService<PrerenderedStories>().AddAll(prerendered);
+    }
+}
+catch (JSException exception)
+{
+    host.Services.GetRequiredService<ILogger<PrerenderedStories>>().LogWarning(exception, "The prerendered content can't be read.");
+}
+
+await host.RunAsync();

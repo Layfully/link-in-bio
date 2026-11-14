@@ -1,5 +1,6 @@
 ﻿@implements IAsyncDisposable
 @inject StoryblokStoryClient StoryblokClient
+@inject PrerenderedStories Prerendered
 @page "/"
 
 <PageTitle>Adrian Gaborek - Links</PageTitle>
@@ -13,11 +14,11 @@
     case Loaded loaded:
         if (loaded.Header is not null)
         {
-            <Header Model="@loaded.Header" />
+            <Header Model="@loaded.Header" Reveal="@loaded.Reveal" />
         }
         if (loaded.Links is { Count: > 0 })
         {
-            <LinkList Model="@loaded.Links" />
+            <LinkList Model="@loaded.Links" Reveal="@loaded.Reveal" />
         }
         break;
 
@@ -35,7 +36,7 @@
     // The page is in exactly one of these states; each state carries only the data it needs.
     private union PageState(Loading, Loaded, Unavailable, Unreadable, NothingPublished);
     private sealed record Loading;
-    private sealed record Loaded(StoryblokHeader? Header, IReadOnlyList<StoryblokLink>? Links);
+    private sealed record Loaded(StoryblokHeader? Header, IReadOnlyList<StoryblokLink>? Links, bool Reveal);
     private sealed record Unavailable;
     private sealed record Unreadable;
     private sealed record NothingPublished;
@@ -51,31 +52,53 @@
         _ => ContentStatus.Done,
     };
 
+    private const string Slug = "/home";
+
     protected override async Task OnInitializedAsync()
     {
+        // The deployed page arrives with its content already in the HTML (see the Prerender project). Its story then
+        // loads without a request, so this first render shows the same content, and without fading it in a second time.
+        bool prerendered = Prerendered.Contains(Slug);
+
         // Leaving the page cancels the request; Blazor ignores the resulting cancellation.
         StoryLoadResult<StoryblokPage> result = await StoryblokClient.Story()
-            .WithSlug("/home")
+            .WithSlug(Slug)
             .TryLoad<StoryblokPage>(_cts.Token);
 
         _state = result switch
         {
-            StoryblokStory<StoryblokPage> story => FromBlocks(story.Content.Body),
+            StoryblokStory<StoryblokPage> story => FromBlocks(story.Content.Body, reveal: !prerendered),
             StoryNotFound => new NothingPublished(),
             StoryblokUnavailable => new Unavailable(),
             StoryUnreadable => new Unreadable(),
             null => new Unavailable(),
         };
+
+        if (!prerendered)
+        {
+            return;
+        }
+
+        // The content may have changed in Storyblok since the deploy. Only a newer story replaces it: an outage or an
+        // unreadable answer keeps the content the page came with rather than swapping it for an error.
+        StoryLoadResult<StoryblokPage>? refreshed = await StoryblokClient.Story()
+            .WithSlug(Slug)
+            .TryRefresh<StoryblokPage>(_cts.Token);
+
+        if (refreshed?.Value is StoryblokStory<StoryblokPage> newer)
+        {
+            _state = FromBlocks(newer.Content.Body, reveal: false);
+        }
     }
 
     // Blocks are picked by type, so reordering or adding blocks in Storyblok can't break the page.
     // A story with neither block counts as nothing published, instead of rendering an empty header.
-    private static PageState FromBlocks(StoryblokComponent[]? body)
+    private static PageState FromBlocks(StoryblokComponent[]? body, bool reveal)
     {
         StoryblokHeader? header = body?.OfType<StoryblokHeader>().FirstOrDefault();
         IReadOnlyList<StoryblokLink>? links = body?.OfType<StoryblokList>().FirstOrDefault()?.EntriesOf<StoryblokLink>();
 
-        return header is null && links is not { Count: > 0 } ? new NothingPublished() : new Loaded(header, links);
+        return header is null && links is not { Count: > 0 } ? new NothingPublished() : new Loaded(header, links, reveal);
     }
 
     public async ValueTask DisposeAsync()

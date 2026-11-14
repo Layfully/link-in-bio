@@ -1,7 +1,7 @@
 ﻿@using Storyblok.Extensions
 
 @* Full width, so the typed line growing letter by letter never changes the header's size and re-centres the photo. *@
-<header class="flex w-full flex-col items-center z-20 reveal">
+<header class="flex w-full flex-col items-center z-20 @(Reveal ? "reveal" : null)">
     @* Each part renders only when Storyblok has its data, so a header without a photo or link has no empty shapes. *@
     @if (Model?.Profile is { Url.Length: > 0 } profile)
     {
@@ -22,4 +22,8 @@
 @code {
     [Parameter]
     public StoryblokHeader? Model { get; set; }
+
+    /// <summary>Fades the header in. Off when it replaces identical prerendered content, which would otherwise fade in twice.</summary>
+    [Parameter]
+    public bool Reveal { get; set; } = true;
 }
