@@ -48,6 +48,9 @@ public sealed class ImageServiceExtensionsTests
     [InlineData("")]
     [InlineData("https://example.com/photo.jpg")]
     [InlineData("https://a.storyblok.com/f/1/0x400/abc/x.jpg")]
+    [InlineData("https://a.storyblok.com/f/space/600x400/abc/x.jpg")]
+    [InlineData("https://a.storyblok.com/f/1/600x/abc/x.jpg")]
+    [InlineData("https://a.storyblok.com/f/1/600x400")]
     public void An_address_of_another_shape_has_no_size(string? url)
     {
         Assert.Null(new StoryblokAsset { Url = url }.Dimensions());

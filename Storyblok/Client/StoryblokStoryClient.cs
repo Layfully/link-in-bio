@@ -1,4 +1,4 @@
-﻿using Microsoft.Extensions.Caching.Memory;
+﻿using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Storyblok.Converters;
@@ -9,10 +9,10 @@ using System.Text.Json;
 namespace Storyblok.Client;
 
 /// <summary>Loads stories from Storyblok's Content Delivery API v2.</summary>
-public sealed class StoryblokStoryClient
+public sealed class StoryblokStoryClient : IDisposable
 {
     private readonly HttpClient _client;
-    private readonly IMemoryCache _cache;
+    private readonly StoryCache _cache;
     private readonly PrerenderedStories _prerendered;
     private readonly ILogger<StoryblokStoryClient> _logger;
     private readonly StoryblokOptions _settings;
@@ -25,18 +25,20 @@ public sealed class StoryblokStoryClient
     // content directly instead of redirecting to the latest version first (https://www.storyblok.com/docs/concepts/caching).
     private long? _cacheVersion;
 
+    // The handler sends the requests: in the app the retry handler around the browser's (see AddStoryblok), in tests a
+    // fake Storyblok. It is shared, so disposing this client leaves it alone.
     public StoryblokStoryClient(
         IOptions<StoryblokOptions> settings,
         StoryblokComponentTypes componentTypes,
-        IHttpClientFactory clientFactory,
-        IMemoryCache cache,
+        [FromKeyedServices(ServiceCollectionExtensions.HttpHandlerKey)] HttpMessageHandler handler,
         PrerenderedStories prerendered,
+        TimeProvider time,
         ILogger<StoryblokStoryClient> logger)
     {
         // Reading Value validates the options (see AddStoryblok), so a missing token fails here with a clear message.
         _settings = settings.Value;
-        _client = clientFactory.CreateClient(ServiceCollectionExtensions.HttpClientName);
-        _cache = cache;
+        _client = new HttpClient(handler, disposeHandler: false);
+        _cache = new StoryCache(time);
         _prerendered = prerendered;
         _logger = logger;
 
@@ -61,6 +63,8 @@ public sealed class StoryblokStoryClient
     private string ApiKey => (LoadDrafts ? _settings.ApiKeyPreview : _settings.ApiKeyPublic) ?? string.Empty;
 
     public StoryblokStoryQuery Story() => new(this);
+
+    public void Dispose() => _client.Dispose();
 
     internal Task<StoryLoadResult<T>> TryLoadStory<T>(string slug, CancellationToken cancellationToken) where T : StoryblokComponent
     {
@@ -188,43 +192,27 @@ public sealed class StoryblokStoryClient
             return prerendered;
         }
 
-        // Drafts in the Visual Editor must always be fresh. A cache duration of 0 turns caching off (MemoryCache rejects
-        // an entry that expires at once).
+        // Drafts in the Visual Editor must always be fresh. A cache duration of 0 turns caching off.
         if (LoadDrafts || _settings.CacheDurationSeconds <= 0)
         {
             return (await LoadStoryFromStoryblok(path, cancellationToken)).Story;
         }
 
-        string cacheKey = path;
-        if (_cache.TryGetValue(cacheKey, out StoryblokStory? cachedStory) && cachedStory is not null)
+        // A story Storyblok said doesn't exist is cached too (as null), so a mistyped address isn't asked about again.
+        if (_cache.TryGet(path, out StoryblokStory? cached))
         {
-            _logger.LogTrace("Using cached story for {Path}.", path);
-            return cachedStory;
+            _logger.LogTrace("Using the cached answer for {Path}.", path);
+            return cached;
         }
 
-        string notFoundCacheKey = "404_" + cacheKey;
-        if (_cache.TryGetValue(notFoundCacheKey, out _))
-        {
-            _logger.LogTrace("Using cached 404 for {Path}.", path);
-            return null;
-        }
-
-        TimeSpan cacheDuration = TimeSpan.FromSeconds(_settings.CacheDurationSeconds);
         StoryblokStory? story = (await LoadStoryFromStoryblok(path, cancellationToken)).Story;
-
-        if (story is not null)
-        {
-            _cache.Set(cacheKey, story, cacheDuration);
-            return story;
-        }
-
-        _logger.LogTrace("Story not found for {Path}.", path);
-        _cache.Set(notFoundCacheKey, true, cacheDuration);
-        return null;
+        Remember(path, story);
+        return story;
     }
 
-    // Caches a story the way a load from Storyblok does, unless caching is off.
-    private void Remember(string path, StoryblokStory story)
+    // Caches an answer (a story, or null for one that doesn't exist) the way a load from Storyblok does, unless caching
+    // is off.
+    private void Remember(string path, StoryblokStory? story)
     {
         if (!LoadDrafts && _settings.CacheDurationSeconds > 0)
         {
