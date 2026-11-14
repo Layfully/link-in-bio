@@ -32,6 +32,9 @@
     };
 
     function loadAnalytics() {
+        // An earlier "No thanks" in this tab set Google's opt-out flag; a new "Allow" lifts it.
+        window[`ga-disable-${MEASUREMENT_ID}`] = false;
+
         if (analyticsLoaded) return;
         analyticsLoaded = true;
 
@@ -63,18 +66,20 @@
         }
     }
 
-    // Withdrawal in this tab: stop a running Google script first (Google's own opt-out flag), so it can't write its cookies
-    // back while the page unloads, then remove them. A running script can't be unloaded, so the page reloads clean.
+    // Without consent nothing may run: stop a running Google script first (Google's own opt-out flag), so it can't write
+    // its cookies back, then remove them. A running script can't be unloaded, so only a tab where Analytics already ran
+    // reloads, to start clean.
     function withdraw() {
         window[`ga-disable-${MEASUREMENT_ID}`] = true;
         removeAnalyticsCookies();
         if (analyticsLoaded) window.location.reload();
-        else apply(null);
     }
 
-    // Applies a choice to this tab: load Analytics, keep the banner hidden, or ask.
+    // Applies a choice to this tab: "granted" loads Analytics, "denied" or no answer withdraws it.
+    // The banner is shown only while there is no answer.
     function apply(choice) {
         if (choice === 'granted') loadAnalytics();
+        else withdraw();
         banner.hidden = choice !== null;
     }
 
@@ -86,18 +91,18 @@
         apply(answer);
     });
 
+    // Asks again without changing anything: the stored answer stays until the visitor picks one of the buttons.
+    // Only switching from "Allow" to "No thanks" reloads the page.
     settings.addEventListener('click', () => {
-        saveChoice(null);
-        withdraw();
+        banner.hidden = false;
+        banner.querySelector('[data-consent]')?.focus();
     });
 
-    // An answer or withdrawal in another tab of this site takes effect here too.
+    // An answer in another tab of this site, or its expiry, takes effect here too.
     window.addEventListener('storage', event => {
         if (event.key !== STORAGE_KEY) return;
 
-        const choice = parseChoice(event.newValue);
-        if (choice === null) withdraw();
-        else apply(choice);
+        apply(parseChoice(event.newValue));
     });
 
     const choice = readChoice();

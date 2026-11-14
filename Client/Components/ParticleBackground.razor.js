@@ -2,7 +2,7 @@
 
 import { whenLoaded } from '../js/deferred-scripts.js';
 
-// The same look as the earlier particles.js setup: 40 small white dots with faint links, pushed away on hover, more on click.
+// 40 small dots in a pale purple with faint links, pushed away on hover, more on click (the earlier particles.js setup, tinted).
 // With reduced motion the dots stand still and don't react to the pointer: the same picture, without movement.
 // tsParticles doesn't check prefers-reduced-motion itself.
 function particlesOptions(reduceMotion) {
@@ -14,11 +14,11 @@ function particlesOptions(reduceMotion) {
         particles: {
             // particles.js' value_area 800 meant 800,000 px² per 40 particles; tsParticles takes that area as width × height.
             number: { value: 40, density: { enable: true, width: 1000, height: 800 } },
-            color: { value: '#ffffff' },
+            color: { value: '#e9d5ff' }, // purple-200: white with a hint of the accent
             shape: { type: 'circle' },
-            opacity: { value: 0.2 },
+            opacity: { value: 0.25 },
             size: { value: { min: 0.5, max: 2 } },
-            links: { enable: true, distance: 150, color: '#ffffff', opacity: 0.2, width: 1 },
+            links: { enable: true, distance: 150, color: '#e9d5ff', opacity: 0.12, width: 1 },
             move: { enable: !reduceMotion, speed: 4, direction: 'none', random: false, straight: false, outModes: 'out' }
         },
         interactivity: {

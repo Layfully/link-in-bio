@@ -1,15 +1,18 @@
-@* The Font Awesome icon in front of a link label. Renders nothing without an icon class, so the label stays centred. *@
-@if (!string.IsNullOrWhiteSpace(CssClass))
-{
-    <i class="@CssClass mr-2 @(Animated ? "transition-transform ease-in-out duration-200 motion-safe:group-hover:scale-125 motion-safe:group-focus-visible:scale-125 motion-reduce:transition-none" : "")" aria-hidden="true"></i>
-}
+@* The square in front of a link label that holds its Font Awesome icon. It is there even without an icon, so every
+   label sits in the same place and stays centred between this square and the arrow on the right. *@
+<span class="flex size-9 shrink-0 items-center justify-center rounded-xl text-base @(Muted ? "text-neutral-500" : "bg-purple-500/15 text-purple-200 ring-1 ring-purple-400/20 transition-colors duration-200 group-hover:bg-purple-500/25 group-hover:text-white group-focus-visible:bg-purple-500/25 group-focus-visible:text-white")" aria-hidden="true">
+    @if (!string.IsNullOrWhiteSpace(CssClass))
+    {
+        <i class="@CssClass"></i>
+    }
+</span>
 
 @code {
     /// <summary>The Font Awesome classes from Storyblok, such as <c>fab fa-github</c>.</summary>
     [Parameter]
     public string? CssClass { get; set; }
 
-    /// <summary>Grows with its link on hover and keyboard focus.</summary>
+    /// <summary>For an entry without a link: no tinted square and no reaction to hover.</summary>
     [Parameter]
-    public bool Animated { get; set; }
+    public bool Muted { get; set; }
 }

@@ -13,8 +13,9 @@
         }
     </div>
     @* A fixed size, because the line is typed and deleted letter by letter and the header shouldn't move with it:
-       the height for wrapped lines, the full width so the header's width doesn't follow the text. *@
-    <p @ref="_output" class="flex h-32 w-full items-center justify-center px-8 text-center text-2xl font-bold text-white" aria-hidden="true"></p>
+       the height for wrapped lines (up to four on a phone, two in the larger type from tablet width up), the full
+       width so the header's width doesn't follow the text. *@
+    <p @ref="_output" class="flex h-32 sm:h-24 w-full items-center justify-center px-8 text-center text-2xl font-bold tracking-tight text-white sm:text-3xl" aria-hidden="true"></p>
 }
 
 @code {

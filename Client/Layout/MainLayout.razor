@@ -7,7 +7,7 @@
         @Body
     </ChildContent>
     <ErrorContent>
-        <main class="flex flex-col items-center justify-center bg-gray-900 min-h-screen">
+        <main class="flex flex-col items-center justify-center bg-gray-900 min-h-screen py-16">
             <Notice Icon="fa-triangle-exclamation" Title="Something went wrong" Text="An unexpected error stopped this page. Reloading usually fixes it." IsPageHeading="true">
                 <Actions>
                     <button type="button" class="action-button" @onclick="Reload">Reload the page</button>
@@ -23,7 +23,8 @@
 </ErrorBoundary>
 
 @* One background for the whole visit: it keeps running across navigation instead of restarting with every page,
-   and stays behind the error message too. *@
+   and stays behind the error message too. The glow sits under the particles, the pages' content above both. *@
+<div class="backdrop-glow" aria-hidden="true"></div>
 <ParticleBackground />
 
 @code {
