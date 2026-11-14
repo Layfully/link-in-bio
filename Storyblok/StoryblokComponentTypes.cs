@@ -14,10 +14,16 @@ public sealed class StoryblokComponentTypes
     private readonly FrozenDictionary<string, Type> _types;
 
     public StoryblokComponentTypes(IEnumerable<Assembly> assemblies)
+        : this(assemblies.Distinct().SelectMany(assembly => assembly.GetTypes()))
+    {
+    }
+
+    /// <summary>Only the given classes, for tests: an assembly holds every test's classes, deliberately broken ones included.</summary>
+    internal StoryblokComponentTypes(IEnumerable<Type> candidates)
     {
         Dictionary<string, Type> types = new(StringComparer.Ordinal);
 
-        foreach (Type type in assemblies.Distinct().SelectMany(assembly => assembly.GetTypes()))
+        foreach (Type type in candidates.Distinct())
         {
             if (type.GetCustomAttribute<StoryblokComponentAttribute>(inherit: false) is not { } attribute)
             {

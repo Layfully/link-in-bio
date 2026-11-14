@@ -6,7 +6,6 @@ namespace Storyblok;
 public sealed class StoryblokStoryQuery(StoryblokStoryClient client)
 {
     private string _slug = string.Empty;
-    private ResolveLinksType _resolveLinks = ResolveLinksType.Url;
 
     public StoryblokStoryQuery WithSlug(string slug)
     {
@@ -14,26 +13,13 @@ public sealed class StoryblokStoryQuery(StoryblokStoryClient client)
         return this;
     }
 
-    public StoryblokStoryQuery ResolveLinks(ResolveLinksType type)
-    {
-        _resolveLinks = type;
-        return this;
-    }
-
     /// <summary>
-    /// Loads the story. A story that doesn't exist is <see cref="StoryNotFound"/>; a Storyblok outage is
-    /// <see cref="StoryblokUnavailable"/> instead of an exception, so a page can still render without its content.
+    /// Loads the story. Instead of throwing, a story that doesn't exist is <see cref="StoryNotFound"/>, a Storyblok outage
+    /// is <see cref="StoryblokUnavailable"/> and content that doesn't fit <typeparamref name="T"/> is <see cref="StoryUnreadable"/>,
+    /// so a page can still render without its content.
     /// </summary>
     public Task<StoryLoadResult<T>> TryLoad<T>(CancellationToken cancellationToken = default) where T : StoryblokComponent
     {
-        return client.TryLoadStory<T>(_slug, _resolveLinks, cancellationToken);
+        return client.TryLoadStory<T>(_slug, cancellationToken);
     }
-}
-
-public enum ResolveLinksType
-{
-    Url,
-    Story,
-    Link,
-    None
 }

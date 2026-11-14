@@ -2,6 +2,7 @@
   <Folder Name="/SolutionFiles/">
     <File Path="Directory.Build.props" />
     <File Path="Directory.Packages.props" />
+    <File Path="global.json" />
     <File Path="README.md" />
   </Folder>
   <Folder Name="/.github/">
@@ -10,4 +11,5 @@
   </Folder>
   <Project Path="Client/Client.csproj" />
   <Project Path="Storyblok/Storyblok.csproj" />
+  <Project Path="Tests/LinkInBio.Tests.csproj" />
 </Solution>

@@ -1,13 +1,15 @@
 ﻿@inherits LayoutComponentBase
 @inject NavigationManager Navigation
 
-@* Unexpected errors in a page show this styled message instead of Blazor's default error bar. ErrorBoundary logs the exception. *@
-<ErrorBoundary @ref="_errorBoundary">
-    <ChildContent>
-        @Body
-    </ChildContent>
-    <ErrorContent>
-        <main class="flex flex-col items-center justify-center bg-gray-900 min-h-screen py-16 overflow-x-clip">
+@* The page shell for every page and the error message: content centred on the screen. The glow behind the profile
+   photo is much wider than the page, so main clips it sideways and it never makes a narrow screen scroll. *@
+<main class="flex min-h-screen flex-col items-center justify-center bg-gray-900 py-16 overflow-x-clip">
+    @* Unexpected errors in a page show this styled message instead of Blazor's default error bar. ErrorBoundary logs the exception. *@
+    <ErrorBoundary @ref="_errorBoundary">
+        <ChildContent>
+            @Body
+        </ChildContent>
+        <ErrorContent>
             <Notice Icon="fa-triangle-exclamation" Title="Something went wrong" Text="An unexpected error stopped this page. Reloading usually fixes it." IsPageHeading="true">
                 <Actions>
                     <button type="button" class="action-button" @onclick="Reload">Reload the page</button>
@@ -18,14 +20,15 @@
                     }
                 </Actions>
             </Notice>
-        </main>
-    </ErrorContent>
-</ErrorBoundary>
+        </ErrorContent>
+    </ErrorBoundary>
+</main>
 
 @* One background for the whole visit: it keeps running across navigation instead of restarting with every page,
    and stays behind the error message too. The glow sits under the particles, the pages' content above both. *@
 <div class="backdrop-glow" aria-hidden="true"></div>
 <ParticleBackground />
+<StoryblokBridge />
 
 @code {
     private ErrorBoundary? _errorBoundary;

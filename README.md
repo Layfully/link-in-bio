@@ -12,10 +12,11 @@ hosted on Azure Static Web Apps.
 | --- | --- |
 | `Client` | The Blazor WebAssembly app: pages, components, styles and the static files in `wwwroot`. |
 | `Storyblok` | A small client for Storyblok's Content Delivery API v2 that reads stories into the app's component classes. |
+| `Tests` | Unit tests for the Storyblok client, the link converter and the pages. |
 
 ## Running it locally
 
-You need the .NET 11 SDK.
+You need the .NET SDK that `global.json` names (11.0.100, or a later patch of it).
 
 1. Put the Storyblok **public** token in `Client/wwwroot/appsettings.Development.json`, which git ignores:
 
@@ -31,6 +32,29 @@ You need the .NET 11 SDK.
    Without a preview token the app ignores `?_storyblok` and shows published content.
 
 2. Run `dotnet run --project Client` and open the address it prints.
+
+## Tests
+
+`Tests` holds the unit tests (xunit v3): the Storyblok client against a fake Storyblok (how each answer becomes a result,
+how Storyblok's values are read, how slugs are escaped, what is cached), the retries and timeouts of its requests, the
+component registry, the image addresses, the link converter's safety rules, the Visual Editor check, the JavaScript
+interop (a typing animation or particle background that finishes starting too late is stopped), and with
+[bUnit](https://bunit.dev) the pages (what each answer from Storyblok shows), the loading hints and the layout's error
+message. Run them with:
+
+```bash
+dotnet test --solution link-in-bio.slnx
+```
+
+`global.json` switches `dotnet test` to Microsoft Testing Platform, which xunit v3 needs on .NET 10 and later. It also pins
+the SDK: CI installs the same one, and Dependabot proposes newer ones as pull requests. CI runs the tests in Release on
+every push and pull request, before anything is deployed.
+
+## Code style
+
+`.editorconfig` describes the code style (explicit types rather than `var`, braces everywhere, `_camelCase` private
+fields, no unused usings), and the build checks it together with the .NET analyzers' recommended rules. Release builds,
+which CI makes, treat every warning as an error.
 
 ## Styles
 
@@ -73,6 +97,9 @@ Dependabot doesn't see these files. To update one:
 `Client/wwwroot/staticwebapp.config.json` sets how long browsers keep files:
 
 - `_framework/*` and `lib/*` are cached for a year as `immutable`: their names change whenever their content does.
+- The exception is `_framework/blazor.webassembly.js` (and its `.map`). A standalone WebAssembly app publishes it
+  without a fingerprint, although `index.html` asks for one, so it is `no-cache`. Otherwise a returning visitor would
+  keep an old loader next to a new runtime after a .NET update.
 - Everything else, `index.html` included, is `no-cache`. Browsers keep a copy but check it on every visit, so a deploy
   is never answered with a stale page that points at `_framework` files that no longer exist.
 
@@ -88,10 +115,16 @@ deploys to Azure Static Web Apps:
 - **Production** (pushes to `main`) and **pull request staging environments** are built with the public token only.
 - **The `editor` environment** (pushes to `main`) is built with the preview token as well. It's the address Storyblok's
   Visual Editor previews, `https://<app>-editor.<region>.azurestaticapps.net`, so drafts appear there and nowhere else.
-  Set it as the preview URL in Storyblok's space settings.
+  Set it as the preview URL in Storyblok's space settings. Its responses carry `X-Robots-Tag: noindex, nofollow`
+  (added by `Client/Csp.targets`), so search engines leave it out.
 
 Everything in a WebAssembly app's `appsettings.json` can be downloaded by any visitor, which is why the preview token,
 which reads drafts, is never part of the production build.
+
+The `editor` environment is public too, though: anyone who opens its address can download the preview token there and
+read the space's drafts. That is accepted for this site, whose drafts contain nothing private. If that changes, protect
+the environment with a password (Azure Static Web Apps Standard plan) or preview from `https://localhost:7077/` instead
+and stop deploying the editor build.
 
 Dependabot's pull requests and pull requests from forks get no secrets, so they're built but not deployed.
 
@@ -109,6 +142,10 @@ The workflow needs these repository secrets:
 `index.html` is an inline script whose content changes with every build, so the policy allows it by hash:
 `Client/Csp.targets` computes that hash after each `dotnet publish` and writes it into the published config, in place
 of the `sha256-IMPORTMAP-HASH-SET-AT-PUBLISH` placeholder.
+
+The same step removes `https://app.storyblok.com` from the policy unless the build has the preview token. Only the editor
+build runs inside the Visual Editor, which frames the page and loads its bridge script from that origin; the app starts
+the bridge only there (`Client/Components/StoryblokBridge.razor`).
 
 ## License
 

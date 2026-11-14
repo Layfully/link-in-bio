@@ -16,5 +16,5 @@ public sealed class StoryblokHeader : StoryblokComponent
     [JsonPropertyName("typed_texts")]
     public IReadOnlyList<StoryblokText>? TypedTexts { get; set; }
 
-    public StoryblokLink? ProfileLink => Links?.FirstOrDefault();
+    public StoryblokLink? ProfileLink => Links is [StoryblokLink first, ..] ? first : null;
 }

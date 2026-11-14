@@ -3,41 +3,12 @@ using System.Text.Json.Serialization;
 
 namespace Storyblok;
 
-public class StoryblokAsset : IImageService
+/// <summary>An uploaded file from an asset field. Only the fields the site uses are read.</summary>
+public sealed class StoryblokAsset : IImageService
 {
     [JsonPropertyName("filename")]
     public string? Url { get; set; }
-    [JsonPropertyName("fieldtype")]
-    public string? FieldType { get; set; }
+
     [JsonPropertyName("alt")]
     public string? Alt { get; set; }
-    [JsonPropertyName("name")]
-    public string? Name { get; set; }
-    [JsonPropertyName("title")]
-    public string? Title { get; set; }
-    [JsonPropertyName("copyright")]
-    public string? Copyright { get; set; }
-
-    [JsonPropertyName("original")]
-    public StoryblokAssetOriginal? Original { get; set; }
-}
-
-public class StoryblokAssetOriginal : IImageService
-{
-    [JsonPropertyName("filename")]
-    public string? Url { get; set; }
-    [JsonPropertyName("fieldtype")]
-    public string? FieldType { get; set; }
-    [JsonPropertyName("alt")]
-    public string? Alt { get; set; }
-    [JsonPropertyName("name")]
-    public string? Name { get; set; }
-    [JsonPropertyName("title")]
-    public string? Title { get; set; }
-    [JsonPropertyName("copyright")]
-    public string? Copyright { get; set; }
-    [JsonPropertyName("content_length")]
-    public int? ContentLength { get; set; }
-    [JsonPropertyName("content_type")]
-    public string? ContentType { get; set; }
 }

@@ -1,5 +1,6 @@
 @implements IDisposable
 @inject NavigationManager Navigation
+@inject TimeProvider Time
 
 @* The screen reader's view of the loading hint, announced politely (role="status"). It stays on the page and gets its
    text only after the first second: screen readers often skip a live region that arrives together with its text,
@@ -31,9 +32,14 @@ else if (Status == ContentStatus.Unavailable)
         </Actions>
     </Notice>
 }
+else if (Status == ContentStatus.Unreadable)
+{
+    @* The content itself has a problem, so reloading would show the same: no retry button. *@
+    <Notice Icon="fa-file-circle-exclamation" Title="@Message" Text="The published content doesn't fit this page and needs a fix first. Please check back later." />
+}
 
 @code {
-    /// <summary>Where the page's content is. While loading, a placeholder and hint; when unavailable, a notice; otherwise nothing.</summary>
+    /// <summary>Where the page's content is. While loading, a placeholder and hint; when unavailable or unreadable, a notice; otherwise nothing.</summary>
     [Parameter, EditorRequired]
     public ContentStatus Status { get; set; }
 
@@ -41,7 +47,7 @@ else if (Status == ContentStatus.Unavailable)
     [Parameter]
     public string Subject { get; set; } = "content";
 
-    /// <summary>The headline shown when the content is unavailable.</summary>
+    /// <summary>The headline shown when the content is unavailable or unreadable.</summary>
     [Parameter]
     public string Message { get; set; } = "This content can't be loaded right now.";
 
@@ -68,8 +74,8 @@ else if (Status == ContentStatus.Unavailable)
             if (_waitingTimer is null)
             {
                 _secondsWaiting = 0;
-                _waitingTimer = new PeriodicTimer(TimeSpan.FromSeconds(1));
-                _ = CountWaitingSecondsAsync(_waitingTimer);
+                _waitingTimer = new PeriodicTimer(TimeSpan.FromSeconds(1), Time);
+                _ = CountWaitingSecondsAsync(_waitingTimer, Time.GetTimestamp());
             }
         }
         else
@@ -79,11 +85,13 @@ else if (Status == ContentStatus.Unavailable)
     }
 
     // Ends on its own once the timer is disposed: WaitForNextTickAsync then returns false.
-    private async Task CountWaitingSecondsAsync(PeriodicTimer timer)
+    // Each tick measures the time since the load began rather than counting ticks: a timer that falls behind, as in a
+    // background tab where browsers throttle timers, delivers one tick for several seconds.
+    private async Task CountWaitingSecondsAsync(PeriodicTimer timer, long loadStarted)
     {
         while (await timer.WaitForNextTickAsync())
         {
-            _secondsWaiting++;
+            _secondsWaiting = (int)Time.GetElapsedTime(loadStarted).TotalSeconds;
             await InvokeAsync(StateHasChanged);
         }
     }

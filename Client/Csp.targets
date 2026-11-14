@@ -3,12 +3,15 @@
     The build writes an import map into index.html as an inline script. Its content lists fingerprinted file names, so it
     changes with every build. The Content Security Policy in staticwebapp.config.json allows exactly that script by its
     SHA-256 hash; this step computes the hash after each publish and writes the published config with it.
+    It also removes app.storyblok.com from the policy unless the build has the preview token (the editor build), and
+    tells search engines not to index the editor build.
   -->
   <UsingTask TaskName="SetImportMapCspHash" TaskFactory="RoslynCodeTaskFactory" AssemblyFile="$(MSBuildToolsPath)\Microsoft.Build.Tasks.Core.dll">
     <ParameterGroup>
       <IndexHtml ParameterType="System.String" Required="true" />
       <SourceConfig ParameterType="System.String" Required="true" />
       <OutputConfig ParameterType="System.String" Required="true" />
+      <AppSettings ParameterType="System.String" Required="true" />
     </ParameterGroup>
     <Task>
       <Using Namespace="System.IO" />
@@ -46,7 +49,31 @@
             return false;
         }
 
-        File.WriteAllText(OutputConfig, config.Replace(Placeholder, "'sha256-" + hash + "'"));
+        config = config.Replace(Placeholder, "'sha256-" + hash + "'");
+
+        // Only the editor build, the one published with the preview token, runs inside Storyblok's Visual Editor: it is
+        // framed by app.storyblok.com and loads the editor's bridge from there. Every other build drops that origin.
+        string appSettings = File.Exists(AppSettings) ? File.ReadAllText(AppSettings) : string.Empty;
+        bool isEditorBuild = Regex.IsMatch(appSettings, "\"ApiKeyPreview\"\\s*:\\s*\"[^\"\\s]+\"");
+        if (!isEditorBuild)
+        {
+            config = config.Replace(" https://app.storyblok.com", string.Empty);
+        }
+        else
+        {
+            // The editor environment is public, but only the Visual Editor should look at it. Its pages point their
+            // canonical link at the real site already; this keeps search engines from indexing it at all.
+            const string GlobalHeaders = "\"globalHeaders\": {";
+            if (!config.Contains(GlobalHeaders))
+            {
+                Log.LogError("{0} has no {1} section to add X-Robots-Tag to.", SourceConfig, GlobalHeaders);
+                return false;
+            }
+
+            config = config.Replace(GlobalHeaders, GlobalHeaders + "\n    \"X-Robots-Tag\": \"noindex, nofollow\",");
+        }
+
+        File.WriteAllText(OutputConfig, config);
 
         // Publish compresses every static file, this config included, before this step runs. Those copies still hold the
         // placeholder and a config is never served compressed, so they are removed rather than left with a wrong policy.
@@ -58,7 +85,8 @@
             }
         }
 
-        Log.LogMessage(MessageImportance.High, "Content Security Policy: allowed the import map with sha256-{0}", hash);
+        Log.LogMessage(MessageImportance.High, "Content Security Policy: allowed the import map with sha256-{0}{1}", hash,
+            isEditorBuild ? ", kept app.storyblok.com for the Visual Editor, added X-Robots-Tag: noindex" : ", removed app.storyblok.com (no preview token)");
       ]]></Code>
     </Task>
   </UsingTask>
@@ -66,6 +94,7 @@
   <Target Name="SetImportMapCspHash" AfterTargets="Publish">
     <SetImportMapCspHash IndexHtml="$(PublishDir)wwwroot/index.html"
                          SourceConfig="$(MSBuildProjectDirectory)/wwwroot/staticwebapp.config.json"
-                         OutputConfig="$(PublishDir)wwwroot/staticwebapp.config.json" />
+                         OutputConfig="$(PublishDir)wwwroot/staticwebapp.config.json"
+                         AppSettings="$(PublishDir)wwwroot/appsettings.json" />
   </Target>
 </Project>
