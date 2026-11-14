@@ -13,6 +13,7 @@ public sealed class StoryblokStoryClient
 {
     private readonly HttpClient _client;
     private readonly IMemoryCache _cache;
+    private readonly PrerenderedStories _prerendered;
     private readonly ILogger<StoryblokStoryClient> _logger;
     private readonly StoryblokOptions _settings;
 
@@ -29,12 +30,14 @@ public sealed class StoryblokStoryClient
         StoryblokComponentTypes componentTypes,
         IHttpClientFactory clientFactory,
         IMemoryCache cache,
+        PrerenderedStories prerendered,
         ILogger<StoryblokStoryClient> logger)
     {
         // Reading Value validates the options (see AddStoryblok), so a missing token fails here with a clear message.
         _settings = settings.Value;
         _client = clientFactory.CreateClient(ServiceCollectionExtensions.HttpClientName);
         _cache = cache;
+        _prerendered = prerendered;
         _logger = logger;
 
         _jsonOptions = new JsonSerializerOptions
@@ -59,19 +62,69 @@ public sealed class StoryblokStoryClient
 
     public StoryblokStoryQuery Story() => new(this);
 
-    internal async Task<StoryLoadResult<T>> TryLoadStory<T>(string slug, CancellationToken cancellationToken) where T : StoryblokComponent
+    internal Task<StoryLoadResult<T>> TryLoadStory<T>(string slug, CancellationToken cancellationToken) where T : StoryblokComponent
     {
         if (ToStoryPath(slug) is not { } path)
         {
             _logger.LogTrace("Slug {Slug} can't name a story.", slug);
-            return new StoryNotFound();
+            return Task.FromResult<StoryLoadResult<T>>(new StoryNotFound());
         }
 
+        return ToResult<T>(slug, () => LoadStory(path, cancellationToken), cancellationToken);
+    }
+
+    /// <summary>
+    /// Asks Storyblok again for a story the page came with (see <see cref="PrerenderedStories"/>), past every cache. Null
+    /// when the page came without it, or when Storyblok's story is the same as the one it came with.
+    /// </summary>
+    internal async Task<StoryLoadResult<T>?> TryRefreshStory<T>(string slug, CancellationToken cancellationToken) where T : StoryblokComponent
+    {
+        if (LoadDrafts || ToStoryPath(slug) is not { } path || !_prerendered.TryGetResponse(path, out string prerendered))
+        {
+            return null;
+        }
+
+        bool unchanged = false;
+        StoryLoadResult<T> result = await ToResult<T>(slug, async () =>
+        {
+            (StoryblokStory? story, string? response) = await LoadStoryFromStoryblok(path, cancellationToken);
+            unchanged = IsSameStory(prerendered, response);
+            return story;
+        }, cancellationToken);
+
+        return unchanged ? null : (StoryLoadResult<T>?)result;
+    }
+
+    // Compared as JSON values, not as text: the embedded copy has <, > and & written as \u escapes.
+    private static bool IsSameStory(string response, string? otherResponse)
+    {
+        if (otherResponse is null)
+        {
+            return false;
+        }
+
+        try
+        {
+            using JsonDocument first = JsonDocument.Parse(response);
+            using JsonDocument second = JsonDocument.Parse(otherResponse);
+            return first.RootElement.TryGetProperty("story", out JsonElement firstStory)
+                && second.RootElement.TryGetProperty("story", out JsonElement secondStory)
+                && JsonElement.DeepEquals(firstStory, secondStory);
+        }
+        catch (JsonException)
+        {
+            return false;
+        }
+    }
+
+    private async Task<StoryLoadResult<T>> ToResult<T>(string slug, Func<Task<StoryblokStory?>> load, CancellationToken cancellationToken)
+        where T : StoryblokComponent
+    {
         StoryblokStory? story;
 
         try
         {
-            story = await LoadStory(path, cancellationToken);
+            story = await load();
         }
         catch (JsonException exception)
         {
@@ -122,11 +175,17 @@ public sealed class StoryblokStoryClient
     // Takes the escaped path, which is also the cache key: "/home" and "home" are one story and one cache entry.
     private async Task<StoryblokStory?> LoadStory(string path, CancellationToken cancellationToken)
     {
+        // The first load of a story the page came with needs no request. Drafts never come with the page.
+        if (!LoadDrafts && FromPrerendered(path) is { } prerendered)
+        {
+            return prerendered;
+        }
+
         // Drafts in the Visual Editor must always be fresh. A cache duration of 0 turns caching off (MemoryCache rejects
         // an entry that expires at once).
         if (LoadDrafts || _settings.CacheDurationSeconds <= 0)
         {
-            return await LoadStoryFromStoryblok(path, cancellationToken);
+            return (await LoadStoryFromStoryblok(path, cancellationToken)).Story;
         }
 
         string cacheKey = path;
@@ -144,7 +203,7 @@ public sealed class StoryblokStoryClient
         }
 
         TimeSpan cacheDuration = TimeSpan.FromSeconds(_settings.CacheDurationSeconds);
-        StoryblokStory? story = await LoadStoryFromStoryblok(path, cancellationToken);
+        StoryblokStory? story = (await LoadStoryFromStoryblok(path, cancellationToken)).Story;
 
         if (story is not null)
         {
@@ -157,8 +216,34 @@ public sealed class StoryblokStoryClient
         return null;
     }
 
+    // A prerendered response that can't be read is skipped: the story then loads from Storyblok as if the page had come
+    // without it.
+    private StoryblokStory? FromPrerendered(string path)
+    {
+        if (!_prerendered.TryTake(path, out string response))
+        {
+            return null;
+        }
+
+        try
+        {
+            if (JsonSerializer.Deserialize<StoryblokStoryContainer>(response, _jsonOptions)?.Story is { } story)
+            {
+                _logger.LogTrace("Using the prerendered story for {Path}.", path);
+                return story;
+            }
+        }
+        catch (JsonException exception)
+        {
+            _logger.LogWarning(exception, "The prerendered story for {Path} can't be read; loading it from Storyblok instead.", path);
+        }
+
+        return null;
+    }
+
     // Links are left unresolved (Storyblok's default): a link field carries the target's slug, which is all the site needs.
-    private async Task<StoryblokStory?> LoadStoryFromStoryblok(string path, CancellationToken cancellationToken)
+    // Also returns the response as Storyblok sent it, for recording (PrerenderedStories) and for comparing on a refresh.
+    private async Task<(StoryblokStory? Story, string? Response)> LoadStoryFromStoryblok(string path, CancellationToken cancellationToken)
     {
         List<string> query = [$"version={(LoadDrafts ? "draft" : "published")}"];
 
@@ -178,12 +263,13 @@ public sealed class StoryblokStoryClient
 
         if (response.StatusCode == HttpStatusCode.NotFound)
         {
-            return null;
+            return (null, null);
         }
 
         response.EnsureSuccessStatusCode();
 
-        StoryblokStoryContainer? container = await response.Content.ReadFromJsonAsync<StoryblokStoryContainer>(_jsonOptions, cancellationToken);
+        string body = await response.Content.ReadAsStringAsync(cancellationToken);
+        StoryblokStoryContainer? container = JsonSerializer.Deserialize<StoryblokStoryContainer>(body, _jsonOptions);
 
         if (container?.Story is not { } story)
         {
@@ -195,6 +281,7 @@ public sealed class StoryblokStoryClient
             _cacheVersion = container.CacheVersion;
         }
 
-        return story;
+        _prerendered.Record(path, body);
+        return (story, body);
     }
 }

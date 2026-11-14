@@ -20,16 +20,19 @@ public sealed class PageTests : IDisposable
 {
     private readonly BunitContext _context = new();
     private readonly FakeStoryblok _storyblok = new();
+    private readonly PrerenderedStories _prerendered = new();
 
     public PageTests()
     {
         _context.JSInterop.Mode = JSRuntimeMode.Loose;
         _context.Services.AddSingleton(TimeProvider.System);
+        _context.Services.AddSingleton(_prerendered);
         _context.Services.AddSingleton(new StoryblokStoryClient(
             Options.Create(new StoryblokOptions { ApiKeyPublic = "public-token" }),
             new StoryblokComponentTypes([typeof(App).Assembly]),
             _storyblok,
             new MemoryCache(new MemoryCacheOptions()),
+            _prerendered,
             NullLogger<StoryblokStoryClient>.Instance));
     }
 
@@ -124,6 +127,51 @@ public sealed class PageTests : IDisposable
 
         page.WaitForAssertion(() => Assert.Contains("Nothing here yet", page.Markup));
     }
+
+    [Fact]
+    public void A_prerendered_home_page_shows_its_links_in_the_first_render_without_fading_in()
+    {
+        _prerendered.AddAll($$"""{ "home": {{HomeWithLink("GitHub")}} }""");
+        _storyblok.Answer(HttpStatusCode.OK, HomeWithLink("GitHub"));
+
+        IRenderedComponent<Home> page = _context.Render<Home>();
+
+        Assert.Contains("GitHub", page.Find("nav li a").TextContent);
+        Assert.Empty(page.FindAll(".reveal"));
+    }
+
+    [Fact]
+    public void A_changed_home_page_replaces_the_prerendered_one()
+    {
+        _prerendered.AddAll($$"""{ "home": {{HomeWithLink("GitHub")}} }""");
+        _storyblok.Answer(HttpStatusCode.OK, HomeWithLink("GitLab"));
+
+        IRenderedComponent<Home> page = _context.Render<Home>();
+
+        page.WaitForAssertion(() => Assert.Contains("GitLab", page.Find("nav li a").TextContent));
+    }
+
+    [Fact]
+    public void A_failed_refresh_keeps_the_prerendered_links()
+    {
+        _prerendered.AddAll($$"""{ "home": {{HomeWithLink("GitHub")}} }""");
+        _storyblok.Answer(HttpStatusCode.ServiceUnavailable);
+
+        IRenderedComponent<Home> page = _context.Render<Home>();
+
+        page.WaitForAssertion(() => Assert.Single(_storyblok.Requests));
+        Assert.Contains("GitHub", page.Find("nav li a").TextContent);
+        Assert.DoesNotContain("can't be loaded", page.Markup, StringComparison.Ordinal);
+    }
+
+    private static string HomeWithLink(string label) => Story("Home", $$"""
+        { "_uid": "11111111-1111-1111-1111-111111111111", "component": "page", "body": [
+            { "_uid": "22222222-2222-2222-2222-222222222222", "component": "list", "entries": [
+                { "_uid": "33333333-3333-3333-3333-333333333333", "component": "link", "label": "{{label}}",
+                  "url": { "linktype": "url", "url": "https://example.com" } }
+            ] }
+        ] }
+        """);
 
     private IRenderedComponent<Certificate> RenderCertificate(string name) =>
         _context.Render<Certificate>(parameters => parameters.Add(page => page.Name, name));

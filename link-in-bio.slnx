@@ -10,6 +10,7 @@
     <File Path=".github/workflows/azure-static-web-apps-gray-tree-0c2e88d03.yml" />
   </Folder>
   <Project Path="Client/Client.csproj" />
+  <Project Path="Prerender/Prerender.csproj" />
   <Project Path="Storyblok/Storyblok.csproj" />
   <Project Path="Tests/LinkInBio.Tests.csproj" />
 </Solution>

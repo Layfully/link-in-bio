@@ -1,5 +1,6 @@
 ﻿using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Storyblok.Attributes;
 using Storyblok.Client;
 using System.Reflection;
@@ -32,6 +33,7 @@ public static class ServiceCollectionExtensions
         services.AddHttpClient(HttpClientName)
             .AddHttpMessageHandler(() => new StoryblokRetryHandler());
         services.AddScoped<StoryblokStoryClient>();
+        services.TryAddSingleton<PrerenderedStories>();
         services.AddMemoryCache();
         return services;
     }
