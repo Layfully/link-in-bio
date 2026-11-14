@@ -27,9 +27,11 @@ Chosen: A, then B. Expected result: roughly 60-75, TBT about 2 s.
 
 ## B (next round)
 
-- A `Prerender` console project renders `Home` with `HtmlRenderer` after the production publish, writes `home.html` (shell
-  plus HTML in `#app` plus the story JSON in a `<script type="application/json">`) and adds a route from `/` to it. Other
-  routes keep the plain shell.
+- A `Prerender` console project renders `Home` with `HtmlRenderer` after the production publish and writes it into the
+  published `index.html` (HTML in `#app` plus the story's Storyblok response in a `<script type="application/json">`).
+  The untouched page is kept as `app-shell.html`, and the published config's navigation fallback points there, so every
+  other route keeps the plain shell while `/` is served `index.html` as before.
+- If the refresh after boot fails, the prerendered content stays: an outage never replaces content with an error.
 - `Program.cs` seeds the Storyblok client's cache from the embedded JSON, so the first render matches the static HTML,
   without repeating the fade-in. Blazor then loads the live story and re-renders only if it differs.
 - Editor and token-less builds skip it; a Storyblok outage during deploy only warns.

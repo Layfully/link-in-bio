@@ -16,6 +16,7 @@ namespace LinkInBio.Tests.Storyblok;
 public sealed class StoryblokStoryClientTests : IDisposable
 {
     private readonly FakeStoryblok _storyblok = new();
+    private PrerenderedStories _prerendered = new();
 
     public void Dispose() => _storyblok.Dispose();
 
@@ -231,6 +232,95 @@ public sealed class StoryblokStoryClientTests : IDisposable
         Assert.Null(fields.ImageWithoutFile);
     }
 
+    [Fact]
+    public async Task A_prerendered_story_is_used_without_asking_Storyblok()
+    {
+        _prerendered.AddAll($$"""{ "home": {{Story("Prerendered", Page())}} }""");
+
+        StoryblokStory<TestPage> story = Assert.IsType<StoryblokStory<TestPage>>((await Load<TestPage>("/home")).Value);
+
+        Assert.Equal("Prerendered", story.Name);
+        Assert.Empty(_storyblok.Requests);
+    }
+
+    [Fact]
+    public async Task A_refresh_of_an_unchanged_story_is_null()
+    {
+        // Recorded and embedded the way the deploy does it, with characters the embedding escapes.
+        string response = Story("Me & <you>", Page());
+        _storyblok.Answer(HttpStatusCode.OK, response);
+        _prerendered.IsRecording = true;
+        await Load<TestPage>("/home");
+        PrerenderedStories embedded = new();
+        embedded.AddAll(_prerendered.ToJson());
+        _prerendered = embedded;
+        _storyblok.Answer(HttpStatusCode.OK, response);
+        StoryblokStoryClient client = CreateClient();
+        await Load<TestPage>(client, "/home", TestContext.Current.CancellationToken);
+
+        Assert.Null(await Refresh<TestPage>(client, "/home"));
+        Assert.Equal(2, _storyblok.Requests.Count);
+    }
+
+    [Fact]
+    public async Task A_refresh_of_a_changed_story_is_the_new_story()
+    {
+        _prerendered.AddAll($$"""{ "home": {{Story("Before", Page())}} }""");
+        _storyblok.Answer(HttpStatusCode.OK, Story("After", Page()));
+        StoryblokStoryClient client = CreateClient();
+        await Load<TestPage>(client, "/home", TestContext.Current.CancellationToken);
+
+        StoryLoadResult<TestPage>? refreshed = await Refresh<TestPage>(client, "/home");
+
+        Assert.Equal("After", Assert.IsType<StoryblokStory<TestPage>>(refreshed?.Value).Name);
+    }
+
+    [Fact]
+    public async Task A_refresh_of_a_story_that_wasnt_prerendered_is_null_without_asking()
+    {
+        Assert.Null(await Refresh<TestPage>(CreateClient(), "/home"));
+        Assert.Empty(_storyblok.Requests);
+    }
+
+    [Fact]
+    public async Task Recording_keeps_the_response_of_each_story()
+    {
+        string response = Story("Home", Page());
+        _storyblok.Answer(HttpStatusCode.OK, response);
+        _prerendered.IsRecording = true;
+
+        await Load<TestPage>("/home");
+
+        Assert.Equal(response, _prerendered.Recorded["home"]);
+    }
+
+    [Fact]
+    public async Task Prerendered_json_cant_end_a_script_block()
+    {
+        _storyblok.Answer(HttpStatusCode.OK, Story("</script><!--", Page()));
+        _prerendered.IsRecording = true;
+        await Load<TestPage>("/home");
+
+        string json = _prerendered.ToJson();
+
+        Assert.DoesNotContain("</script", json, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("<!--", json, StringComparison.Ordinal);
+        _prerendered = new PrerenderedStories();
+        _prerendered.AddAll(json);
+        Assert.Equal("</script><!--", Assert.IsType<StoryblokStory<TestPage>>((await Load<TestPage>("/home")).Value).Name);
+    }
+
+    [Fact]
+    public void Unreadable_prerendered_json_is_ignored()
+    {
+        _prerendered.AddAll("not json");
+
+        Assert.False(_prerendered.Contains("/home"));
+    }
+
+    private static Task<StoryLoadResult<T>?> Refresh<T>(StoryblokStoryClient client, string slug) where T : StoryblokComponent =>
+        client.Story().WithSlug(slug).TryRefresh<T>(TestContext.Current.CancellationToken);
+
     private Task<StoryLoadResult<T>> Load<T>(string slug) where T : StoryblokComponent =>
         Load<T>(CreateClient(), slug, TestContext.Current.CancellationToken);
 
@@ -243,6 +333,7 @@ public sealed class StoryblokStoryClientTests : IDisposable
         new StoryblokComponentTypes([typeof(TestPage), typeof(TestFields)]),
         _storyblok,
         new MemoryCache(new MemoryCacheOptions()),
+        _prerendered,
         NullLogger<StoryblokStoryClient>.Instance);
 
     private static string Page() => """{ "_uid": "11111111-1111-1111-1111-111111111111", "component": "test_page", "body": [] }""";

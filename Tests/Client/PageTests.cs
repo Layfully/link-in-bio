@@ -20,6 +20,7 @@ public sealed class PageTests : IDisposable
 {
     private readonly BunitContext _context = new();
     private readonly FakeStoryblok _storyblok = new();
+    private readonly PrerenderedStories _prerendered = new();
 
     public PageTests()
     {
@@ -30,6 +31,7 @@ public sealed class PageTests : IDisposable
             new StoryblokComponentTypes([typeof(App).Assembly]),
             _storyblok,
             new MemoryCache(new MemoryCacheOptions()),
+            _prerendered,
             NullLogger<StoryblokStoryClient>.Instance));
     }
 

@@ -22,4 +22,13 @@ public sealed class StoryblokStoryQuery(StoryblokStoryClient client)
     {
         return client.TryLoadStory<T>(_slug, cancellationToken);
     }
+
+    /// <summary>
+    /// Asks Storyblok again for a story the page came with (see <see cref="PrerenderedStories"/>), past every cache. Null when
+    /// the page came without it or the story hasn't changed since; otherwise the outcome, like <see cref="TryLoad{T}"/>.
+    /// </summary>
+    public Task<StoryLoadResult<T>?> TryRefresh<T>(CancellationToken cancellationToken = default) where T : StoryblokComponent
+    {
+        return client.TryRefreshStory<T>(_slug, cancellationToken);
+    }
 }
