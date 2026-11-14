@@ -6,7 +6,7 @@
     @if (Model?.Profile is { Url.Length: > 0 } profile)
     {
         @* The gradient ring is the wrapper's padding, so photo and ring together stay 128 px, like the placeholder. *@
-        <div class="avatar-ring size-32 p-[3px]">
+        <div class="avatar-ring halo size-32 p-[3px]">
             @* Shown at 128 px; Storyblok's image service delivers 256 x 384 (2x for sharp screens, the photo's 2:3 ratio) instead of the original. *@
             <img class="size-full rounded-full border-[3px] border-gray-900 bg-gray-900 object-cover object-bottom" src="@profile.Resize(256, 384, smart: false)" width="128" height="128"
                  alt="@(string.IsNullOrWhiteSpace(profile.Alt) ? "Profile picture" : profile.Alt)" fetchpriority="high">
