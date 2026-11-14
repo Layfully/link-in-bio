@@ -5,6 +5,7 @@ using Storyblok.Attributes;
 using Storyblok.Client;
 using System.Globalization;
 using System.Reflection;
+using System.Text.Json.Serialization.Metadata;
 
 namespace Storyblok.Extensions;
 
@@ -16,8 +17,9 @@ public static class ServiceCollectionExtensions
     /// <summary>
     /// Registers <see cref="StoryblokStoryClient"/>, configured from <paramref name="configuration"/>. Storyblok components
     /// are read into the classes marked with <see cref="StoryblokComponentAttribute"/> in <paramref name="componentAssemblies"/>.
+    /// <paramref name="componentJson"/> is their source-generated JSON metadata (see <see cref="StoryblokComponentTypes.Json"/>).
     /// </summary>
-    public static IServiceCollection AddStoryblok(this IServiceCollection services, IConfiguration configuration, params Assembly[] componentAssemblies)
+    public static IServiceCollection AddStoryblok(this IServiceCollection services, IConfiguration configuration, IJsonTypeInfoResolver? componentJson = null, params Assembly[] componentAssemblies)
     {
         // Checked when the options are first read, after every Configure call (the app decides IsInEditor in its own).
         services.AddOptions<StoryblokOptions>()
@@ -29,7 +31,7 @@ public static class ServiceCollectionExtensions
                 "Storyblok:ApiKeyPreview is missing, but the site runs in the Visual Editor.")
             .Validate(options => options.CacheDurationSeconds >= 0, "Storyblok:CacheDurationSeconds can't be negative.");
 
-        services.AddSingleton(_ => new StoryblokComponentTypes(componentAssemblies));
+        services.AddSingleton(_ => new StoryblokComponentTypes(componentAssemblies, componentJson));
 
         // Retries transient failures (network errors, 408, 429, 5xx) and caps how long a page waits when Storyblok hangs.
         // A handler of its own rather than IHttpClientFactory: the site sends one kind of request, and the factory is

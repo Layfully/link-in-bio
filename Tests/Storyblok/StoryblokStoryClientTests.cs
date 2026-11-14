@@ -348,7 +348,7 @@ public sealed class StoryblokStoryClientTests : IDisposable
 
     private StoryblokStoryClient CreateClient(StoryblokOptions? options = null) => new(
         Options.Create(options ?? new StoryblokOptions { ApiKeyPublic = "public-token" }),
-        new StoryblokComponentTypes([typeof(TestPage), typeof(TestFields)]),
+        new StoryblokComponentTypes([typeof(TestPage), typeof(TestFields)], TestComponentJson.Default),
         _storyblok,
         _prerendered,
         _time,
@@ -385,3 +385,8 @@ public sealed class TestFields : StoryblokComponent
     [JsonPropertyName("empty_image")] public StoryblokAsset? EmptyImage { get; set; }
     [JsonPropertyName("image_without_file")] public StoryblokAsset? ImageWithoutFile { get; set; }
 }
+
+// The test components are read with source-generated metadata, as the app's are.
+[JsonSerializable(typeof(TestPage))]
+[JsonSerializable(typeof(TestFields))]
+internal sealed partial class TestComponentJson : JsonSerializerContext;

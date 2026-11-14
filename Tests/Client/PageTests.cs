@@ -1,5 +1,6 @@
 using Bunit;
 using Client;
+using Client.Data.Components;
 using Client.Pages;
 using Microsoft.AspNetCore.Components;
 using Microsoft.Extensions.DependencyInjection;
@@ -28,7 +29,7 @@ public sealed class PageTests : IDisposable
         _context.Services.AddSingleton(_prerendered);
         _context.Services.AddSingleton(new StoryblokStoryClient(
             Options.Create(new StoryblokOptions { ApiKeyPublic = "public-token" }),
-            new StoryblokComponentTypes([typeof(App).Assembly]),
+            new StoryblokComponentTypes([typeof(App).Assembly], ComponentJson.Default),
             _storyblok,
             _prerendered,
             TimeProvider.System,
