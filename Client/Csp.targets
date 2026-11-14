@@ -3,8 +3,9 @@
     The build writes an import map into index.html as an inline script. Its content lists fingerprinted file names, so it
     changes with every build. The Content Security Policy in staticwebapp.config.json allows exactly that script by its
     SHA-256 hash; this step computes the hash after each publish and writes the published config with it.
-    It also removes app.storyblok.com from the policy unless the build has the preview token (the editor build), and
-    tells search engines not to index the editor build.
+    It also puts css/app.css into index.html as a <style> element, allowed by its hash too, so the first paint needs no
+    request after the page itself. It removes app.storyblok.com from the policy unless the build has the preview token
+    (the editor build), and tells search engines not to index the editor build.
   -->
   <UsingTask TaskName="SetImportMapCspHash" TaskFactory="RoslynCodeTaskFactory" AssemblyFile="$(MSBuildToolsPath)\Microsoft.Build.Tasks.Core.dll">
     <ParameterGroup>
@@ -12,6 +13,7 @@
       <SourceConfig ParameterType="System.String" Required="true" />
       <OutputConfig ParameterType="System.String" Required="true" />
       <AppSettings ParameterType="System.String" Required="true" />
+      <AppCss ParameterType="System.String" Required="true" />
     </ParameterGroup>
     <Task>
       <Using Namespace="System.IO" />
@@ -20,8 +22,27 @@
       <Using Namespace="System.Text.RegularExpressions" />
       <Code Type="Fragment" Language="cs"><![CDATA[
         const string Placeholder = "'sha256-IMPORTMAP-HASH-SET-AT-PUBLISH'";
+        const string StylePlaceholder = "'sha256-APPCSS-HASH-SET-AT-PUBLISH'";
+        const string StylesheetLink = "<link rel=\"stylesheet\" href=\"css/app.css\" />";
 
         string html = File.ReadAllText(IndexHtml);
+
+        // The stylesheet is part of the page: the first paint then waits for the page alone, not for a second request
+        // (app.css is no-cache, so even a returning visitor's browser asked the server again before painting).
+        // Line endings normalized for the hash below, as the HTML parser does. A publish into a folder that still holds
+        // an earlier publish's page may find the style inlined already.
+        string css = File.ReadAllText(AppCss).Replace("\r\n", "\n").Replace("\r", "\n");
+        string inlineStyle = "<style>" + css + "</style>";
+        if (html.Contains(StylesheetLink))
+        {
+            html = html.Replace(StylesheetLink, inlineStyle);
+            File.WriteAllText(IndexHtml, html);
+        }
+        else if (!html.Contains(inlineStyle))
+        {
+            Log.LogError("{0} links no {1} to inline, and doesn't contain it inlined either.", IndexHtml, AppCss);
+            return false;
+        }
         Match importMap = Regex.Match(html, "<script type=\"importmap\">(.*?)</script>", RegexOptions.Singleline);
         if (!importMap.Success)
         {
@@ -35,9 +56,11 @@
 
         // Inline tasks compile against .NET Standard, which has no SHA256.HashData.
         string hash;
+        string styleHash;
         using (SHA256 sha = SHA256.Create())
         {
             hash = Convert.ToBase64String(sha.ComputeHash(Encoding.UTF8.GetBytes(scriptText)));
+            styleHash = Convert.ToBase64String(sha.ComputeHash(Encoding.UTF8.GetBytes(css)));
         }
 
         // Always start from the project's config, which holds the placeholder, so republishing never depends on what an
@@ -50,6 +73,14 @@
         }
 
         config = config.Replace(Placeholder, "'sha256-" + hash + "'");
+
+        if (!config.Contains(StylePlaceholder))
+        {
+            Log.LogError("The Content Security Policy in {0} has no {1} source to fill in.", SourceConfig, StylePlaceholder);
+            return false;
+        }
+
+        config = config.Replace(StylePlaceholder, "'sha256-" + styleHash + "'");
 
         // Only the editor build, the one published with the preview token, runs inside Storyblok's Visual Editor: it is
         // framed by app.storyblok.com and loads the editor's bridge from there. Every other build drops that origin.
@@ -75,9 +106,9 @@
 
         File.WriteAllText(OutputConfig, config);
 
-        // Publish compresses every static file, this config included, before this step runs. Those copies still hold the
-        // placeholder and a config is never served compressed, so they are removed rather than left with a wrong policy.
-        foreach (string compressed in new[] { OutputConfig + ".br", OutputConfig + ".gz" })
+        // Publish compresses every static file, this config and the page included, before this step runs. Those copies
+        // still hold the placeholders or the stylesheet link, so they are removed rather than served out of date.
+        foreach (string compressed in new[] { OutputConfig + ".br", OutputConfig + ".gz", IndexHtml + ".br", IndexHtml + ".gz" })
         {
             if (File.Exists(compressed))
             {
@@ -85,8 +116,9 @@
             }
         }
 
-        Log.LogMessage(MessageImportance.High, "Content Security Policy: allowed the import map with sha256-{0}{1}", hash,
-            isEditorBuild ? ", kept app.storyblok.com for the Visual Editor, added X-Robots-Tag: noindex" : ", removed app.storyblok.com (no preview token)");
+        Log.LogMessage(MessageImportance.High, "Content Security Policy: allowed the import map with sha256-{0} and the inlined app.css with sha256-{2}{1}", hash,
+            isEditorBuild ? ", kept app.storyblok.com for the Visual Editor, added X-Robots-Tag: noindex" : ", removed app.storyblok.com (no preview token)",
+            styleHash);
       ]]></Code>
     </Task>
   </UsingTask>
@@ -95,6 +127,7 @@
     <SetImportMapCspHash IndexHtml="$(PublishDir)wwwroot/index.html"
                          SourceConfig="$(MSBuildProjectDirectory)/wwwroot/staticwebapp.config.json"
                          OutputConfig="$(PublishDir)wwwroot/staticwebapp.config.json"
-                         AppSettings="$(PublishDir)wwwroot/appsettings.json" />
+                         AppSettings="$(PublishDir)wwwroot/appsettings.json"
+                         AppCss="$(PublishDir)wwwroot/css/app.css" />
   </Target>
 </Project>
