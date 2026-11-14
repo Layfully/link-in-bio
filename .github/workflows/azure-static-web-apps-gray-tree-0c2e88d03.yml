@@ -51,6 +51,11 @@ jobs:
         with:
           global-json-file: global.json
 
+      # Without it, publish ships the .NET runtime's WebAssembly file as it comes; with it, the file is relinked for
+      # this app and smaller.
+      - name: Install the WebAssembly build tools
+        run: dotnet workload install wasm-tools
+
       # Release, like the deploy: warnings are errors there. Builds the whole solution, then runs the tests.
       - name: Build and test
         run: dotnet test --solution link-in-bio.slnx --configuration Release
@@ -88,6 +93,11 @@ jobs:
         uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
         with:
           global-json-file: global.json
+
+      # Without it, publish ships the .NET runtime's WebAssembly file as it comes; with it, the file is relinked for
+      # this app and smaller.
+      - name: Install the WebAssembly build tools
+        run: dotnet workload install wasm-tools
 
       # jq writes the values as JSON strings, so characters such as & or # in a token arrive unchanged.
       - name: Publish the site with the public token

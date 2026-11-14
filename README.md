@@ -33,6 +33,9 @@ You need the .NET SDK that `global.json` names (11.0.100, or a later patch of it
 
 2. Run `dotnet run --project Client` and open the address it prints.
 
+CI also installs the WebAssembly build tools (`dotnet workload install wasm-tools`), which make `dotnet publish` relink
+the .NET runtime into a smaller file. A local publish works without them, only with a larger download.
+
 ## Tests
 
 `Tests` holds the unit tests (xunit v3): the Storyblok client against a fake Storyblok (how each answer becomes a result,
