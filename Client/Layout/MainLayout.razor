@@ -24,10 +24,9 @@
     </ErrorBoundary>
 </main>
 
-@* One background for the whole visit: it keeps running across navigation instead of restarting with every page,
-   and stays behind the error message too. The glow sits under the particles, the pages' content above both. *@
+@* One glow for the whole visit, behind the error message too. It sits under the particles (index.html, outside the
+   app, so they run before .NET starts and never restart), the pages' content above both. *@
 <div class="backdrop-glow" aria-hidden="true"></div>
-<ParticleBackground />
 <StoryblokBridge />
 
 @code {
