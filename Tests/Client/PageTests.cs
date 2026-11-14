@@ -2,7 +2,6 @@ using Bunit;
 using Client;
 using Client.Pages;
 using Microsoft.AspNetCore.Components;
-using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
@@ -31,8 +30,8 @@ public sealed class PageTests : IDisposable
             Options.Create(new StoryblokOptions { ApiKeyPublic = "public-token" }),
             new StoryblokComponentTypes([typeof(App).Assembly]),
             _storyblok,
-            new MemoryCache(new MemoryCacheOptions()),
             _prerendered,
+            TimeProvider.System,
             NullLogger<StoryblokStoryClient>.Instance));
     }
 

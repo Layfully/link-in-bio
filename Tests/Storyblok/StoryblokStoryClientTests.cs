@@ -1,6 +1,6 @@
-using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
+using Microsoft.Extensions.Time.Testing;
 using Storyblok;
 using Storyblok.Attributes;
 using Storyblok.Client;
@@ -17,6 +17,7 @@ public sealed class StoryblokStoryClientTests : IDisposable
 {
     private readonly FakeStoryblok _storyblok = new();
     private PrerenderedStories _prerendered = new();
+    private readonly FakeTimeProvider _time = new();
 
     public void Dispose() => _storyblok.Dispose();
 
@@ -163,6 +164,23 @@ public sealed class StoryblokStoryClientTests : IDisposable
         await Load<TestPage>(client, "/nothing", TestContext.Current.CancellationToken);
         await Load<TestPage>(client, "/nothing", TestContext.Current.CancellationToken);
 
+        Assert.Equal(2, _storyblok.Requests.Count);
+    }
+
+    [Fact]
+    public async Task A_cached_story_is_loaded_again_once_its_cache_time_is_up()
+    {
+        _storyblok.Answer(HttpStatusCode.OK, Story("Before", Page()));
+        _storyblok.Answer(HttpStatusCode.OK, Story("After", Page()));
+        StoryblokStoryClient client = CreateClient(new StoryblokOptions { ApiKeyPublic = "public-token", CacheDurationSeconds = 60 });
+
+        await Load<TestPage>(client, "/home", TestContext.Current.CancellationToken);
+        _time.Advance(TimeSpan.FromSeconds(59));
+        await Load<TestPage>(client, "/home", TestContext.Current.CancellationToken);
+        _time.Advance(TimeSpan.FromSeconds(1));
+        StoryLoadResult<TestPage> later = await Load<TestPage>(client, "/home", TestContext.Current.CancellationToken);
+
+        Assert.Equal("After", Assert.IsType<StoryblokStory<TestPage>>(later.Value).Name);
         Assert.Equal(2, _storyblok.Requests.Count);
     }
 
@@ -332,8 +350,8 @@ public sealed class StoryblokStoryClientTests : IDisposable
         Options.Create(options ?? new StoryblokOptions { ApiKeyPublic = "public-token" }),
         new StoryblokComponentTypes([typeof(TestPage), typeof(TestFields)]),
         _storyblok,
-        new MemoryCache(new MemoryCacheOptions()),
         _prerendered,
+        _time,
         NullLogger<StoryblokStoryClient>.Instance);
 
     private static string Page() => """{ "_uid": "11111111-1111-1111-1111-111111111111", "component": "test_page", "body": [] }""";

@@ -6,7 +6,7 @@ using System.Text;
 namespace LinkInBio.Tests;
 
 /// <summary>Answers requests from a queue of prepared responses and records what was asked.</summary>
-internal sealed class FakeStoryblok : HttpMessageHandler, IHttpClientFactory
+internal sealed class FakeStoryblok : HttpMessageHandler
 {
     private readonly Queue<Func<CancellationToken, Task<HttpResponseMessage>>> _answers = new();
 
@@ -27,8 +27,6 @@ internal sealed class FakeStoryblok : HttpMessageHandler, IHttpClientFactory
         await Task.Delay(Timeout.Infinite, cancellationToken);
         throw new UnreachableException();
     });
-
-    public HttpClient CreateClient(string name) => new(this, disposeHandler: false);
 
     protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
     {

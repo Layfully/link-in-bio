@@ -4,6 +4,16 @@
     <InvariantGlobalization>true</InvariantGlobalization>
   </PropertyGroup>
 
+  <!-- Smaller runtime files, only where the WebAssembly build tools (wasm-tools) are installed, which both need. The deploy
+       workflow installs them and says so with WASM_TOOLS_INSTALLED; a development machine or another CI check may not
+       have them, and CI=true alone doesn't tell. -->
+  <PropertyGroup Condition="'$(WASM_TOOLS_INSTALLED)' == 'true'">
+    <!-- No time zone data: the site shows no local times, and Storyblok's dates are read as UTC. -->
+    <InvariantTimezone>true</InvariantTimezone>
+    <!-- Exception messages as resource keys instead of full text: smaller framework assemblies. Only logs see them. -->
+    <UseSystemResourceKeys>true</UseSystemResourceKeys>
+  </PropertyGroup>
+
   <ItemGroup>
     <PackageReference Include="Microsoft.AspNetCore.Components.WebAssembly" />
     <PackageReference Include="Microsoft.AspNetCore.Components.WebAssembly.DevServer" PrivateAssets="all" />
