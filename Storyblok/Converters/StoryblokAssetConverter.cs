@@ -18,8 +18,9 @@ internal sealed class StoryblokAssetConverter : JsonConverter<StoryblokAsset?>
             return null;
         }
 
-        // Without the original options: they contain this converter, which would call itself forever.
-        StoryblokAsset? asset = JsonSerializer.Deserialize<StoryblokAsset>(ref reader);
+        // With the generated metadata's own options, not the original ones: those contain this converter, which would call
+        // itself forever.
+        StoryblokAsset? asset = JsonSerializer.Deserialize(ref reader, StoryblokJson.Default.StoryblokAsset);
 
         return string.IsNullOrWhiteSpace(asset?.Url) ? null : asset;
     }
