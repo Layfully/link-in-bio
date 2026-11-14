@@ -36,7 +36,7 @@
     ".webmanifest": "application/manifest+json"
   },
   "globalHeaders": {
-    "Content-Security-Policy": "default-src 'self'; script-src 'self' 'wasm-unsafe-eval' 'sha256-IMPORTMAP-HASH-SET-AT-PUBLISH' https://www.googletagmanager.com https://app.storyblok.com; style-src 'self'; font-src 'self'; img-src 'self' data: https://a.storyblok.com https://*.google-analytics.com https://*.googletagmanager.com; connect-src 'self' https://api.storyblok.com https://app.storyblok.com https://*.google-analytics.com https://*.analytics.google.com https://*.googletagmanager.com; frame-ancestors 'self' https://app.storyblok.com; object-src 'none'; base-uri 'self'; form-action 'self'",
+    "Content-Security-Policy": "default-src 'self'; script-src 'self' 'wasm-unsafe-eval' 'sha256-IMPORTMAP-HASH-SET-AT-PUBLISH' https://www.googletagmanager.com https://app.storyblok.com; style-src 'self' 'sha256-APPCSS-HASH-SET-AT-PUBLISH'; font-src 'self'; img-src 'self' data: https://a.storyblok.com https://*.google-analytics.com https://*.googletagmanager.com; connect-src 'self' https://api.storyblok.com https://app.storyblok.com https://*.google-analytics.com https://*.analytics.google.com https://*.googletagmanager.com; frame-ancestors 'self' https://app.storyblok.com; object-src 'none'; base-uri 'self'; form-action 'self'",
     "X-Content-Type-Options": "nosniff",
     "Referrer-Policy": "strict-origin-when-cross-origin",
     "Permissions-Policy": "camera=(), microphone=(), geolocation=(), payment=()",

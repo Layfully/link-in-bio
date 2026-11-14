@@ -70,6 +70,7 @@ which CI makes, treat every warning as an error.
 ## Styles
 
 `Client/Styles/app.css` is the Tailwind CSS 4 source; `Client/wwwroot/css/app.css` is the built file and is committed.
+Publishing puts it inline into `index.html` (see [Content Security Policy](#content-security-policy)).
 After changing classes in a `.razor` file or the source stylesheet, rebuild it from the `Client` folder, using either
 the [standalone Tailwind CLI](https://tailwindcss.com/docs/installation/tailwind-cli) or npm:
 
@@ -181,6 +182,11 @@ To try it locally, publish, put the public token into the published `appsettings
 `index.html` is an inline script whose content changes with every build, so the policy allows it by hash:
 `Client/Csp.targets` computes that hash after each `dotnet publish` and writes it into the published config, in place
 of the `sha256-IMPORTMAP-HASH-SET-AT-PUBLISH` placeholder.
+
+The same step puts `css/app.css` into the published `index.html` as a `<style>` element, in place of its `<link>`, and
+allows it by its hash (the `sha256-APPCSS-HASH-SET-AT-PUBLISH` placeholder in `style-src`). The first paint then needs
+no request after the page itself; the stylesheet was `no-cache`, so even returning visitors waited for it to be
+checked. The dev server keeps the `<link>`: the policy applies only on Azure.
 
 The same step removes `https://app.storyblok.com` from the policy unless the build has the preview token. Only the editor
 build runs inside the Visual Editor, which frames the page and loads its bridge script from that origin; the app starts
