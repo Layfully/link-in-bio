@@ -4,6 +4,15 @@
     <InvariantGlobalization>true</InvariantGlobalization>
   </PropertyGroup>
 
+  <!-- Smaller runtime files, in CI only: both need the WebAssembly build tools (wasm-tools), which CI installs and a
+       development machine may not have. GitHub Actions sets CI=true. -->
+  <PropertyGroup Condition="'$(CI)' == 'true'">
+    <!-- No time zone data: the site shows no local times, and Storyblok's dates are read as UTC. -->
+    <InvariantTimezone>true</InvariantTimezone>
+    <!-- Exception messages as resource keys instead of full text: smaller framework assemblies. Only logs see them. -->
+    <UseSystemResourceKeys>true</UseSystemResourceKeys>
+  </PropertyGroup>
+
   <ItemGroup>
     <PackageReference Include="Microsoft.AspNetCore.Components.WebAssembly" />
     <PackageReference Include="Microsoft.AspNetCore.Components.WebAssembly.DevServer" PrivateAssets="all" />
