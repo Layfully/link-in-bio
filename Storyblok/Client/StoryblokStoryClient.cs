@@ -89,6 +89,13 @@ public sealed class StoryblokStoryClient
         {
             (StoryblokStory? story, string? response) = await LoadStoryFromStoryblok(path, cancellationToken);
             unchanged = IsSameStory(prerendered, response);
+
+            // A newer story takes the prerendered one's place in the cache, for the rest of the visit.
+            if (story is not null && !unchanged)
+            {
+                Remember(path, story);
+            }
+
             return story;
         }, cancellationToken);
 
@@ -216,6 +223,15 @@ public sealed class StoryblokStoryClient
         return null;
     }
 
+    // Caches a story the way a load from Storyblok does, unless caching is off.
+    private void Remember(string path, StoryblokStory story)
+    {
+        if (!LoadDrafts && _settings.CacheDurationSeconds > 0)
+        {
+            _cache.Set(path, story, TimeSpan.FromSeconds(_settings.CacheDurationSeconds));
+        }
+    }
+
     // A prerendered response that can't be read is skipped: the story then loads from Storyblok as if the page had come
     // without it.
     private StoryblokStory? FromPrerendered(string path)
@@ -230,6 +246,7 @@ public sealed class StoryblokStoryClient
             if (JsonSerializer.Deserialize<StoryblokStoryContainer>(response, _jsonOptions)?.Story is { } story)
             {
                 _logger.LogTrace("Using the prerendered story for {Path}.", path);
+                Remember(path, story);
                 return story;
             }
         }
