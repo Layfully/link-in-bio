@@ -93,13 +93,16 @@
 
     // Blocks are picked by type, so reordering or adding blocks in Storyblok can't break the page.
     // A story with neither block counts as nothing published, instead of rendering an empty header.
-    private static PageState FromBlocks(StoryblokComponent[]? body, bool reveal)
-    {
-        StoryblokHeader? header = body?.OfType<StoryblokHeader>().FirstOrDefault();
-        IReadOnlyList<StoryblokLink>? links = body?.OfType<StoryblokList>().FirstOrDefault()?.EntriesOf<StoryblokLink>();
+    private static PageState FromBlocks(StoryblokComponent[]? body, bool reveal) =>
+        HasContent(body) ? new Loaded(Header(body), Links(body), reveal) : new NothingPublished();
 
-        return header is null && links is not { Count: > 0 } ? new NothingPublished() : new Loaded(header, links, reveal);
-    }
+    /// <summary>True when the story has a header or at least one link; otherwise the page says nothing is published yet.</summary>
+    public static bool HasContent(StoryblokComponent[]? body) => Header(body) is not null || Links(body) is { Count: > 0 };
+
+    private static StoryblokHeader? Header(StoryblokComponent[]? body) => body?.OfType<StoryblokHeader>().FirstOrDefault();
+
+    private static IReadOnlyList<StoryblokLink>? Links(StoryblokComponent[]? body) =>
+        body?.OfType<StoryblokList>().FirstOrDefault()?.EntriesOf<StoryblokLink>();
 
     public async ValueTask DisposeAsync()
     {

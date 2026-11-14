@@ -70,11 +70,13 @@
         </noscript>
 
         <div id="app">
+            <!--prerender-->
             <svg class="relative mx-auto mt-[35vh] mb-4 block h-32 w-32">
                 <circle r="40%" cx="50%" cy="50%" class="origin-center -rotate-90 fill-none stroke-gray-800 [stroke-width:0.5rem]" />
                 <circle r="40%" cx="50%" cy="50%" class="origin-center -rotate-90 fill-none stroke-purple-600 [stroke-width:0.5rem] [stroke-linecap:round] [stroke-dasharray:calc(3.141*var(--blazor-load-percentage,0%)*0.8),500%] transition-[stroke-dasharray] duration-50 ease-in-out drop-shadow-[0_0_6px_rgb(147_51_234/0.6)]" />
             </svg>
             <div class="absolute inset-x-0 top-[calc(35vh+3.25rem)] text-center font-bold text-white after:content-[var(--blazor-load-percentage-text,'Loading')]"></div>
+            <!--/prerender-->
         </div>
 
         <div id="analytics-consent" hidden class="fixed inset-x-0 bottom-0 z-50 flex justify-center px-4 pb-4">
