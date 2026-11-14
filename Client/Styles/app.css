@@ -67,15 +67,36 @@
         0 0 48px -8px color-mix(in oklab, var(--color-purple-500) 75%, transparent);
 }
 
-/* Depth behind everything: a purple glow above the middle of the page and darker edges. It sits below the particles. */
+/* Depth behind everything: a faint purple glow in the middle of the screen and darker edges. It sits below the
+   particles. The stronger glow behind the photo is the halo utility, which moves with the content. */
 @utility backdrop-glow {
     position: fixed;
     inset: 0;
     z-index: 0;
     pointer-events: none;
     background:
-        radial-gradient(48rem 34rem at 50% 22%, color-mix(in oklab, var(--color-purple-600) 24%, transparent), transparent 70%),
+        radial-gradient(40rem 30rem at 50% 50%, color-mix(in oklab, var(--color-purple-600) 10%, transparent), transparent 70%),
         radial-gradient(ellipse at 50% 45%, transparent 55%, rgb(0 0 0 / 0.5) 100%);
+}
+
+/* A purple glow centred on the element, much larger than it: behind the profile photo, wherever the photo ends up
+   on screens of any height. It is drawn below the element's content but above the particles. Pages clip it
+   sideways (overflow-x-clip on main), so it never makes a narrow screen scroll. */
+@utility halo {
+    position: relative;
+
+    &::before {
+        content: "";
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        width: 64rem;
+        height: 44rem;
+        translate: -50% -50%;
+        z-index: -1;
+        pointer-events: none;
+        background: radial-gradient(closest-side, color-mix(in oklab, var(--color-purple-600) 30%, transparent), transparent);
+    }
 }
 
 /* The filled purple button used for actions such as "Try again" or "Back to the links". White on purple-600 keeps a
