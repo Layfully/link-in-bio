@@ -44,15 +44,17 @@ how Storyblok's values are read, how slugs are escaped, what is cached), the ret
 component registry, the image addresses, the link converter's safety rules, the Visual Editor check, the JavaScript
 interop (a typing animation that finishes starting too late is stopped), and with
 [bUnit](https://bunit.dev) the pages (what each answer from Storyblok shows), the loading hints and the layout's error
-message. Run them with:
+message, and the prerendering (the rendered page, the profile it takes from Storyblok, how it is written into the
+published site, which Font Awesome icons stay, what a failure says). Run them with:
 
 ```bash
 dotnet test --solution link-in-bio.slnx
 ```
 
-The particle background's movement rules and drawing (`particle-field.js`, `particle-scene.js`) and when Blazor starts
-(`blazor-start.js`), all in `Client/wwwroot/js`, have tests of their own in `Tests/js`,
-run with Node's built-in test runner, no packages needed:
+The particle background's movement rules and drawing (`particle-field.js`, `particle-scene.js`), when Blazor starts
+(`blazor-start.js`) and the analytics consent (`analytics-consent.js`: nothing of Google before a yes), all in
+`Client/wwwroot/js`, and the deploy's Content Security Policy check (`.github/scripts/check-published-csp.mjs`) have
+tests of their own in `Tests/js`, run with Node's built-in test runner, no packages needed:
 
 ```bash
 node --test "Tests/js/*.test.mjs"
@@ -101,7 +103,17 @@ Dependabot doesn't see these files. To update one:
    `dist.integrity` (`npm view <package>@<version> dist.integrity`).
 2. Copy the files listed above into a **new** folder named after the new version, and delete the old folder. Never
    change files inside an existing folder: browsers that cached them would keep the old copies for a year.
-3. Update the paths in `Client/wwwroot/index.html` and this table, then check the icons and the typed taglines.
+3. Update the paths in `Client/wwwroot/index.html` and this table, then check the icons and the typed taglines. The
+   deploy's Font Awesome cut (see [Prerendering](#prerendering)) finds the folder through the link in `index.html`, so
+   it needs no change.
+
+For typed.js, also check that the taglines still take turns without the first one coming back half-deleted:
+`Client/Components/TypedText.razor.js` resets `typed.strPos`, which is typed.js's internal state, not its documented
+API, and a new version may rename or drop it.
+
+The Tailwind CLI is pinned in the workflow, where Dependabot doesn't see it either (`TAILWIND_VERSION` and its
+`TAILWIND_SHA256`, also named in [Styles](#styles)); update it by hand now and then. fonttools and brotli, for the Font
+Awesome cut, are pinned with their hashes in `Prerender/requirements.txt`, which Dependabot keeps up to date.
 
 The particle background used tsParticles until November 2026; it is now drawn by the site's own script
 (`Client/wwwroot/js/particle-background.js`), which saves every visitor 160 KB and about a third of a second of
@@ -127,8 +139,8 @@ Blazor's `#[.{fingerprint}]` placeholder in `index.html` is documented for JavaS
 `.github/workflows/azure-static-web-apps-gray-tree-0c2e88d03.yml` builds every push and pull request, then
 deploys to Azure Static Web Apps:
 
-- **Production** (pushes to `main`) and **pull request staging environments** are built with the public token only.
-- **The `editor` environment** (pushes to `main`) is built with the preview token as well. It's the address Storyblok's
+- **Production** (`main`) and **pull request staging environments** are built with the public token only.
+- **The `editor` environment** (`main`) is built with the preview token as well. It's the address Storyblok's
   Visual Editor previews, `https://<app>-editor.<region>.azurestaticapps.net`, so drafts appear there and nowhere else.
   Set it as the preview URL in Storyblok's space settings. Its responses carry `X-Robots-Tag: noindex, nofollow`
   (added by `Client/Csp.targets`), so search engines leave it out.
@@ -143,6 +155,15 @@ and stop deploying the editor build.
 
 Dependabot's pull requests and pull requests from forks get no secrets, so they're built but not deployed.
 
+Besides pushes, `main` deploys when content is published in Storyblok (a `repository_dispatch` event of type
+`storyblok_publish`, see below) and when the workflow is started by hand from the Actions tab. A run started by hand on
+another branch is built but never deployed.
+
+Before deploying, CI checks every published page against the site's Content Security Policy
+(`.github/scripts/check-published-csp.mjs`): each inline script and style must match a hash in the policy, and no
+element may carry a style or event handler attribute, which the policy would block. It runs after each publish and
+again after prerendering, which changes the page.
+
 The workflow needs these repository secrets:
 
 | Secret | Used for |
@@ -150,6 +171,22 @@ The workflow needs these repository secrets:
 | `STORYBLOK_API_KEY_PUBLIC` | Published content, in every build. |
 | `STORYBLOK_API_KEY_PREVIEW` | Drafts, in the `editor` build only. |
 | `AZURE_STATIC_WEB_APPS_API_TOKEN_GRAY_TREE_0C2E88D03` | Deploying to Azure Static Web Apps. |
+
+### Deploying on a publish in Storyblok
+
+The prerendered page, the cut-down Font Awesome and the page's metadata are made at deploy time (see
+[Prerendering](#prerendering)), so a publish in Storyblok should start a deploy. Storyblok's webhooks can't send the
+`Authorization` header GitHub's API needs, so a relay passes them on: the `TriggerBuild` function of the
+[portfolio](https://github.com/Layfully/portfolio) site's API, which checks a secret in its address and sends
+`repository_dispatch` with the event type `storyblok_publish`.
+
+1. In Storyblok, add a webhook on story **published**, **unpublished**, **deleted** and **moved**, to the relay's
+   address with its secret: `https://<portfolio site>/api/TriggerBuild?secret=<secret>`.
+2. In the portfolio Static Web App's application settings, `GithubOptions__Repository` lists every repository to
+   notify, separated by commas (`portfolio,link-in-bio`), and `GithubOptions__Pat` is a fine-grained GitHub token with
+   **Contents: read and write** on each of them.
+
+Several publishes in a row end in one deploy: a newer run on `main` replaces one still in progress.
 
 ### Prerendering
 
@@ -165,9 +202,13 @@ production and pull request builds, after `dotnet publish`, run the `Prerender` 
   the newer one if so. An outage at that point keeps the content the page came with.
 - The page as published is kept as `app-shell.html`, and the published config's navigation fallback points there, so
   certificate pages and unknown addresses get the plain page, never the home page's content.
+- Both pages get the profile from the home story in their metadata: the photo, cut to 600 x 600, as the link preview
+  (`og:image`) and the structured data's `image`, and every web address the page links to as its `sameAs`. The values
+  written in `index.html` are the fallback, for builds without prerendering. The description stays as written.
 - Font Awesome is cut down to the icons in the prerendered page and in the components (`FontAwesomeSubset.ComponentIcons`,
   which a test keeps complete), fonts included (`pyftsubset` from fonttools). The copy goes to
-  `lib/fontawesome-7.3.1-<content hash>`. An icon added to a link in Storyblok stays blank until the next deploy.
+  `lib/fontawesome-7.3.1-<content hash>`. An icon added to a link in Storyblok shows once the deploy its publish
+  starts has finished.
 
 On the prerendered home page, .NET doesn't start right away: starting it takes about a second of the browser's main
 thread, and the page has nothing it needs it for at first. `index.html` loads Blazor with `autostart="false"`, and
@@ -183,11 +224,16 @@ look, and after page-speed tests have finished measuring. Nothing visible waits 
   tagline becomes the element's text, and typed.js carries on from it: it deletes it after the usual pause and types
   the next one, so nothing jumps.
 
+- Blazor's first render replaces the prerendered content with its own copy. A link that has keyboard focus at that
+  moment keeps it (`blazor-start.js` moves focus to the same link in the copy), and the app moves focus to a page's
+  heading only after navigating inside the app, never on its first render (`Client/App.razor`).
+
 Every other page, and every build without prerendering, starts Blazor at once.
 
-A change published in Storyblok reaches the first HTML only with the next deploy; until then visitors see it a moment
-after the page has loaded. The editor build is never prerendered (it shows drafts). Whatever goes wrong while
-prerendering (no token, Storyblok down, no content, a render error) shows as a warning on the run, and the site
+A change published in Storyblok reaches the first HTML with the deploy the publish starts, a few minutes later; until
+then visitors see it a moment after the page has loaded. The editor build is never prerendered (it shows drafts).
+Whatever goes wrong while prerendering (no token, Storyblok down or refusing the token, no content, a render error)
+shows as a warning on the run that says why, with the exception's details in a collapsed group of the log, and the site
 deploys as published, which works as before, only without content in the first HTML.
 
 To try it locally, publish, put the public token into the published `appsettings.json`, and run
@@ -208,6 +254,10 @@ checked. The dev server keeps the `<link>`: the policy applies only on Azure.
 The same step removes `https://app.storyblok.com` from the policy unless the build has the preview token. Only the editor
 build runs inside the Visual Editor, which frames the page and loads its bridge script from that origin; the app starts
 the bridge only there (`Client/Components/StoryblokBridge.razor`).
+
+A hash that doesn't match shows only in a visitor's browser, as a page that stays blank or unstyled, so CI checks the
+published pages against the filled-in policy before every deploy (see [Deployment](#deployment)). To check a local
+publish: `node .github/scripts/check-published-csp.mjs <publish folder>/wwwroot`.
 
 ## License
 

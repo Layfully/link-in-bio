@@ -19,6 +19,13 @@ updates:
     schedule:
       interval: "weekly"
 
+  # fonttools and brotli, which the deploy uses to cut Font Awesome down (Prerender/requirements.txt). Dependabot updates
+  # the versions and their hashes together.
+  - package-ecosystem: "pip"
+    directory: "/Prerender"
+    schedule:
+      interval: "weekly"
+
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:

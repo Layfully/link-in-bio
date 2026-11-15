@@ -36,21 +36,26 @@ public static class HomeRenderer
     }
 
     /// <summary>
-    /// What the app renders into <c>#app</c> for <c>/</c>: the home page in the layout. Null unless the home story loads
-    /// with something to show: a page that would say "not found", "nothing here yet" or "can't be loaded" is not worth
-    /// putting into the HTML, the app says that itself.
+    /// What the app renders into <c>#app</c> for <c>/</c>: the home page in the layout, and the profile it shows for the
+    /// page's metadata. Throws, saying why, unless the home story loads with something to show: a page that would say
+    /// "not found", "nothing here yet" or "can't be loaded" is not worth putting into the HTML, the app says that itself.
     /// </summary>
-    public static async Task<string?> RenderAsync(IServiceProvider services)
+    public static async Task<RenderedHome> RenderAsync(IServiceProvider services)
     {
         StoryLoadResult<StoryblokPage> result = await services.GetRequiredService<StoryblokStoryClient>()
             .Story()
             .WithSlug("/home")
             .TryLoad<StoryblokPage>();
 
-        if (result.Value is not StoryblokStory<StoryblokPage> story || !Home.HasContent(story.Content.Body))
+        StoryblokStory<StoryblokPage> story = result switch
         {
-            return null;
-        }
+            StoryblokStory<StoryblokPage> loaded when Home.HasContent(loaded.Content.Body) => loaded,
+            StoryblokStory<StoryblokPage> => throw new InvalidOperationException("The home story has neither a header nor links."),
+            StoryNotFound => throw new InvalidOperationException("The home story isn't published."),
+            StoryblokUnavailable unavailable => throw new InvalidOperationException("Storyblok is unavailable.", unavailable.Error),
+            StoryUnreadable unreadable => throw new InvalidOperationException("The home story can't be read.", unreadable.Error),
+            null => throw new InvalidOperationException("The home story didn't load."),
+        };
 
         // The page loads the story again while rendering; it comes from the cache, the same response that was recorded.
         await using HtmlRenderer renderer = new(services, services.GetRequiredService<ILoggerFactory>());
@@ -71,7 +76,23 @@ public static class HomeRenderer
             throw new InvalidOperationException("The home page failed while rendering.", error);
         }
 
-        return html;
+        return new RenderedHome(html, ProfileOf(story.Content.Body));
+    }
+
+    // What the page shows about the person, as the page's metadata wants it: the photo cut square for link previews
+    // (og:image says 600 x 600), and every profile the page links to as an absolute web address.
+    private static SiteProfile ProfileOf(StoryblokComponent[]? body)
+    {
+        StoryblokHeader? header = Home.Header(body);
+        string? image = header?.Profile is { } photo && photo.IsSupported() ? photo.Resize(600, 600) : null;
+
+        IEnumerable<string?> addresses = [header?.ProfileLink?.Url, .. (Home.Links(body) ?? []).Select(link => link.Url)];
+        string[] profiles = [.. addresses
+            .Where(address => Uri.TryCreate(address, UriKind.Absolute, out Uri? uri) && uri.Scheme is "https" or "http")
+            .OfType<string>()
+            .Distinct(StringComparer.Ordinal)];
+
+        return new SiteProfile(image, profiles);
     }
 
     // Takes the place of the error boundary's logger to notice that the page failed.

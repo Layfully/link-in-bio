@@ -104,9 +104,11 @@
     /// <summary>True when the story has a header or at least one link; otherwise the page says nothing is published yet.</summary>
     public static bool HasContent(StoryblokComponent[]? body) => Header(body) is not null || Links(body) is { Count: > 0 };
 
-    private static StoryblokHeader? Header(StoryblokComponent[]? body) => body?.OfType<StoryblokHeader>().FirstOrDefault();
+    /// <summary>The header the page shows: the story's first header block.</summary>
+    public static StoryblokHeader? Header(StoryblokComponent[]? body) => body?.OfType<StoryblokHeader>().FirstOrDefault();
 
-    private static IReadOnlyList<StoryblokLink>? Links(StoryblokComponent[]? body) =>
+    /// <summary>The links the page lists: those of the story's first list block.</summary>
+    public static IReadOnlyList<StoryblokLink>? Links(StoryblokComponent[]? body) =>
         body?.OfType<StoryblokList>().FirstOrDefault()?.EntriesOf<StoryblokLink>();
 
     public async ValueTask DisposeAsync()
