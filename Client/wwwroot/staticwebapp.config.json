@@ -29,7 +29,7 @@
     },
     {
       "route": "/*",
-      "headers": { "cache-control": "no-cache" }
+      "headers": { "cache-control": "no-cache, no-transform" }
     }
   ],
   "platform": {

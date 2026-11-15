@@ -400,6 +400,9 @@ FodyWeavers.xsd
 # Local Storyblok tokens for the dev server
 Client/wwwroot/appsettings.Development.json
 
+# The API's settings for a local run (Functions Core Tools): the GitHub token and the webhook secret
+local.settings.json
+
 # Personal Claude Code settings (the shared .claude/settings.json is committed)
 .claude/settings.local.json
 

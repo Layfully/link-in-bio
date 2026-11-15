@@ -1,4 +1,4 @@
-﻿using Storyblok;
+using Storyblok;
 using Storyblok.Attributes;
 using System.Text.Json.Serialization;
 

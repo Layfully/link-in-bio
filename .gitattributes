@@ -1,3 +1,6 @@
 # Text files are stored with LF in git and checked out with the platform's line endings (CRLF on Windows),
 # whatever core.autocrlf is set to on a machine. Git detects binary files (images, fonts) by itself.
 * text=auto
+
+# Shell scripts run on Linux runners, and bash fails on CR at the end of a line.
+*.sh text eol=lf

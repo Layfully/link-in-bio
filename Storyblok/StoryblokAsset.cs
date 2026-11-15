@@ -1,4 +1,4 @@
-﻿using Storyblok.Extensions;
+using Storyblok.Extensions;
 using System.Text.Json.Serialization;
 
 namespace Storyblok;

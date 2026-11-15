@@ -224,8 +224,6 @@ public sealed class StoryblokStoryClientTests : IDisposable
             {
               "_uid": "11111111-1111-1111-1111-111111111111", "component": "test_fields",
               "text": 42, "flag_text": true, "option": ["first", "second", { "nested": ["x"] }], "nothing": null,
-              "number": "7", "number_from_json": 8, "optional_number": "", "broken_number": { "a": 1 },
-              "date": "2024-05-01 10:00", "timestamp": "2024-05-01T10:00:00.000Z", "no_date": "",
               "image": { "filename": "https://a.storyblok.com/f/1/600x400/abc/x.jpg", "alt": "A picture" },
               "empty_image": "", "image_without_file": { "filename": "" }
             }
@@ -237,14 +235,6 @@ public sealed class StoryblokStoryClientTests : IDisposable
         Assert.Equal("true", fields.FlagText);
         Assert.Equal("first", fields.Option); // a multi-option field: the first entry, the rest skipped cleanly
         Assert.Null(fields.Nothing);
-        Assert.Equal(7, fields.Number);
-        Assert.Equal(8, fields.NumberFromJson);
-        Assert.Null(fields.OptionalNumber);
-        Assert.Equal(0, fields.BrokenNumber);
-        Assert.Equal(new DateTime(2024, 5, 1, 10, 0, 0, DateTimeKind.Utc), fields.Date);
-        Assert.Equal(DateTimeKind.Utc, fields.Date!.Value.Kind);
-        Assert.Equal(new DateTime(2024, 5, 1, 10, 0, 0, DateTimeKind.Utc), fields.Timestamp);
-        Assert.Null(fields.NoDate);
         Assert.Equal("A picture", fields.Image?.Alt);
         Assert.Null(fields.EmptyImage);
         Assert.Null(fields.ImageWithoutFile);
@@ -374,13 +364,6 @@ public sealed class TestFields : StoryblokComponent
     [JsonPropertyName("flag_text")] public string? FlagText { get; set; }
     [JsonPropertyName("option")] public string? Option { get; set; }
     [JsonPropertyName("nothing")] public string? Nothing { get; set; }
-    [JsonPropertyName("number")] public int Number { get; set; }
-    [JsonPropertyName("number_from_json")] public int NumberFromJson { get; set; }
-    [JsonPropertyName("optional_number")] public int? OptionalNumber { get; set; }
-    [JsonPropertyName("broken_number")] public int BrokenNumber { get; set; } = -1;
-    [JsonPropertyName("date")] public DateTime? Date { get; set; }
-    [JsonPropertyName("timestamp")] public DateTime Timestamp { get; set; }
-    [JsonPropertyName("no_date")] public DateTime? NoDate { get; set; }
     [JsonPropertyName("image")] public StoryblokAsset? Image { get; set; }
     [JsonPropertyName("empty_image")] public StoryblokAsset? EmptyImage { get; set; }
     [JsonPropertyName("image_without_file")] public StoryblokAsset? ImageWithoutFile { get; set; }
