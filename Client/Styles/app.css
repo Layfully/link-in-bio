@@ -1,4 +1,4 @@
-﻿@import "tailwindcss";
+@import "tailwindcss";
 
 /* The vendored libraries contain words such as "blur" or "transition" in their code, which Tailwind would otherwise
    turn into unused classes. */

@@ -1,4 +1,4 @@
-﻿using Client.Data.Converters;
+using Client.Data.Converters;
 using Storyblok;
 using Storyblok.Attributes;
 using System.Text.Json.Serialization;

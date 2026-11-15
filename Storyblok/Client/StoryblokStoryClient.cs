@@ -1,4 +1,4 @@
-﻿using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Storyblok.Converters;
@@ -47,10 +47,6 @@ public sealed class StoryblokStoryClient : IDisposable
             Converters =
             {
                 new StoryblokComponentConverter(componentTypes),
-                new StoryblokDateConverter(),
-                new StoryblokNullableDateConverter(),
-                new StoryblokIntConverter(),
-                new StoryblokNullableIntConverter(),
                 new StoryblokStringConverter(),
                 new StoryblokAssetConverter(),
             },

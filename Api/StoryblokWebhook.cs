@@ -1,6 +1,5 @@
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Azure.Functions.Worker.Http;
-using System.Web;
 
 namespace Api;
 
@@ -15,7 +14,7 @@ public sealed class StoryblokWebhook(DeployTrigger trigger)
         [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "storyblok-webhook")] HttpRequestData request,
         CancellationToken cancellationToken)
     {
-        DeployTriggerResult result = await trigger.TriggerAsync(HttpUtility.ParseQueryString(request.Url.Query)["secret"], cancellationToken);
+        DeployTriggerResult result = await trigger.TriggerAsync(request.Query["secret"], cancellationToken);
 
         HttpResponseData response = request.CreateResponse(result.Status);
         await response.WriteStringAsync(result.Message, cancellationToken);

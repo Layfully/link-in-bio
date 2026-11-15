@@ -10,17 +10,14 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.Azure.Functions.Worker" />
-    <PackageReference Include="Microsoft.Azure.Functions.Worker.Extensions.Http" />
+    <!-- The Functions types stay out of projects that reference this one (the tests call DeployTrigger directly), where
+         their extension classes would clash with others of the same name: compile is private, besides the defaults. -->
+    <PackageReference Include="Microsoft.Azure.Functions.Worker" PrivateAssets="compile;contentfiles;analyzers;build" />
+    <PackageReference Include="Microsoft.Azure.Functions.Worker.Extensions.Http" PrivateAssets="compile;contentfiles;analyzers;build" />
     <PackageReference Include="Microsoft.Azure.Functions.Worker.Sdk" />
   </ItemGroup>
 
   <ItemGroup>
     <None Update="host.json" CopyToOutputDirectory="PreserveNewest" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <!-- ImplicitUsings brings in System.Threading, whose ExecutionContext would clash with the Functions one. -->
-    <Using Include="System.Threading.ExecutionContext" Alias="ExecutionContext" />
   </ItemGroup>
 </Project>

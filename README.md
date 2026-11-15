@@ -47,7 +47,7 @@ interop (a typing animation that finishes starting too late is stopped), and wit
 [bUnit](https://bunit.dev) the pages (what each answer from Storyblok shows), the loading hints and the layout's error
 message, and the prerendering (the rendered page, the profile it takes from Storyblok, how it is written into the
 published site, which Font Awesome icons stay, what a failure says), and the webhook that starts a deploy (which calls
-it refuses, what it sends GitHub). Run them with:
+it refuses, what it sends GitHub, which failures it tries again). Run them with:
 
 ```bash
 dotnet test --solution link-in-bio.slnx
@@ -83,7 +83,9 @@ the [standalone Tailwind CLI](https://tailwindcss.com/docs/installation/tailwind
 npx @tailwindcss/cli@4.3.5 --input Styles/app.css --output wwwroot/css/app.css --minify
 ```
 
-CI rebuilds it the same way and warns when the committed file differs.
+CI rebuilds it the same way and warns when the committed file differs. The deploy always ships the file it builds
+itself (`.github/scripts/build-app-css.sh`), so a forgotten rebuild never reaches visitors; the committed copy is for the
+dev server.
 
 ## Third-party libraries
 
@@ -130,7 +132,8 @@ script.
   without a fingerprint, although `index.html` asks for one, so it is `no-cache`. Otherwise a returning visitor would
   keep an old loader next to a new runtime after a .NET update.
 - Everything else, `index.html` included, is `no-cache`. Browsers keep a copy but check it on every visit, so a deploy
-  is never answered with a stale page that points at `_framework` files that no longer exist.
+  is never answered with a stale page that points at `_framework` files that no longer exist. It is also
+  `no-transform`, which keeps Cloudflare from changing the pages on the way (see [Cloudflare](#cloudflare)).
 
 The site's own `css/app.css` and `js/*.js` could be cached for a year too if their names carried a fingerprint.
 Blazor's `#[.{fingerprint}]` placeholder in `index.html` is documented for JavaScript modules only, so check a real
@@ -157,9 +160,9 @@ and stop deploying the editor build.
 
 Dependabot's pull requests and pull requests from forks get no secrets, so they're built but not deployed.
 
-Besides pushes, `main` deploys when content is published in Storyblok (a `repository_dispatch` event of type
-`storyblok_publish`, see below) and when the workflow is started by hand from the Actions tab. A run started by hand on
-another branch is built but never deployed.
+Besides pushes, `main` deploys when the workflow is started by hand from the Actions tab, and when content is published
+in Storyblok, which starts it the same way (`workflow_dispatch`, see below). A run started by hand on another branch is
+built but never deployed.
 
 Before deploying, CI checks every published page against the site's Content Security Policy
 (`.github/scripts/check-published-csp.mjs`): each inline script and style must match a hash in the policy, and no
@@ -179,15 +182,17 @@ The workflow needs these repository secrets:
 The prerendered page, the cut-down Font Awesome and the page's metadata are made at deploy time (see
 [Prerendering](#prerendering)), so a publish in Storyblok should start a deploy. Storyblok's webhooks can't send the
 `Authorization` header GitHub's API needs, so the site's own API passes them on: `Api` is an Azure Function that the
-Static Web App runs next to the site (managed functions, deployed with production and pull request builds). At
-`POST /api/storyblok-webhook?secret=<secret>` it checks the secret and sends `repository_dispatch` with the event type
-`storyblok_publish`, which starts this workflow on `main`.
+Static Web App runs next to the site (managed functions, deployed with production only). At
+`POST /api/storyblok-webhook?secret=<secret>` it checks the secret and starts this workflow on `main`
+(`workflow_dispatch`, the same as "Run workflow" in the Actions tab). Storyblok never repeats a webhook call that failed,
+so the API tries GitHub up to three times when it answers with a 5xx, 408 or 429, or can't be reached.
 
 Set it up once:
 
 1. Create a fine-grained GitHub token (Settings → Developer settings → Fine-grained tokens) for this repository only,
-   with **Contents: read and write**, which is what `repository_dispatch` needs. Give it an expiry you'll remember: a
-   token that has expired makes the webhook answer 502, and publishes stop starting deploys.
+   with **Actions: read and write** and nothing else. That lets it start workflow runs, but not push to the repository,
+   so a token that leaks can't change the site. Give it an expiry you'll remember: a token that has expired makes the
+   webhook answer 502, and publishes stop starting deploys.
 2. Make up a long random secret, for example with `openssl rand -hex 32`.
 3. In the Azure portal, open the Static Web App → **Environment variables**, production environment, and add
    `DeployTrigger__GitHubToken` (the token) and `DeployTrigger__WebhookSecret` (the secret). Settings are kept
@@ -198,7 +203,28 @@ Set it up once:
    missing, 502 means GitHub refused (expired token, missing permission) or couldn't be reached.
 
 Several publishes in a row end in one deploy: a newer run on `main` replaces one still in progress. Pull request
-environments get the API too, but without its settings, so it refuses every call there.
+environments don't get the API: Static Web Apps copies production's settings to them, and a branch's unreviewed code
+mustn't run with the token.
+
+To run the API locally with Azure Functions Core Tools, put the two settings in `Api/local.settings.json` (under
+`Values`, as `DeployTrigger__GitHubToken` and `DeployTrigger__WebhookSecret`); git ignores that file.
+
+### Cloudflare
+
+`adriangaborek.dev` is served through Cloudflare; the `azurestaticapps.net` addresses are not. Cloudflare changes the
+responses on the way:
+
+- It replaces `Referrer-Policy` (with `same-origin`) and `Strict-Transport-Security`, and adds `X-Frame-Options`, so
+  visitors don't get exactly the headers `staticwebapp.config.json` sets. That is accepted. To see the site's own
+  headers, request the `azurestaticapps.net` address.
+- Bot Fight Mode would add an inline script (JavaScript detections, `/cdn-cgi/challenge-platform/…`) before `</body>`.
+  Its text changes with every request, so the Content Security Policy can't allow it by hash; only a nonce made afresh
+  for every response could, which a static site can't send. Browsers blocked it and logged a CSP error on every page,
+  so the site sends `Cache-Control: no-transform`, and Cloudflare then leaves the pages alone. Bot Fight Mode's other
+  protection stays on. CI's CSP check runs on the published folder and wouldn't see such a script.
+
+If Storyblok's webhook log shows Cloudflare's 403 instead of the API's answers, point the webhook at the
+`azurestaticapps.net` address instead.
 
 ### Prerendering
 

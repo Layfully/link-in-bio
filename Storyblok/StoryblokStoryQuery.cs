@@ -1,4 +1,4 @@
-﻿using Storyblok.Client;
+using Storyblok.Client;
 
 namespace Storyblok;
 

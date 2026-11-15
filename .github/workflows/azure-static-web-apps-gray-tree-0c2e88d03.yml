@@ -10,12 +10,9 @@ on:
     types: [opened, synchronize, reopened, closed]
     branches:
       - main
-  # A publish in Storyblok: its webhook calls the site's own API (Api, /api/storyblok-webhook), which sends this event,
-  # so the content in the first HTML, the cut-down Font Awesome and the page's metadata follow the change. Runs on main,
-  # like a push.
-  repository_dispatch:
-    types: [storyblok_publish]
-  # The same by hand, from the Actions tab.
+  # By hand from the Actions tab, and on a publish in Storyblok: its webhook calls the site's own API (Api,
+  # /api/storyblok-webhook), which starts this workflow on main, so the content in the first HTML, the cut-down Font
+  # Awesome and the page's metadata follow the change.
   workflow_dispatch:
 
 # A newer push to the same branch or pull request replaces a run still in progress: the last deploy would win anyway.
@@ -23,6 +20,11 @@ on:
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
+
+# The Tailwind CLI that builds app.css, in both jobs (.github/scripts/build-app-css.sh). Dependabot doesn't see it.
+env:
+  TAILWIND_VERSION: v4.3.5
+  TAILWIND_SHA256: e47695cee3f0d90623a91f3939b08bdee610eb5ad99340adff9d4145b284d6cc
 
 jobs:
   # Needs no secrets, so it also runs for Dependabot's pull requests and pull requests from forks.
@@ -41,21 +43,15 @@ jobs:
         with:
           persist-credentials: false
 
-      # app.css is built by hand and committed (see README). A stale copy doesn't fail the run: it would only miss classes
-      # added since, so this warns and the deploy goes ahead with the committed file.
+      # app.css is built by hand and committed (see README) for the dev server. The deploy builds its own from the sources,
+      # so a stale copy never reaches visitors; this warns so the committed one gets rebuilt too, and then uses the
+      # fresh one, like the deploy.
       - name: Check that app.css is up to date
-        env:
-          TAILWIND_VERSION: v4.3.5
-          TAILWIND_SHA256: e47695cee3f0d90623a91f3939b08bdee610eb5ad99340adff9d4145b284d6cc
         run: |
-          curl --fail --silent --show-error --location --output "$RUNNER_TEMP/tailwindcss" \
-            "https://github.com/tailwindlabs/tailwindcss/releases/download/$TAILWIND_VERSION/tailwindcss-linux-x64"
-          echo "$TAILWIND_SHA256  $RUNNER_TEMP/tailwindcss" | sha256sum --check --status
-          chmod +x "$RUNNER_TEMP/tailwindcss"
-          cd Client
-          "$RUNNER_TEMP/tailwindcss" --input Styles/app.css --output "$RUNNER_TEMP/app.css" --minify
-          if ! cmp --silent "$RUNNER_TEMP/app.css" wwwroot/css/app.css; then
-            echo "::warning file=Client/wwwroot/css/app.css::app.css differs from what Tailwind $TAILWIND_VERSION builds from the current sources. Rebuild it as the README describes and commit the result."
+          .github/scripts/build-app-css.sh "$RUNNER_TEMP/app.css"
+          if ! cmp --silent "$RUNNER_TEMP/app.css" Client/wwwroot/css/app.css; then
+            echo "::warning file=Client/wwwroot/css/app.css::app.css differs from what Tailwind $TAILWIND_VERSION builds from the current sources. Rebuild it as the README describes and commit the result; the deploy uses the rebuilt one meanwhile."
+            cp "$RUNNER_TEMP/app.css" Client/wwwroot/css/app.css
           fi
 
       - name: Setup .NET
@@ -81,14 +77,16 @@ jobs:
       - name: Test the JavaScript
         run: node --test "Tests/js/*.test.mjs"
 
-      # Publishing does more than building: trimming, fingerprinting and the Content Security Policy hash (Csp.targets).
-      # Done here, without tokens, for the runs that don't deploy (Dependabot's pull requests, forks'), so a change that
-      # breaks it fails before it is merged. Every other run publishes in the deploy job and checks the same there.
-      - name: Check that the site publishes
+      # Publishing does more than building: trimming, fingerprinting and the Content Security Policy hash (Csp.targets),
+      # and for the API the Functions metadata. Done here, without tokens, for the runs that don't deploy (Dependabot's
+      # pull requests, forks'), so a change that breaks it fails before it is merged. Every other run publishes in the
+      # deploy job and checks the same there.
+      - name: Check that the site and the API publish
         if: env.DEPLOYS != 'true'
         run: |
           dotnet publish Client --configuration Release --output "$RUNNER_TEMP/publish"
           node .github/scripts/check-published-csp.mjs "$RUNNER_TEMP/publish/wwwroot"
+          dotnet publish Api --configuration Release --output "$RUNNER_TEMP/publish-api"
 
   # Production gets the public token only. On pushes to main, the "editor" environment, which the Storyblok Visual Editor
   # previews, is also built with the preview token. That token reads drafts and ships inside the app, so it must
@@ -127,6 +125,10 @@ jobs:
         run: |
           dotnet workload install wasm-tools
           echo "WASM_TOOLS_INSTALLED=true" >> "$GITHUB_ENV"
+
+      # From the sources, so the deploy never ships a committed copy that missed a rebuild. The build job warns about one.
+      - name: Build app.css
+        run: .github/scripts/build-app-css.sh Client/wwwroot/css/app.css
 
       # jq writes the values as JSON strings, so characters such as & or # in a token arrive unchanged.
       - name: Publish the site with the public token
@@ -167,6 +169,8 @@ jobs:
       - name: Publish the API
         run: dotnet publish Api --configuration Release --output publish/api
 
+      # The API goes to production only. Static Web Apps copies production's settings, the GitHub token included, to
+      # pull request environments, where the API would run a branch's unreviewed code with them.
       - name: Deploy to Azure Static Web Apps
         uses: Azure/static-web-apps-deploy@1a947af9992250f3bc2e68ad0754c0b0c11566c9 # v1
         with:
@@ -174,7 +178,7 @@ jobs:
           repo_token: ${{ secrets.GITHUB_TOKEN }}
           action: "upload"
           app_location: "publish/site/wwwroot"
-          api_location: "publish/api"
+          api_location: ${{ github.event_name != 'pull_request' && 'publish/api' || '' }}
           output_location: ""
           skip_app_build: true
           skip_api_build: true

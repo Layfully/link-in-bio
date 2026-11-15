@@ -1,4 +1,4 @@
-﻿namespace Storyblok;
+namespace Storyblok;
 
 public sealed class StoryblokOptions
 {
