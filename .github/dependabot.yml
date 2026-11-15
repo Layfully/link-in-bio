@@ -12,6 +12,10 @@ updates:
         patterns:
           - "Microsoft.AspNetCore.*"
           - "Microsoft.Extensions.*"
+      # The API's Azure Functions packages (Api), likewise released together.
+      azure-functions:
+        patterns:
+          - "Microsoft.Azure.Functions.*"
 
   # The SDK pinned in global.json, which CI installs too: a new release arrives as a pull request instead of silently.
   - package-ecosystem: "dotnet-sdk"

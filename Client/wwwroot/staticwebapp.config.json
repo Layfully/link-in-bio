@@ -32,6 +32,9 @@
       "headers": { "cache-control": "no-cache" }
     }
   ],
+  "platform": {
+    "apiRuntime": "dotnet-isolated:10.0"
+  },
   "mimeTypes": {
     ".webmanifest": "application/manifest+json"
   },
