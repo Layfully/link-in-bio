@@ -1,16 +1,10 @@
 {
-  "navigationFallback": {
-    "rewrite": "/index.html",
-    "exclude": [
-      "/_framework/*",
-      "/css/*",
-      "/js/*",
-      "/icons/*",
-      "/lib/*",
-      "*.{css,js,mjs,map,json,webmanifest,wasm,dat,br,gz,ico,png,jpg,jpeg,gif,svg,webp,woff2,txt,xml}"
-    ]
-  },
   "routes": [
+    {
+      "route": "/Certificate/*",
+      "rewrite": "/index.html",
+      "headers": { "cache-control": "no-cache, no-transform" }
+    },
     {
       "route": "/_framework/blazor.webassembly.js",
       "headers": { "cache-control": "no-cache" }
@@ -32,6 +26,12 @@
       "headers": { "cache-control": "no-cache, no-transform" }
     }
   ],
+  "responseOverrides": {
+    "404": {
+      "rewrite": "/index.html",
+      "statusCode": 404
+    }
+  },
   "platform": {
     "apiRuntime": "dotnet-isolated:10.0"
   },

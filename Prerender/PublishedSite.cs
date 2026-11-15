@@ -17,12 +17,13 @@ public sealed partial class PublishedSite(string wwwroot)
     private const string StartMarker = "<!--prerender-->";
     private const string EndMarker = "<!--/prerender-->";
 
-    private const string FallbackToIndex = "\"rewrite\": \"/index.html\"";
+    // The config sends certificate pages and every unknown address (with a 404) to the app's page, each by a rewrite.
+    private const string RewriteToIndex = "\"rewrite\": \"/index.html\"";
 
     /// <summary>
     /// Puts <paramref name="html"/> into <c>index.html</c> in place of the loading indicator and the Storyblok responses
     /// (<see cref="PrerenderedStories.ToJson"/>) in a data block the app reads on start. The page as it was becomes
-    /// <see cref="ShellFile"/>, and the Static Web Apps config sends every route without a file of its own there, so only
+    /// <see cref="ShellFile"/>, and every rewrite in the Static Web Apps config (certificate pages, unknown addresses) points there, so only
     /// <c>/</c> gets the home page's content.
     /// </summary>
     /// <remarks>
@@ -47,9 +48,9 @@ public sealed partial class PublishedSite(string wwwroot)
         }
 
         // Changed as text, like Csp.targets does, so everything else in the config stays exactly as it was.
-        if (!config.Contains(FallbackToIndex, StringComparison.Ordinal))
+        if (!config.Contains(RewriteToIndex, StringComparison.Ordinal))
         {
-            throw new InvalidOperationException($"{configPath} has no {FallbackToIndex} navigation fallback to change.");
+            throw new InvalidOperationException($"{configPath} has no {RewriteToIndex} to change.");
         }
 
         // A data block, not a script: the Content Security Policy doesn't apply to it, and ToJson escapes < and >.
@@ -65,7 +66,7 @@ public sealed partial class PublishedSite(string wwwroot)
 
         File.WriteAllText(Path.Combine(wwwroot, ShellFile), page);
         File.WriteAllText(indexPath, home);
-        File.WriteAllText(configPath, config.Replace(FallbackToIndex, $"\"rewrite\": \"/{ShellFile}\"", StringComparison.Ordinal));
+        File.WriteAllText(configPath, config.Replace(RewriteToIndex, $"\"rewrite\": \"/{ShellFile}\"", StringComparison.Ordinal));
 
         // Publish compressed the page before it had its content; those copies would serve the page without it.
         foreach (string compressed in new[] { indexPath + ".br", indexPath + ".gz" })
