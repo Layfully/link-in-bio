@@ -18,7 +18,42 @@
     // Late enough that the page has had its first look, the photo and its fonts, and that page-speed tests have finished
     // measuring; then at an idle moment, so it doesn't begin in the middle of a scroll. Nothing visible waits for it.
     function startLater() {
-        setTimeout(() => whenIdle(() => Blazor.start()), START_DELAY_MS);
+        setTimeout(() => whenIdle(() => {
+            const app = document.getElementById('app');
+            if (app) keepFocusAcrossFirstRender(app);
+            Blazor.start();
+        }), START_DELAY_MS);
+    }
+
+    // Blazor's first render replaces the prerendered content with its own, identical copy. A visitor who has tabbed to
+    // a link by then would lose their place, so focus moves to the same link in the copy: the same position among the
+    // links and buttons, with the same address. Focus the visitor moved elsewhere, outside the content, stays there.
+    // Set up just before Blazor starts: what has focus then, and any focus change while .NET starts.
+    const CONTROLS = 'a[href], button';
+
+    function keepFocusAcrossFirstRender(app) {
+        const prerendered = [...app.childNodes];
+        let focused = null;
+        const remember = element => {
+            const index = [...app.querySelectorAll(CONTROLS)].indexOf(element);
+            focused = index < 0 ? null : { element, index, href: element.getAttribute('href') };
+        };
+
+        remember(document.activeElement);
+        app.addEventListener('focusin', event => remember(event.target));
+
+        new MutationObserver((_, observer) => {
+            if (prerendered.every(node => node.isConnected)) return;
+            observer.disconnect();
+
+            const lostFocus = document.activeElement === null || document.activeElement === document.body;
+            if (!focused || focused.element.isConnected || !lostFocus) return;
+
+            const replacement = app.querySelectorAll(CONTROLS)[focused.index];
+            if (replacement && replacement.getAttribute('href') === focused.href) {
+                replacement.focus({ preventScroll: true });
+            }
+        }).observe(app, { childList: true, subtree: true });
     }
 
     function decide() {

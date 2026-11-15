@@ -7,10 +7,11 @@ import vm from 'node:vm';
 const script = readFileSync(new URL('../../Client/wwwroot/js/blazor-start.js', import.meta.url), 'utf8');
 
 // Runs the script on a fake page and returns what it did: how often Blazor started, plus ways to move the page along.
-function load({ prerendered, parsed = true, loaded = false, idleCallbacks = true }) {
+function load({ prerendered, parsed = true, loaded = false, idleCallbacks = true, app = null }) {
     const listeners = new Map();
     const idle = [];
     const timers = [];
+    const observers = [];
     const page = {
         starts: 0,
         fire(type) {
@@ -20,14 +21,30 @@ function load({ prerendered, parsed = true, loaded = false, idleCallbacks = true
         },
         runIdle() { for (const callback of idle.splice(0)) callback(); },
         runTimers() { for (const { callback } of timers.splice(0)) callback(); },
+        notifyObservers() { for (const observer of [...observers]) observer.callback([], observer); },
         get delays() { return timers.map(timer => timer.delay); }
     };
+    const document = {
+        body: { tagName: 'BODY' },
+        activeElement: null,
+        get readyState() { return !parsed ? 'loading' : loaded ? 'complete' : 'interactive'; },
+        getElementById: id => {
+            if (!parsed) return null;
+            if (id === 'storyblok-prerendered') return prerendered ? {} : null;
+            return id === 'app' ? app : null;
+        }
+    };
+    document.activeElement = document.body;
+    page.document = document;
+    class MutationObserver {
+        constructor(callback) { this.callback = callback; }
+        observe() { observers.push(this); }
+        disconnect() { observers.splice(observers.indexOf(this), 1); }
+    }
     const window = {
         Blazor: { start: () => { page.starts++; return Promise.resolve(); } },
-        document: {
-            get readyState() { return !parsed ? 'loading' : loaded ? 'complete' : 'interactive'; },
-            getElementById: id => (parsed && prerendered && id === 'storyblok-prerendered' ? {} : null)
-        },
+        document,
+        MutationObserver,
         addEventListener: (type, listener) => listeners.set(type, [...(listeners.get(type) ?? []), listener]),
         removeEventListener: (type, listener) => listeners.set(type, (listeners.get(type) ?? []).filter(l => l !== listener)),
         setTimeout: (callback, delay) => { timers.push({ callback, delay }); }
@@ -36,6 +53,116 @@ function load({ prerendered, parsed = true, loaded = false, idleCallbacks = true
     vm.runInNewContext(script, { window, ...window });
     return page;
 }
+
+// A fake #app holding links. render() swaps them for fresh copies, as Blazor's first render does with the prerendered
+// content: the old elements leave the page, and focus on one of them goes back to the body.
+function fakeApp(page, hrefs) {
+    const focusListeners = [];
+    const link = href => {
+        const element = {
+            isConnected: true,
+            getAttribute: name => (name === 'href' ? href : null),
+            focus() { page.document.activeElement = element; }
+        };
+        return element;
+    };
+    const app = {
+        links: hrefs.map(link),
+        get childNodes() { return app.links; },
+        querySelectorAll: () => app.links,
+        addEventListener: (type, listener) => { if (type === 'focusin') focusListeners.push(listener); },
+        focus(element) {
+            page.document.activeElement = element;
+            for (const listener of focusListeners) listener({ target: element });
+        },
+        render() {
+            for (const old of app.links) {
+                old.isConnected = false;
+                if (page.document.activeElement === old) page.document.activeElement = page.document.body;
+            }
+            app.links = hrefs.map(link);
+        }
+    };
+    return app;
+}
+
+function loadWithLinks(hrefs) {
+    const holder = {};
+    const app = fakeApp(holder, hrefs);
+    const page = load({ prerendered: true, loaded: true, app });
+    holder.document = page.document;
+    page.app = app;
+    page.startBlazor = () => {
+        page.runTimers();
+        page.runIdle();
+        assert.equal(page.starts, 1);
+    };
+    return page;
+}
+
+test('a link that has keyboard focus when Blazor replaces the prerendered content keeps it', () => {
+    const page = loadWithLinks(['https://github.com/x', 'https://linkedin.com/x', 'https://example.com']);
+    page.app.focus(page.app.links[1]);
+
+    page.startBlazor();
+    page.app.render();
+    page.notifyObservers();
+
+    assert.equal(page.document.activeElement, page.app.links[1]);
+    assert.equal(page.document.activeElement.getAttribute('href'), 'https://linkedin.com/x');
+});
+
+test('focus is read when Blazor starts, also when no focus event reached the page', () => {
+    // A window in the background gets no focus events, yet its page remembers which link has focus.
+    const page = loadWithLinks(['https://github.com/x', 'https://linkedin.com/x']);
+    page.document.activeElement = page.app.links[1];
+
+    page.startBlazor();
+    page.app.render();
+    page.notifyObservers();
+
+    assert.equal(page.document.activeElement, page.app.links[1]);
+});
+
+test('a link focused while .NET starts keeps focus too', () => {
+    const page = loadWithLinks(['https://github.com/x', 'https://linkedin.com/x']);
+
+    page.startBlazor();
+    page.app.focus(page.app.links[0]);
+    page.app.render();
+    page.notifyObservers();
+
+    assert.equal(page.document.activeElement, page.app.links[0]);
+});
+
+test('focus the visitor moved outside the content stays where it is', () => {
+    const page = loadWithLinks(['https://github.com/x', 'https://linkedin.com/x']);
+    page.app.focus(page.app.links[0]);
+    page.startBlazor();
+    const consentButton = { tagName: 'BUTTON' };
+    page.document.activeElement = consentButton;
+
+    page.app.render();
+    page.notifyObservers();
+
+    assert.equal(page.document.activeElement, consentButton);
+});
+
+test('changes before Blazor renders leave focus alone, and only the first render counts', () => {
+    const page = loadWithLinks(['https://github.com/x', 'https://linkedin.com/x']);
+    page.app.focus(page.app.links[0]);
+    page.startBlazor();
+
+    page.notifyObservers(); // something else changed; the prerendered content is still there
+    assert.equal(page.document.activeElement, page.app.links[0]);
+
+    page.app.render();
+    page.notifyObservers();
+    page.document.activeElement = page.document.body;
+    page.notifyObservers(); // the observer stopped after the first render
+
+    assert.equal(page.document.activeElement, page.document.body);
+});
 
 test('a page without prerendered content starts Blazor at once', () => {
     assert.equal(load({ prerendered: false }).starts, 1);

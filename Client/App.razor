@@ -1,6 +1,32 @@
-﻿<Router AppAssembly="@typeof(App).Assembly" NotFoundPage="@typeof(Pages.NotFound)">
+﻿@implements IDisposable
+@inject NavigationManager Navigation
+
+<Router AppAssembly="@typeof(App).Assembly" NotFoundPage="@typeof(Pages.NotFound)">
     <Found Context="routeData">
         <RouteView RouteData="@routeData" DefaultLayout="@typeof(MainLayout)" />
-        <FocusOnNavigate RouteData="@routeData" Selector="h1" />
+        @* Moves focus to the new page's heading after a navigation inside the app, but not on the first render: that
+           would take a keyboard user's place away on the prerendered home page, where Blazor starts seconds after the
+           visitor could begin to tab through the links (js/blazor-start.js keeps their focus instead). *@
+        @if (_hasNavigated)
+        {
+            <FocusOnNavigate RouteData="@routeData" Selector="h1" />
+        }
     </Found>
 </Router>
+
+@code {
+    private bool _hasNavigated;
+
+    protected override void OnInitialized() => Navigation.LocationChanged += OnLocationChanged;
+
+    private void OnLocationChanged(object? sender, LocationChangedEventArgs e)
+    {
+        if (!_hasNavigated)
+        {
+            _hasNavigated = true;
+            StateHasChanged();
+        }
+    }
+
+    public void Dispose() => Navigation.LocationChanged -= OnLocationChanged;
+}
