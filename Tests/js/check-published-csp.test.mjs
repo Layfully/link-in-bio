@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { hashSource, pageProblems, siteProblems } from '../../.github/scripts/check-published-csp.mjs';
+import { attribute, hashSource, pageProblems, siteProblems } from '../../.github/scripts/check-published-csp.mjs';
 
 const IMPORT_MAP = '{ "imports": { "./a.js": "./a.abc123.js" } }';
 const CSS = 'body{margin:0}';
@@ -28,6 +28,28 @@ test('data blocks and scripts with a src need no hash', () => {
         '<script type="application/json" id="storyblok-prerendered">{"home":{}}</script>');
 
     assert.deepEqual(pageProblems(html, policy(), 'index.html'), []);
+});
+
+test('a script or stylesheet from a host the policy does not name is reported', () => {
+    const hosts = 'https://*.example.com https://cdn.example.org';
+    const allowed = `default-src 'self'; script-src 'self' ${hashSource(IMPORT_MAP)} ${hosts}; style-src 'self' ${hashSource(CSS)} ${hosts}`;
+    const html = page(
+        '<script src="https://cdn.example.org/a.js"></script><script src="https://www.example.com/b.js"></script>' +
+        '<link rel="stylesheet" href="css/a.css"><link rel="preload" as="style" href="https://evil.example.net/a.css">' +
+        '<link rel="modulepreload" href="https://evil.example.net/m.js"><link rel="preconnect" href="https://evil.example.net">',
+        '<script src="https://evil.example.net/c.js"></script>');
+
+    const problems = pageProblems(html, allowed, 'index.html');
+
+    assert.equal(problems.length, 3);
+    assert.match(problems.join('\n'), /script-src doesn't allow the script https:\/\/evil\.example\.net\/c\.js/);
+    assert.match(problems.join('\n'), /style-src doesn't allow the stylesheet https:\/\/evil\.example\.net\/a\.css/);
+    assert.match(problems.join('\n'), /script-src doesn't allow the script https:\/\/evil\.example\.net\/m\.js/);
+});
+
+test('only an attribute of that exact name counts, so data-type does not make a script a data block', () => {
+    assert.equal(attribute(' data-type="application/json"', 'type'), null);
+    assert.equal(pageProblems(page('<script data-type="application/json">run()</script>'), policy(), 'index.html').length, 1);
 });
 
 test('an import map that changed after the hash was taken is reported', () => {

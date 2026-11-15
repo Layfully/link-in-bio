@@ -178,6 +178,37 @@ public sealed class StoryblokRetryHandlerTests : IDisposable
         Assert.Equal(2, _storyblok.Requests.Count);
     }
 
+    [Fact]
+    public async Task A_pause_Storyblok_asked_for_is_waited_once_not_again_after_a_broken_connection()
+    {
+        FakeTimeProvider time = new();
+        using HttpClient client = new(new StoryblokRetryHandler(Policy, time) { InnerHandler = _storyblok }, disposeHandler: false);
+        _storyblok.Answer(HttpStatusCode.TooManyRequests, new RetryConditionHeaderValue(TimeSpan.FromSeconds(5)));
+        _storyblok.Fail(new HttpRequestException("Connection reset."));
+        _storyblok.Answer(HttpStatusCode.OK);
+
+        Task<HttpResponseMessage> get = client.GetAsync("https://api.storyblok.com/v2/cdn/stories/home", TestContext.Current.CancellationToken);
+        await Until(() => _storyblok.Requests.Count == 1);
+        time.Advance(TimeSpan.FromSeconds(5));
+
+        // The clock stands still from here: a second five-second pause would never end.
+        await Until(() => get.IsCompleted);
+        using HttpResponseMessage response = await get;
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal(3, _storyblok.Requests.Count);
+    }
+
+    // Waits in real time for something the handler does on its own, failing after a second.
+    private static async Task Until(Func<bool> condition)
+    {
+        for (int i = 0; i < 100 && !condition(); i++)
+        {
+            await Task.Delay(10, TestContext.Current.CancellationToken);
+        }
+
+        Assert.True(condition());
+    }
+
     private Task<HttpResponseMessage> Get() =>
         _client.GetAsync("https://api.storyblok.com/v2/cdn/stories/home", TestContext.Current.CancellationToken);
 

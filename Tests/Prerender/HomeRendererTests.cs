@@ -63,6 +63,29 @@ public sealed class HomeRendererTests : IDisposable
     }
 
     [Fact]
+    public async Task Listed_links_whose_address_the_site_refused_or_lacks_are_named()
+    {
+        _storyblok.Answer(HttpStatusCode.OK, """
+            { "story": { "name": "Home", "content": { "_uid": "11111111-1111-1111-1111-111111111111", "component": "page", "body": [
+                { "_uid": "22222222-2222-2222-2222-222222222222", "component": "list", "entries": [
+                    { "_uid": "33333333-3333-3333-3333-333333333333", "component": "link", "label": "GitHub",
+                      "url": { "linktype": "url", "url": "https://github.com/Layfully" } },
+                    { "_uid": "44444444-4444-4444-4444-444444444444", "component": "link", "label": "Typo",
+                      "url": { "linktype": "url", "url": "www.example.com" } },
+                    { "_uid": "55555555-5555-5555-5555-555555555555", "component": "link", "label": " Coming soon ",
+                      "url": { "linktype": "url", "url": "" } },
+                    { "_uid": "66666666-6666-6666-6666-666666666666", "component": "link", "label": "",
+                      "url": { "linktype": "url", "url": "" } }
+                ] }
+            ] } }, "cv": 0 }
+            """);
+
+        RenderedHome home = await HomeRenderer.RenderAsync(Services());
+
+        Assert.Equal(["Typo", "Coming soon"], home.LinksWithoutAddress);
+    }
+
+    [Fact]
     public async Task A_home_page_that_isnt_published_isnt_rendered()
     {
         _storyblok.Answer(HttpStatusCode.NotFound, "{}");

@@ -5,7 +5,8 @@ namespace Api;
 
 /// <summary>
 /// <c>POST /api/storyblok-webhook?secret=…</c>: the address Storyblok's webhook calls on a publish. Anonymous, because
-/// Storyblok sends no credentials; the secret in the address is checked instead (<see cref="DeployTrigger"/>).
+/// Storyblok sends no credentials; the secret in the address is checked instead (<see cref="DeployTrigger"/>). Storyblok's
+/// signed webhooks (a <c>webhook-signature</c> header) would keep the secret out of the address, but they need a paid plan.
 /// </summary>
 public sealed class StoryblokWebhook(DeployTrigger trigger)
 {

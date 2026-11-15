@@ -1,7 +1,7 @@
 // Tests for the particle background's movement rules. Run with: node --test Tests/js/
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { particleCount, step, linkOpacity, repulse, addParticles, rescale, MAX_STEP } from '../../Client/wwwroot/js/particle-field.js';
+import { particleCount, step, linkOpacity, repulse, addParticles, rescale, MAX_PARTICLES, MAX_STEP } from '../../Client/wwwroot/js/particle-field.js';
 
 const dot = (x, y, vx = 0, vy = 0) => ({ x, y, vx, vy, radius: 1 });
 
@@ -9,6 +9,10 @@ test('40 dots fill 1000 x 800 px, and a larger screen gets proportionally more',
     assert.equal(particleCount(1000, 800), 40);
     assert.equal(particleCount(2000, 800), 80);
     assert.equal(particleCount(0, 0), 0);
+});
+
+test('a very large screen gets no more than the cap', () => {
+    assert.equal(particleCount(3840, 2160), MAX_PARTICLES);
 });
 
 test('a dot moves by its speed for the time that passed', () => {

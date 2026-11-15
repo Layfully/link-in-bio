@@ -76,8 +76,14 @@ public static class HomeRenderer
             throw new InvalidOperationException("The home page failed while rendering.", error);
         }
 
-        return new RenderedHome(html, ProfileOf(story.Content.Body));
+        return new RenderedHome(html, ProfileOf(story.Content.Body), LinksWithoutAddress(story.Content.Body));
     }
+
+    // The list shows such an entry as plain text, which is easy to miss after a typo in Storyblok: an address without
+    // https:// is refused, as is any other scheme, and the entry quietly stops being a link. Entries without a label
+    // aren't shown at all.
+    private static string[] LinksWithoutAddress(StoryblokComponent[]? body) =>
+        [.. (Home.Links(body) ?? []).Where(link => !string.IsNullOrWhiteSpace(link.Label) && string.IsNullOrEmpty(link.Url)).Select(link => link.Label!.Trim())];
 
     // What the page shows about the person, as the page's metadata wants it: the photo cut square for link previews
     // (og:image says 600 x 600), and every profile the page links to as an absolute web address.

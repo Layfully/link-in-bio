@@ -55,6 +55,9 @@ internal sealed class StoryblokRetryHandler(RetryPolicy policy, TimeProvider tim
                 {
                     throw TimedOut(policy.TotalTimeout, exception);
                 }
+
+                // The pause it asked for is over. An attempt that ends without an answer must not repeat it.
+                retryAfter = TimeSpan.Zero;
             }
 
             bool isLastAttempt = retry == policy.MaxRetries;
