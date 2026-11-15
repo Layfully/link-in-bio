@@ -14,7 +14,7 @@ hosted on Azure Static Web Apps.
 | `Storyblok` | A small client for Storyblok's Content Delivery API v2 that reads stories into the app's component classes. |
 | `Api` | The site's API, an Azure Function deployed with it: passes Storyblok's webhook on to GitHub, so a publish starts a deploy (see [Deploying on a publish in Storyblok](#deploying-on-a-publish-in-storyblok)). |
 | `Prerender` | A console app the deploy runs after publishing: it puts the home page's content into the HTML (see [Prerendering](#prerendering)). |
-| `Tests` | Unit tests for the Storyblok client, the link converter, the pages and the prerendering. |
+| `Tests` | Unit tests for the Storyblok client, the link converter, the pages, the prerendering and the API's webhook. |
 
 ## Running it locally
 
@@ -165,8 +165,9 @@ in Storyblok, which starts it the same way (`workflow_dispatch`, see below). A r
 built but never deployed.
 
 Before deploying, CI checks every published page against the site's Content Security Policy
-(`.github/scripts/check-published-csp.mjs`): each inline script and style must match a hash in the policy, and no
-element may carry a style or event handler attribute, which the policy would block. It runs after each publish and
+(`.github/scripts/check-published-csp.mjs`): each inline script and style must match a hash in the policy, each
+script and stylesheet the page loads must come from a host the policy names, and no element may carry a style or event
+handler attribute, which the policy would block. It runs after each publish and
 again after prerendering, which changes the page.
 
 The workflow needs these repository secrets:
@@ -193,7 +194,11 @@ Set it up once:
    with **Actions: read and write** and nothing else. That lets it start workflow runs, but not push to the repository,
    so a token that leaks can't change the site. Give it an expiry you'll remember: a token that has expired makes the
    webhook answer 502, and publishes stop starting deploys.
-2. Make up a long random secret, for example with `openssl rand -hex 32`.
+2. Make up a long random secret, for example with `openssl rand -hex 32`. It goes in the webhook's address because
+   Storyblok's own webhook secrets, which sign each call in a `webhook-signature` header and would keep the secret out
+   of the address, come only with its paid plans, and this space is on the free one. An address can end up in logs
+   (Cloudflare's, Storyblok's webhook log), so if the secret leaks, make a new one and change it in both places. A
+   leaked secret can only start extra deploys.
 3. In the Azure portal, open the Static Web App → **Environment variables**, production environment, and add
    `DeployTrigger__GitHubToken` (the token) and `DeployTrigger__WebhookSecret` (the secret). Settings are kept
    between deploys; the build never sees them.
@@ -273,6 +278,11 @@ then visitors see it a moment after the page has loaded. The editor build is nev
 Whatever goes wrong while prerendering (no token, Storyblok down or refusing the token, no content, a render error)
 shows as a warning on the run that says why, with the exception's details in a collapsed group of the log, and the site
 deploys as published, which works as before, only without content in the first HTML.
+
+A link in the list whose address the site can't use shows as plain text, "not available". That is meant for an entry
+left without an address, but it also happens to a typo, such as `www.example.com` without `https://`, which the site
+refuses (only web, email and site addresses are allowed). So the prerender step names each such link in a warning on
+the run.
 
 To try it locally, publish, put the public token into the published `appsettings.json`, and run
 `dotnet run --project Prerender -- <publish folder>/wwwroot`. Without fonttools installed, Font Awesome stays whole.

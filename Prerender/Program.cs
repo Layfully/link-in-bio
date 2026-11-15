@@ -36,6 +36,11 @@ try
     RenderedHome home = await HomeRenderer.RenderAsync(services);
     new PublishedSite(wwwroot).WriteHome(home.Html, services.GetRequiredService<PrerenderedStories>().ToJson(), home.Profile);
     Console.WriteLine($"Prerendered the home page into index.html; every other route now falls back to {PublishedSite.ShellFile}.");
+
+    foreach (string label in home.LinksWithoutAddress)
+    {
+        Console.WriteLine($"::warning::The link \"{label}\" has no address the site can use, so it shows as not available. In Storyblok, give it a web address with https://, an email address or another story.");
+    }
 }
 catch (Exception exception)
 {

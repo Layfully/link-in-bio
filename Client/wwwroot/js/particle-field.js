@@ -26,8 +26,12 @@ export const MAX_STEP = 0.1; // seconds
 const DENSITY_AREA = 1000 * 800;
 const DENSITY_COUNT = 40;
 
+// Every pair of dots is checked for a link on each frame, so the work grows with the square of the count. A 4K screen
+// would get over 400 dots by area alone, and clicks can double that; past this many the screen looks no fuller.
+export const MAX_PARTICLES = 150;
+
 export function particleCount(width, height) {
-    return Math.round(DENSITY_COUNT * (width * height) / DENSITY_AREA);
+    return Math.min(MAX_PARTICLES, Math.round(DENSITY_COUNT * (width * height) / DENSITY_AREA));
 }
 
 // A dot at (x, y) heading in a random direction at the constant speed.
