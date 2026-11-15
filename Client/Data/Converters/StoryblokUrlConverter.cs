@@ -17,7 +17,8 @@ public sealed class StoryblokUrlConverter : JsonConverter<string>
 
         if (link.ValueKind == JsonValueKind.String)
         {
-            return NonEmpty(link.GetString())?.Trim() is { } text && IsSafe(text) ? text : null;
+            string? text = NonEmpty(link.GetString()) is { } value ? WithoutTabsAndNewlines(value.Trim()) : null;
+            return text is not null && IsSafe(text) ? text : null;
         }
 
         if (link.ValueKind != JsonValueKind.Object)
@@ -37,7 +38,7 @@ public sealed class StoryblokUrlConverter : JsonConverter<string>
             return null;
         }
 
-        address = address.Trim();
+        address = WithoutTabsAndNewlines(address.Trim());
 
         // A link may point at a section of the target page. Editors may type the anchor with or without "#";
         // an email address has no sections.
@@ -59,6 +60,13 @@ public sealed class StoryblokUrlConverter : JsonConverter<string>
 
     private static bool IsSitePath(string address) =>
         address.StartsWith('/') && !address.StartsWith("//", StringComparison.Ordinal) && !address.StartsWith("/\\", StringComparison.Ordinal);
+
+    // Browsers drop tabs and line breaks anywhere in an address before reading it, so "/\t/host" would open "//host" on
+    // another site. They are dropped here first, so the checks above see the address the browser will.
+    private static string WithoutTabsAndNewlines(string address) =>
+        address.Replace("\t", string.Empty, StringComparison.Ordinal)
+            .Replace("\n", string.Empty, StringComparison.Ordinal)
+            .Replace("\r", string.Empty, StringComparison.Ordinal);
 
     public override void Write(Utf8JsonWriter writer, string value, JsonSerializerOptions options) => throw new NotSupportedException();
 
