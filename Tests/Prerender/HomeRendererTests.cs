@@ -1,7 +1,6 @@
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Prerender;
-using Storyblok.Extensions;
 using System.Net;
 
 namespace LinkInBio.Tests.Prerender;
@@ -92,7 +91,7 @@ public sealed class HomeRendererTests : IDisposable
         // Requests go straight to the fake Storyblok, without the retry handler.
         return new ServiceCollection()
             .AddPrerendering(storyblok)
-            .AddKeyedSingleton<HttpMessageHandler>(ServiceCollectionExtensions.HttpHandlerKey, _storyblok)
+            .AddKeyedSingleton<HttpMessageHandler>(global::Storyblok.Extensions.ServiceCollectionExtensions.HttpHandlerKey, _storyblok)
             .BuildServiceProvider();
     }
 }

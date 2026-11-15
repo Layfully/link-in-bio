@@ -10,8 +10,9 @@ on:
     types: [opened, synchronize, reopened, closed]
     branches:
       - main
-  # A publish in Storyblok: its webhook reaches a relay (README, Deployment), which sends this event, so the content in
-  # the first HTML, the cut-down Font Awesome and the page's metadata follow the change. Runs on main, like a push.
+  # A publish in Storyblok: its webhook calls the site's own API (Api, /api/storyblok-webhook), which sends this event,
+  # so the content in the first HTML, the cut-down Font Awesome and the page's metadata follow the change. Runs on main,
+  # like a push.
   repository_dispatch:
     types: [storyblok_publish]
   # The same by hand, from the Actions tab.
@@ -161,6 +162,11 @@ jobs:
       - name: Check the pages against the Content Security Policy
         run: node .github/scripts/check-published-csp.mjs publish/site/wwwroot
 
+      # The site's API, which passes Storyblok's webhook on to GitHub. Published here and deployed with the site as its
+      # managed functions (README, Deployment); its settings live in the Static Web App, not in the build.
+      - name: Publish the API
+        run: dotnet publish Api --configuration Release --output publish/api
+
       - name: Deploy to Azure Static Web Apps
         uses: Azure/static-web-apps-deploy@1a947af9992250f3bc2e68ad0754c0b0c11566c9 # v1
         with:
@@ -168,9 +174,10 @@ jobs:
           repo_token: ${{ secrets.GITHUB_TOKEN }}
           action: "upload"
           app_location: "publish/site/wwwroot"
-          api_location: ""
+          api_location: "publish/api"
           output_location: ""
           skip_app_build: true
+          skip_api_build: true
 
       # Every run on main, also those a publish in Storyblok starts: such a run may have replaced a push's run before
       # that one reached this step.

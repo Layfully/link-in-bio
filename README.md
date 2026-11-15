@@ -12,6 +12,7 @@ hosted on Azure Static Web Apps.
 | --- | --- |
 | `Client` | The Blazor WebAssembly app: pages, components, styles and the static files in `wwwroot`. |
 | `Storyblok` | A small client for Storyblok's Content Delivery API v2 that reads stories into the app's component classes. |
+| `Api` | The site's API, an Azure Function deployed with it: passes Storyblok's webhook on to GitHub, so a publish starts a deploy (see [Deploying on a publish in Storyblok](#deploying-on-a-publish-in-storyblok)). |
 | `Prerender` | A console app the deploy runs after publishing: it puts the home page's content into the HTML (see [Prerendering](#prerendering)). |
 | `Tests` | Unit tests for the Storyblok client, the link converter, the pages and the prerendering. |
 
@@ -45,7 +46,8 @@ component registry, the image addresses, the link converter's safety rules, the 
 interop (a typing animation that finishes starting too late is stopped), and with
 [bUnit](https://bunit.dev) the pages (what each answer from Storyblok shows), the loading hints and the layout's error
 message, and the prerendering (the rendered page, the profile it takes from Storyblok, how it is written into the
-published site, which Font Awesome icons stay, what a failure says). Run them with:
+published site, which Font Awesome icons stay, what a failure says), and the webhook that starts a deploy (which calls
+it refuses, what it sends GitHub). Run them with:
 
 ```bash
 dotnet test --solution link-in-bio.slnx
@@ -176,17 +178,27 @@ The workflow needs these repository secrets:
 
 The prerendered page, the cut-down Font Awesome and the page's metadata are made at deploy time (see
 [Prerendering](#prerendering)), so a publish in Storyblok should start a deploy. Storyblok's webhooks can't send the
-`Authorization` header GitHub's API needs, so a relay passes them on: the `TriggerBuild` function of the
-[portfolio](https://github.com/Layfully/portfolio) site's API, which checks a secret in its address and sends
-`repository_dispatch` with the event type `storyblok_publish`.
+`Authorization` header GitHub's API needs, so the site's own API passes them on: `Api` is an Azure Function that the
+Static Web App runs next to the site (managed functions, deployed with production and pull request builds). At
+`POST /api/storyblok-webhook?secret=<secret>` it checks the secret and sends `repository_dispatch` with the event type
+`storyblok_publish`, which starts this workflow on `main`.
 
-1. In Storyblok, add a webhook on story **published**, **unpublished**, **deleted** and **moved**, to the relay's
-   address with its secret: `https://<portfolio site>/api/TriggerBuild?secret=<secret>`.
-2. In the portfolio Static Web App's application settings, `GithubOptions__Repository` lists every repository to
-   notify, separated by commas (`portfolio,link-in-bio`), and `GithubOptions__Pat` is a fine-grained GitHub token with
-   **Contents: read and write** on each of them.
+Set it up once:
 
-Several publishes in a row end in one deploy: a newer run on `main` replaces one still in progress.
+1. Create a fine-grained GitHub token (Settings → Developer settings → Fine-grained tokens) for this repository only,
+   with **Contents: read and write**, which is what `repository_dispatch` needs. Give it an expiry you'll remember: a
+   token that has expired makes the webhook answer 502, and publishes stop starting deploys.
+2. Make up a long random secret, for example with `openssl rand -hex 32`.
+3. In the Azure portal, open the Static Web App → **Environment variables**, production environment, and add
+   `DeployTrigger__GitHubToken` (the token) and `DeployTrigger__WebhookSecret` (the secret). Settings are kept
+   between deploys; the build never sees them.
+4. In Storyblok, open the space's **Settings → Webhooks** and add one on story **published**, **unpublished**,
+   **deleted** and **moved**, with the address `https://adriangaborek.dev/api/storyblok-webhook?secret=<secret>`.
+   Storyblok's log shows each call's answer: 202 started a deploy, 401 is a wrong secret, 500 means a setting is
+   missing, 502 means GitHub refused (expired token, missing permission) or couldn't be reached.
+
+Several publishes in a row end in one deploy: a newer run on `main` replaces one still in progress. Pull request
+environments get the API too, but without its settings, so it refuses every call there.
 
 ### Prerendering
 
