@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using System.Net;
 
 namespace Storyblok.Client;
@@ -28,18 +27,18 @@ internal sealed record RetryPolicy(int MaxRetries, TimeSpan AttemptTimeout, Time
 /// Every attempt sends the same request message again, which is safe for a GET without a body. A timeout throws
 /// <see cref="TimeoutException"/>; the caller's own cancellation stays an <see cref="OperationCanceledException"/>.
 /// </remarks>
-internal sealed class StoryblokRetryHandler(RetryPolicy policy) : DelegatingHandler
+internal sealed class StoryblokRetryHandler(RetryPolicy policy, TimeProvider time) : DelegatingHandler
 {
-    public StoryblokRetryHandler()
-        : this(RetryPolicy.Default)
+    public StoryblokRetryHandler(RetryPolicy policy)
+        : this(policy, TimeProvider.System)
     {
     }
 
     protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
     {
-        using CancellationTokenSource total = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        total.CancelAfter(policy.TotalTimeout);
-        long started = Stopwatch.GetTimestamp();
+        using CancellationTokenSource totalTimeout = new(policy.TotalTimeout, time);
+        using CancellationTokenSource total = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, totalTimeout.Token);
+        long started = time.GetTimestamp();
 
         // The pause Storyblok asked for with its last answer, if any.
         TimeSpan retryAfter = TimeSpan.Zero;
@@ -50,7 +49,7 @@ internal sealed class StoryblokRetryHandler(RetryPolicy policy) : DelegatingHand
             {
                 try
                 {
-                    await Task.Delay(Max(policy.DelayBefore(retry), retryAfter), total.Token);
+                    await Task.Delay(Max(policy.DelayBefore(retry), retryAfter), time, total.Token);
                 }
                 catch (OperationCanceledException exception) when (!cancellationToken.IsCancellationRequested)
                 {
@@ -59,8 +58,8 @@ internal sealed class StoryblokRetryHandler(RetryPolicy policy) : DelegatingHand
             }
 
             bool isLastAttempt = retry == policy.MaxRetries;
-            using CancellationTokenSource attempt = CancellationTokenSource.CreateLinkedTokenSource(total.Token);
-            attempt.CancelAfter(policy.AttemptTimeout);
+            using CancellationTokenSource attemptTimeout = new(policy.AttemptTimeout, time);
+            using CancellationTokenSource attempt = CancellationTokenSource.CreateLinkedTokenSource(total.Token, attemptTimeout.Token);
 
             try
             {
@@ -76,7 +75,7 @@ internal sealed class StoryblokRetryHandler(RetryPolicy policy) : DelegatingHand
                 // so its answer is returned instead.
                 retryAfter = RetryAfter(response);
                 if (retryAfter > TimeSpan.Zero
-                    && Stopwatch.GetElapsedTime(started) + Max(policy.DelayBefore(retry + 1), retryAfter) >= policy.TotalTimeout)
+                    && time.GetElapsedTime(started) + Max(policy.DelayBefore(retry + 1), retryAfter) >= policy.TotalTimeout)
                 {
                     return response;
                 }
@@ -107,10 +106,10 @@ internal sealed class StoryblokRetryHandler(RetryPolicy policy) : DelegatingHand
         status is HttpStatusCode.RequestTimeout or HttpStatusCode.TooManyRequests || (int)status >= 500;
 
     // Retry-After is either a number of seconds or a point in time; a time already past means no pause.
-    private static TimeSpan RetryAfter(HttpResponseMessage response) => response.Headers.RetryAfter switch
+    private TimeSpan RetryAfter(HttpResponseMessage response) => response.Headers.RetryAfter switch
     {
         { Delta: { } delta } => Max(delta, TimeSpan.Zero),
-        { Date: { } date } => Max(date - DateTimeOffset.UtcNow, TimeSpan.Zero),
+        { Date: { } date } => Max(date - time.GetUtcNow(), TimeSpan.Zero),
         _ => TimeSpan.Zero,
     };
 

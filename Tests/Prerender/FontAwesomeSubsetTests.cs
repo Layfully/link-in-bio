@@ -59,6 +59,43 @@ public sealed partial class FontAwesomeSubsetTests
         }
     }
 
+    [Fact]
+    public void The_version_folder_is_the_one_index_html_links()
+    {
+        // After an update the folder has another name; reading its stylesheet proves it was found (no pyftsubset, so
+        // the cut stops right after).
+        string wwwroot = Directory.CreateTempSubdirectory("fontawesome-").FullName;
+        try
+        {
+            Directory.CreateDirectory(Path.Combine(wwwroot, "lib", "fontawesome-8.0.2", "css"));
+            File.WriteAllText(Path.Combine(wwwroot, "lib", "fontawesome-8.0.2", "css", "all.min.css"), """.fa-github{--fa:"\f09b"}""");
+            File.WriteAllText(Path.Combine(wwwroot, "index.html"), """<link rel="preload" as="style" href="lib/fontawesome-8.0.2/css/all.min.css" />""");
+
+            Assert.False(new FontAwesomeSubset("pyftsubset-that-isnt-installed").Apply(wwwroot, new HashSet<string> { "fa-github" }));
+        }
+        finally
+        {
+            Directory.Delete(wwwroot, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void A_page_without_the_stylesheet_link_is_reported()
+    {
+        string wwwroot = Directory.CreateTempSubdirectory("fontawesome-").FullName;
+        try
+        {
+            File.WriteAllText(Path.Combine(wwwroot, "index.html"), "<html></html>");
+
+            InvalidOperationException error = Assert.Throws<InvalidOperationException>(() => new FontAwesomeSubset().Apply(wwwroot, new HashSet<string>()));
+            Assert.Contains("lib/fontawesome-<version>/css/all.min.css", error.Message, StringComparison.Ordinal);
+        }
+        finally
+        {
+            Directory.Delete(wwwroot, recursive: true);
+        }
+    }
+
     // Comments may mention icons as examples (/// <c>fab fa-github</c>); only markup and code count.
     private static string WithoutComments(string razor) => RazorComment().Replace(DocComment().Replace(razor, string.Empty), string.Empty);
 

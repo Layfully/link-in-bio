@@ -15,7 +15,6 @@ namespace Prerender;
 /// <param name="pyftsubset">The fonttools command that subsets the fonts; the deploy installs it.</param>
 public sealed partial class FontAwesomeSubset(string pyftsubset = "pyftsubset")
 {
-    private const string Folder = "fontawesome-7.3.1";
     private const string Stylesheet = "css/all.min.css";
 
     // The fonts with the icons the site uses. The others (regular, v4 compatibility) are small and copied as they are.
@@ -70,7 +69,11 @@ public sealed partial class FontAwesomeSubset(string pyftsubset = "pyftsubset")
     /// </summary>
     public bool Apply(string wwwroot, IReadOnlySet<string> icons)
     {
-        string source = Path.Combine(wwwroot, "lib", Folder);
+        // The version folder index.html links (lib/fontawesome-7.3.1), so updating Font Awesome needs no change here.
+        string folder = StylesheetLink().Match(File.ReadAllText(Path.Combine(wwwroot, "index.html"))) is { Success: true } link
+            ? link.Groups["folder"].Value
+            : throw new InvalidOperationException($"index.html links no lib/fontawesome-<version>/{Stylesheet}.");
+        string source = Path.Combine(wwwroot, "lib", folder);
         (string css, IReadOnlySet<int> codepoints) = Filter(File.ReadAllText(Path.Combine(source, Stylesheet)), icons);
 
         string work = Directory.CreateTempSubdirectory("fontawesome-").FullName;
@@ -84,7 +87,7 @@ public sealed partial class FontAwesomeSubset(string pyftsubset = "pyftsubset")
                 }
             }
 
-            string target = Path.Combine(wwwroot, "lib", $"{Folder}-{ContentHash(css, work)}");
+            string target = Path.Combine(wwwroot, "lib", $"{folder}-{ContentHash(css, work)}");
             Directory.CreateDirectory(Path.Combine(target, "css"));
             Directory.CreateDirectory(Path.Combine(target, "webfonts"));
             File.WriteAllText(Path.Combine(target, Stylesheet), css);
@@ -97,7 +100,7 @@ public sealed partial class FontAwesomeSubset(string pyftsubset = "pyftsubset")
             // The fonts' license (SIL OFL) asks for it to travel with them.
             File.Copy(Path.Combine(source, "LICENSE.txt"), Path.Combine(target, "LICENSE.txt"), overwrite: true);
 
-            string from = $"lib/{Folder}/{Stylesheet}";
+            string from = $"lib/{folder}/{Stylesheet}";
             string to = $"lib/{Path.GetFileName(target)}/{Stylesheet}";
             foreach (string page in new[] { "index.html", PublishedSite.ShellFile }.Select(page => Path.Combine(wwwroot, page)).Where(File.Exists))
             {
@@ -168,6 +171,10 @@ public sealed partial class FontAwesomeSubset(string pyftsubset = "pyftsubset")
             }
         }
     }
+
+    // A version folder as published, never a cut-down copy (fontawesome-7.3.1-1a2b3c4d).
+    [GeneratedRegex(@"lib/(?<folder>fontawesome-[0-9][0-9.]*)/css/all\.min\.css")]
+    private static partial Regex StylesheetLink();
 
     [GeneratedRegex(@"\bfa-[a-z0-9]+(?:-[a-z0-9]+)*")]
     private static partial Regex IconClass();

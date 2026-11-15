@@ -10,8 +10,15 @@ on:
     types: [opened, synchronize, reopened, closed]
     branches:
       - main
+  # A publish in Storyblok: its webhook reaches a relay (README, Deployment), which sends this event, so the content in
+  # the first HTML, the cut-down Font Awesome and the page's metadata follow the change. Runs on main, like a push.
+  repository_dispatch:
+    types: [storyblok_publish]
+  # The same by hand, from the Actions tab.
+  workflow_dispatch:
 
 # A newer push to the same branch or pull request replaces a run still in progress: the last deploy would win anyway.
+# Publishes in Storyblok share the group of main, so several in a row end in one deploy.
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
@@ -19,9 +26,13 @@ concurrency:
 jobs:
   # Needs no secrets, so it also runs for Dependabot's pull requests and pull requests from forks.
   build_job:
-    if: github.event_name == 'push' || github.event.action != 'closed'
+    if: github.event_name != 'pull_request' || github.event.action != 'closed'
     runs-on: ubuntu-latest
     name: Build Job
+    env:
+      # True when the deploy job runs and publishes the site itself (the same condition as its own). This job then only
+      # tests, and leaves the WebAssembly build tools and publishing to it, rather than doing both twice.
+      DEPLOYS: ${{ (github.event_name != 'pull_request' && github.ref == 'refs/heads/main') || (github.event.pull_request.user.login != 'dependabot[bot]' && github.event.pull_request.head.repo.full_name == github.repository) }}
 
     steps:
       - name: Checkout Repository
@@ -55,6 +66,7 @@ jobs:
       # this app and smaller.
       # Also tells the build that they're there (Client.csproj turns on the options that need them).
       - name: Install the WebAssembly build tools
+        if: env.DEPLOYS != 'true'
         run: |
           dotnet workload install wasm-tools
           echo "WASM_TOOLS_INSTALLED=true" >> "$GITHUB_ENV"
@@ -63,14 +75,19 @@ jobs:
       - name: Build and test
         run: dotnet test --solution link-in-bio.slnx --configuration Release
 
-      # The particle background's movement rules; Node comes with the runner, the tests need no packages.
+      # The particle background, when Blazor starts, the analytics consent and the CSP check; Node comes with the runner,
+      # the tests need no packages.
       - name: Test the JavaScript
         run: node --test "Tests/js/*.test.mjs"
 
       # Publishing does more than building: trimming, fingerprinting and the Content Security Policy hash (Csp.targets).
-      # Done here as well, without tokens, so a pull request that breaks it fails before it is merged, Dependabot's included.
+      # Done here, without tokens, for the runs that don't deploy (Dependabot's pull requests, forks'), so a change that
+      # breaks it fails before it is merged. Every other run publishes in the deploy job and checks the same there.
       - name: Check that the site publishes
-        run: dotnet publish Client --configuration Release --output "$RUNNER_TEMP/publish"
+        if: env.DEPLOYS != 'true'
+        run: |
+          dotnet publish Client --configuration Release --output "$RUNNER_TEMP/publish"
+          node .github/scripts/check-published-csp.mjs "$RUNNER_TEMP/publish/wwwroot"
 
   # Production gets the public token only. On pushes to main, the "editor" environment, which the Storyblok Visual Editor
   # previews, is also built with the preview token. That token reads drafts and ships inside the app, so it must
@@ -79,8 +96,9 @@ jobs:
     needs: build_job
     # Dependabot's pull requests and pull requests from forks get no secrets, so they're built but not deployed.
     # The pull request's author decides, not who started the run: a re-run of Dependabot's pull request still has no secrets.
+    # Every other run deploys production, so only from main: a run started by hand on another branch is only built.
     if: >-
-      github.event_name == 'push' ||
+      (github.event_name != 'pull_request' && github.ref == 'refs/heads/main') ||
       (github.event.action != 'closed' &&
        github.event.pull_request.user.login != 'dependabot[bot]' &&
        github.event.pull_request.head.repo.full_name == github.repository)
@@ -124,14 +142,24 @@ jobs:
           mv "$RUNNER_TEMP/appsettings.json" "$APPSETTINGS_PATH"
           dotnet publish Client --configuration Release --output publish/site
 
-      # Puts the home page's content into the published index.html and cuts Font Awesome down to the icons in use (the
-      # Prerender project, see the README's Deployment section). It never fails the deploy: whatever goes wrong, it warns
-      # and leaves the site as published. fonttools (pyftsubset) comes through pipx, which the runner image has.
+      # Puts the home page's content and the profile from Storyblok into the published index.html and cuts Font Awesome
+      # down to the icons in use (the Prerender project, see the README's Deployment section). It never fails the deploy:
+      # whatever goes wrong, it warns and leaves the site as published. fonttools (pyftsubset) is installed exactly as
+      # Prerender/requirements.txt pins it, hashes included, into a virtual environment of its own.
       - name: Prerender the home page
         run: |
-          pipx install fonttools==4.55.0 && pipx inject fonttools brotli==1.1.0 \
-            || echo "::warning::fonttools couldn't be installed; Font Awesome ships whole."
+          if python3 -m venv "$RUNNER_TEMP/fonttools" \
+            && "$RUNNER_TEMP/fonttools/bin/pip" install --quiet --require-hashes -r Prerender/requirements.txt; then
+            export PATH="$RUNNER_TEMP/fonttools/bin:$PATH"
+          else
+            echo "::warning::fonttools couldn't be installed; Font Awesome ships whole."
+          fi
           dotnet run --project Prerender --configuration Release -- publish/site/wwwroot
+
+      # The prerendered page is a different page from the one Csp.targets hashed: check it against the policy before
+      # it goes live. A failure stops here, and the site stays as last deployed.
+      - name: Check the pages against the Content Security Policy
+        run: node .github/scripts/check-published-csp.mjs publish/site/wwwroot
 
       - name: Deploy to Azure Static Web Apps
         uses: Azure/static-web-apps-deploy@1a947af9992250f3bc2e68ad0754c0b0c11566c9 # v1
@@ -144,8 +172,10 @@ jobs:
           output_location: ""
           skip_app_build: true
 
+      # Every run on main, also those a publish in Storyblok starts: such a run may have replaced a push's run before
+      # that one reached this step.
       - name: Publish the editor build with the preview token
-        if: github.event_name == 'push'
+        if: github.event_name != 'pull_request'
         env:
           APPSETTINGS_PATH: Client/wwwroot/appsettings.json
           STORYBLOK_API_KEY_PREVIEW: ${{ secrets.STORYBLOK_API_KEY_PREVIEW }}
@@ -158,10 +188,11 @@ jobs:
             "$APPSETTINGS_PATH" > "$RUNNER_TEMP/appsettings.json"
           mv "$RUNNER_TEMP/appsettings.json" "$APPSETTINGS_PATH"
           dotnet publish Client --configuration Release --output publish/editor
+          node .github/scripts/check-published-csp.mjs publish/editor/wwwroot
 
       # A named preview environment: https://<app>-editor.<region>.azurestaticapps.net. Storyblok's preview URL points here.
       - name: Deploy the editor build
-        if: github.event_name == 'push'
+        if: github.event_name != 'pull_request'
         uses: Azure/static-web-apps-deploy@1a947af9992250f3bc2e68ad0754c0b0c11566c9 # v1
         with:
           azure_static_web_apps_api_token: ${{ secrets.AZURE_STATIC_WEB_APPS_API_TOKEN_GRAY_TREE_0C2E88D03 }}

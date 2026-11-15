@@ -25,9 +25,8 @@ public sealed class HomeRendererTests : IDisposable
             ] } }, "cv": 0 }
             """);
 
-        string? html = await HomeRenderer.RenderAsync(Services());
+        string html = (await HomeRenderer.RenderAsync(Services())).Html;
 
-        Assert.NotNull(html);
         Assert.Contains("GitHub", html, StringComparison.Ordinal);
         Assert.Contains("https://github.com/Layfully", html, StringComparison.Ordinal);
         // Content that is in the HTML from the start doesn't fade in: Chrome doesn't count a photo first painted fully
@@ -36,11 +35,52 @@ public sealed class HomeRendererTests : IDisposable
     }
 
     [Fact]
+    public async Task The_profile_is_the_photo_cut_square_and_every_web_address_the_page_links_to()
+    {
+        _storyblok.Answer(HttpStatusCode.OK, """
+            { "story": { "name": "Home", "content": { "_uid": "11111111-1111-1111-1111-111111111111", "component": "page", "body": [
+                { "_uid": "22222222-2222-2222-2222-222222222222", "component": "header",
+                  "profile": { "filename": "https://a.storyblok.com/f/1/608x912/abc/profile.jpg" },
+                  "header_link": [ { "_uid": "66666666-6666-6666-6666-666666666666", "component": "link", "label": "Portfolio",
+                                     "url": { "linktype": "url", "url": "https://portfolio.example.com" } } ] },
+                { "_uid": "33333333-3333-3333-3333-333333333333", "component": "list", "entries": [
+                    { "_uid": "44444444-4444-4444-4444-444444444444", "component": "link", "label": "GitHub",
+                      "url": { "linktype": "url", "url": "https://github.com/Layfully" } },
+                    { "_uid": "55555555-5555-5555-5555-555555555555", "component": "link", "label": "Mail",
+                      "url": { "linktype": "email", "email": "me@example.com" } },
+                    { "_uid": "77777777-7777-7777-7777-777777777777", "component": "link", "label": "Certificate",
+                      "url": { "linktype": "story", "cached_url": "certificates/aws" } },
+                    { "_uid": "88888888-8888-8888-8888-888888888888", "component": "link", "label": "Portfolio again",
+                      "url": { "linktype": "url", "url": "https://portfolio.example.com" } }
+                ] }
+            ] } }, "cv": 0 }
+            """);
+
+        SiteProfile profile = (await HomeRenderer.RenderAsync(Services())).Profile;
+
+        Assert.Equal("https://a.storyblok.com/f/1/608x912/abc/profile.jpg/m/600x600/smart", profile.Image);
+        Assert.Equal(["https://portfolio.example.com", "https://github.com/Layfully"], profile.SameAs);
+    }
+
+    [Fact]
     public async Task A_home_page_that_isnt_published_isnt_rendered()
     {
         _storyblok.Answer(HttpStatusCode.NotFound, "{}");
 
-        Assert.Null(await HomeRenderer.RenderAsync(Services()));
+        InvalidOperationException exception = await Assert.ThrowsAsync<InvalidOperationException>(() => HomeRenderer.RenderAsync(Services()));
+
+        Assert.Equal("The home story isn't published.", exception.Message);
+    }
+
+    [Fact]
+    public async Task An_outage_says_what_Storyblok_answered()
+    {
+        _storyblok.Answer(HttpStatusCode.Unauthorized, "{}");
+
+        InvalidOperationException exception = await Assert.ThrowsAsync<InvalidOperationException>(() => HomeRenderer.RenderAsync(Services()));
+
+        Assert.Equal("Storyblok is unavailable.", exception.Message);
+        Assert.Contains("401", ExceptionText.Describe(exception), StringComparison.Ordinal);
     }
 
     private ServiceProvider Services()

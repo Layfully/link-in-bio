@@ -40,8 +40,8 @@ function startParticles(container) {
 
 // Returns how to tell the scene something: by message to the worker, or by calling it here.
 function connect(canvas, reduceMotion) {
-    if (typeof canvas.transferControlToOffscreen === 'function' && typeof Worker === 'function') {
-        const worker = new Worker(new URL('./particle-worker.js', import.meta.url), { type: 'module' });
+    const worker = typeof canvas.transferControlToOffscreen === 'function' ? startModuleWorker() : null;
+    if (worker) {
         const offscreen = canvas.transferControlToOffscreen();
         worker.postMessage({ type: 'start', canvas: offscreen, reduceMotion }, [offscreen]);
         return message => worker.postMessage(message);
@@ -49,6 +49,21 @@ function connect(canvas, reduceMotion) {
 
     const scene = createScene(canvas, { reduceMotion, requestFrame: callback => requestAnimationFrame(callback) });
     return message => scene.handle(message);
+}
+
+// The worker, or null where workers can't be modules (Firefox before 114 has OffscreenCanvas but not module workers,
+// and would start the worker as a classic script that fails on its import without telling the page). Only a browser
+// that supports module workers reads the type option, so reading it is the test.
+function startModuleWorker() {
+    if (typeof Worker !== 'function') return null;
+
+    let readsType = false;
+    const options = { get type() { readsType = true; return 'module'; } };
+    const worker = new Worker(new URL('./particle-worker.js', import.meta.url), options);
+    if (readsType) return worker;
+
+    worker.terminate();
+    return null;
 }
 
 const container = document.getElementById('particles');

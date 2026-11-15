@@ -34,7 +34,8 @@ public static class ServiceCollectionExtensions
         // Retries transient failures (network errors, 408, 429, 5xx) and caps how long a page waits when Storyblok hangs.
         // A handler of its own rather than IHttpClientFactory: the site sends one kind of request, and the factory is
         // three more assemblies for every visitor to download and load.
-        services.TryAddKeyedSingleton<HttpMessageHandler>(HttpHandlerKey, (_, _) => new StoryblokRetryHandler { InnerHandler = new HttpClientHandler() });
+        services.TryAddKeyedSingleton<HttpMessageHandler>(HttpHandlerKey, (provider, _) =>
+            new StoryblokRetryHandler(RetryPolicy.Default, provider.GetRequiredService<TimeProvider>()) { InnerHandler = new HttpClientHandler() });
         services.TryAddSingleton(TimeProvider.System);
         services.AddScoped<StoryblokStoryClient>();
         services.TryAddSingleton<PrerenderedStories>();

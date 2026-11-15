@@ -85,7 +85,7 @@
 
         <div id="analytics-consent" hidden class="fixed inset-x-0 bottom-0 z-50 flex justify-center px-4 pb-4">
             <div class="flex w-full max-w-xl flex-col gap-3 rounded-2xl border border-purple-400/30 bg-gray-900/90 p-4 text-sm text-neutral-300 shadow-2xl shadow-black/60 backdrop-blur-md sm:flex-row sm:items-center"
-                role="dialog" aria-label="Analytics consent">
+                role="region" aria-label="Analytics consent">
                 <p class="flex-1">May this site use Google Analytics cookies to count visits? Nothing is sent to Google unless
                     you allow it.</p>
                 <div class="flex justify-end gap-2">
@@ -108,7 +108,7 @@
         </div>
         <script defer src="js/analytics-consent.js"></script>
         <script type="module" src="js/particle-background.js"></script>
-        <!-- Started by js/blazor-start.js: at once, or on the prerendered home page when the visitor first interacts. -->
+        <!-- Started by js/blazor-start.js: at once, or on the prerendered home page 5 seconds after it has loaded. -->
         <script src="_framework/blazor.webassembly#[.{fingerprint}].js" autostart="false"></script>
         <script src="js/blazor-start.js"></script>
     </body>

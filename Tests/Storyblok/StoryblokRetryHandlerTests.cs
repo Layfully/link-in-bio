@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Time.Testing;
 using Storyblok.Client;
 using System.Net;
 using System.Net.Http.Headers;
@@ -159,6 +160,22 @@ public sealed class StoryblokRetryHandlerTests : IDisposable
 
         Assert.IsNotType<TimeoutException>(exception.InnerException);
         Assert.Single(_storyblok.Requests);
+    }
+
+    [Fact]
+    public async Task A_point_in_time_to_wait_for_is_read_on_the_sites_clock()
+    {
+        // On the site's clock the time Storyblok named has passed; on the machine's it is years away, which would
+        // return the answer instead of asking again.
+        FakeTimeProvider time = new(new DateTimeOffset(2030, 1, 1, 12, 0, 0, TimeSpan.Zero));
+        using HttpClient client = new(new StoryblokRetryHandler(Policy, time) { InnerHandler = _storyblok }, disposeHandler: false);
+        _storyblok.Answer(HttpStatusCode.TooManyRequests, new RetryConditionHeaderValue(time.GetUtcNow().AddSeconds(-1)));
+        _storyblok.Answer(HttpStatusCode.OK);
+
+        using HttpResponseMessage response = await client.GetAsync("https://api.storyblok.com/v2/cdn/stories/home", TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal(2, _storyblok.Requests.Count);
     }
 
     private Task<HttpResponseMessage> Get() =>

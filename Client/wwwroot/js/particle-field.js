@@ -1,5 +1,5 @@
 // The particle background's movement rules, without any drawing: how many dots, how they move, how the pointer pushes
-// them and how clicks add more. ParticleBackground.razor.js draws them; Tests/js tests these rules with Node.
+// them and how clicks add more. particle-scene.js draws them; Tests/js tests these rules with Node.
 // The values reproduce the earlier tsParticles setup (itself the older particles.js one): 40 small pale purple dots
 // per 1000 x 800 px with faint links, pushed away on hover, more on click.
 
