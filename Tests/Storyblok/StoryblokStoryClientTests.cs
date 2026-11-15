@@ -202,6 +202,25 @@ public sealed class StoryblokStoryClientTests : IDisposable
         Assert.Contains("cv=1700000000", second.Query);
     }
 
+    // Storyblok's CDN answers a cache version it has seen before with that version's content, so a story loaded again
+    // with the old one would never show a publish.
+    [Fact]
+    public async Task The_cache_version_is_left_out_once_the_cache_time_is_up()
+    {
+        _storyblok.Answer(HttpStatusCode.OK, Story("Before", Page(), cacheVersion: 1700000000));
+        _storyblok.Answer(HttpStatusCode.OK, Story("After", Page(), cacheVersion: 1700000500));
+        _storyblok.Answer(HttpStatusCode.OK, Story("Other", Page()));
+        StoryblokStoryClient client = CreateClient(new StoryblokOptions { ApiKeyPublic = "public-token", CacheDurationSeconds = 60 });
+
+        await Load<TestPage>(client, "/home", TestContext.Current.CancellationToken);
+        _time.Advance(TimeSpan.FromSeconds(60));
+        await Load<TestPage>(client, "/home", TestContext.Current.CancellationToken);
+        await Load<TestPage>(client, "/other", TestContext.Current.CancellationToken);
+
+        Assert.DoesNotContain("cv=", _storyblok.Requests[1].Query);
+        Assert.Contains("cv=1700000500", _storyblok.Requests[2].Query);
+    }
+
     [Fact]
     public async Task The_editor_loads_drafts_with_the_preview_token_and_never_caches_them()
     {

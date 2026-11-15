@@ -25,6 +25,7 @@ public sealed class StoryblokUrlConverterTests
     [InlineData("\"https://example.com/plain\"", "https://example.com/plain")]
     [InlineData("\"/Certificate/x\"", "/Certificate/x")]
     [InlineData("\"#section\"", "#section")]
+    [InlineData("""{ "linktype": "url", "url": "https://example.com/a\n/b" }""", "https://example.com/a/b")]
     public void Links_become_the_address_to_link_to(string field, string expected)
     {
         Assert.Equal(expected, Read(field));
@@ -46,6 +47,10 @@ public sealed class StoryblokUrlConverterTests
     [InlineData("""{ "linktype": "url", "url": "//evil.example" }""")]
     [InlineData("""{ "linktype": "url", "url": "/\\evil.example" }""")]
     [InlineData("\"//evil.example\"")]
+    [InlineData("""{ "linktype": "url", "url": "/\t/evil.example" }""")]
+    [InlineData("""{ "linktype": "url", "url": "/\n/evil.example" }""")]
+    [InlineData("""{ "linktype": "url", "url": "/\r\n\\evil.example" }""")]
+    [InlineData("\"/\\t/evil.example\"")]
     public void Addresses_that_only_look_site_relative_are_dropped(string field)
     {
         Assert.Null(Read(field));

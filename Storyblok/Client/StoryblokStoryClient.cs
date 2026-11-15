@@ -23,7 +23,11 @@ public sealed class StoryblokStoryClient : IDisposable
 
     // The cache version from the last Storyblok response. Sending it back lets the CDN answer requests for published
     // content directly instead of redirecting to the latest version first (https://www.storyblok.com/docs/concepts/caching).
+    // It is sent only as long as stories are cached: the CDN answers a cache version it has seen before with the content
+    // of that version, so a cached story loaded again with it would come back unchanged after every publish.
     private long? _cacheVersion;
+    private DateTimeOffset _cacheVersionExpires;
+    private readonly TimeProvider _time;
 
     // The handler sends the requests: in the app the retry handler around the browser's (see AddStoryblok), in tests a
     // fake Storyblok. It is shared, so disposing this client leaves it alone.
@@ -37,8 +41,15 @@ public sealed class StoryblokStoryClient : IDisposable
     {
         // Reading Value validates the options (see AddStoryblok), so a missing token fails here with a clear message.
         _settings = settings.Value;
-        _client = new HttpClient(handler, disposeHandler: false);
+        // The handler limits each attempt and the whole request, but only until the answer's headers arrive; the body is
+        // read afterwards. This limit covers that too, so a body that stalls can't keep the page loading for the
+        // default 100 seconds.
+        _client = new HttpClient(handler, disposeHandler: false)
+        {
+            Timeout = RetryPolicy.Default.TotalTimeout + RetryPolicy.Default.AttemptTimeout,
+        };
         _cache = new StoryCache(time);
+        _time = time;
         _prerendered = prerendered;
         _logger = logger;
 
@@ -248,8 +259,9 @@ public sealed class StoryblokStoryClient : IDisposable
     {
         List<string> query = [$"version={(LoadDrafts ? "draft" : "published")}"];
 
-        // drafts must always be fresh; published content is served from the CDN for the cache version we last saw
-        if (!LoadDrafts && _cacheVersion is { } cacheVersion)
+        // Drafts must always be fresh. Published content comes from the CDN for the cache version last seen, while that
+        // is recent; after that, a request without one gets the latest.
+        if (!LoadDrafts && _cacheVersion is { } cacheVersion && _time.GetUtcNow() < _cacheVersionExpires)
         {
             query.Add($"cv={cacheVersion}");
         }
@@ -280,6 +292,7 @@ public sealed class StoryblokStoryClient : IDisposable
         if (container.CacheVersion > 0)
         {
             _cacheVersion = container.CacheVersion;
+            _cacheVersionExpires = _time.GetUtcNow() + TimeSpan.FromSeconds(Math.Max(_settings.CacheDurationSeconds, 0));
         }
 
         _prerendered.Record(path, body);
