@@ -89,9 +89,10 @@ dev server.
 
 ## Third-party libraries
 
-Font Awesome and typed.js are served from `Client/wwwroot/lib` rather than a CDN. That way no visitor's
-address goes to a third party before they've agreed to anything, and the Content Security Policy only allows the site's
-own origin.
+Font Awesome and typed.js are served from `Client/wwwroot/lib` rather than a CDN. That way loading the
+libraries sends no visitor's address to a third party, and the Content Security Policy allows only the site's own origin
+for them. Storyblok still sees every visit: the photo comes from `a.storyblok.com`, and the app asks
+`api.storyblok.com` for the content.
 
 | Folder | Package | Files taken from it |
 | --- | --- | --- |
@@ -167,8 +168,8 @@ built but never deployed.
 Before deploying, CI checks every published page against the site's Content Security Policy
 (`.github/scripts/check-published-csp.mjs`): each inline script and style must match a hash in the policy, each
 script and stylesheet the page loads must come from a host the policy names, and no element may carry a style or event
-handler attribute, which the policy would block. It runs after each publish and
-again after prerendering, which changes the page.
+handler attribute, which the policy would block. For production it runs
+after prerendering, which changes the page; for the editor build and for runs that don't deploy, after publishing.
 
 The workflow needs these repository secrets:
 
@@ -243,8 +244,10 @@ production and pull request builds, after `dotnet publish`, run the `Prerender` 
   app reads it on start (`Client/Program.cs`), so its first render shows the same content instead of a placeholder,
   without fading it in a second time. It then asks Storyblok whether the story has changed since the deploy and shows
   the newer one if so. An outage at that point keeps the content the page came with.
-- The page as published is kept as `app-shell.html`, and the published config's navigation fallback points there, so
-  certificate pages and unknown addresses get the plain page, never the home page's content.
+- The page as published is kept as `app-shell.html`, and the published config's rewrites point there, so
+  certificate pages and unknown addresses get the plain page, never the home page's content. Unknown addresses get it
+  with a 404 status (`responseOverrides` in `staticwebapp.config.json`), so search engines don't take them for pages
+  without having to run the app.
 - Both pages get the profile from the home story in their metadata: the photo, cut to 600 x 600, as the link preview
   (`og:image`) and the structured data's `image`, and every web address the page links to as its `sameAs`. The values
   written in `index.html` are the fallback, for builds without prerendering. The description stays as written.

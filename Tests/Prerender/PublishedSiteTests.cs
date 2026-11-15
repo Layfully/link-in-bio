@@ -19,9 +19,11 @@ public sealed class PublishedSiteTests : IDisposable
 
     private const string Config = """
         {
-          "navigationFallback": {
-            "rewrite": "/index.html",
-            "exclude": ["/_framework/*"]
+          "routes": [
+            { "route": "/Certificate/*", "rewrite": "/index.html" }
+          ],
+          "responseOverrides": {
+            "404": { "rewrite": "/index.html", "statusCode": 404 }
           },
           "globalHeaders": {
             "Content-Security-Policy": "default-src 'self'; script-src 'self' 'sha256-abc+def='"
@@ -80,7 +82,9 @@ public sealed class PublishedSiteTests : IDisposable
         new PublishedSite(_wwwroot).WriteHome("<main>Links</main>", "{}", SiteProfile.None);
 
         JsonNode config = JsonNode.Parse(File.ReadAllText(Path.Combine(_wwwroot, "staticwebapp.config.json")))!;
-        Assert.Equal("/app-shell.html", (string?)config["navigationFallback"]!["rewrite"]);
+        Assert.Equal("/app-shell.html", (string?)config["routes"]![0]!["rewrite"]);
+        Assert.Equal("/app-shell.html", (string?)config["responseOverrides"]!["404"]!["rewrite"]);
+        Assert.Equal(404, (int?)config["responseOverrides"]!["404"]!["statusCode"]);
         Assert.Equal("default-src 'self'; script-src 'self' 'sha256-abc+def='", (string?)config["globalHeaders"]!["Content-Security-Policy"]);
     }
 
