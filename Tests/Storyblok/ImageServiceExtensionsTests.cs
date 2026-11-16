@@ -37,6 +37,23 @@ public sealed class ImageServiceExtensionsTests
         Assert.Equal($"{Photo}/m/256x384", photo.Resize(256, 384, smart: false));
     }
 
+    [Theory]
+    [InlineData(Photo, $"{Photo}/m/0x304:608x912/128x128")] // portrait: the bottom square
+    [InlineData("https://a.storyblok.com/f/1/900x600/abc/x.jpg", "https://a.storyblok.com/f/1/900x600/abc/x.jpg/m/150x0:750x600/128x128")] // landscape: the middle
+    [InlineData("https://a.storyblok.com/f/1/600x600/abc/x.jpg", "https://a.storyblok.com/f/1/600x600/abc/x.jpg/m/0x0:600x600/128x128")]
+    public void A_square_is_cut_where_object_position_bottom_would_show_it(string url, string expected)
+    {
+        Assert.Equal(expected, new StoryblokAsset { Url = url }.SquareFromBottom(128));
+    }
+
+    [Fact]
+    public void A_square_from_an_address_without_a_size_keeps_the_photos_shape()
+    {
+        // The page's CSS still cuts it, as it did before; only the download is larger.
+        Assert.Equal("https://a.storyblok.com/f/1/abc/x.jpg/m/128x0", new StoryblokAsset { Url = "https://a.storyblok.com/f/1/abc/x.jpg" }.SquareFromBottom(128));
+        Assert.Equal("https://a.storyblok.com/f/1/600x400/abc/logo.svg", new StoryblokAsset { Url = "https://a.storyblok.com/f/1/600x400/abc/logo.svg" }.SquareFromBottom(128));
+    }
+
     [Fact]
     public void The_original_size_is_read_from_the_address()
     {

@@ -26,6 +26,30 @@ public static class ImageServiceExtensions
             : image.Url;
     }
 
+    /// <summary>
+    /// A <paramref name="side"/> px square of the image, cut where CSS's <c>object-fit: cover</c> with
+    /// <c>object-position: bottom</c> would show it: the bottom of a portrait, the middle of a landscape. Downloading just
+    /// that part saves what the page would cut away. Without the original size in the address it is scaled to the
+    /// width only, and the page's CSS cuts it as before.
+    /// </summary>
+    public static string? SquareFromBottom(this IImageService image, int side)
+    {
+        if (!image.IsSupported())
+        {
+            return image.Url;
+        }
+
+        if (image.Dimensions() is not (int width, int height))
+        {
+            return image.ResizeByWidth(side);
+        }
+
+        int crop = Math.Min(width, height);
+        int left = (width - crop) / 2;
+        int top = height - crop;
+        return image.Url + $"/m/{left}x{top}:{left + crop}x{height}/{side}x{side}";
+    }
+
     public static bool IsSupported(this IImageService image)
     {
         if (string.IsNullOrWhiteSpace(image.Url))
