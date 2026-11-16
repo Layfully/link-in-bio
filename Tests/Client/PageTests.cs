@@ -125,6 +125,30 @@ public sealed class PageTests : IDisposable
         IRenderedComponent<Home> page = _context.Render<Home>();
 
         page.WaitForAssertion(() => Assert.Contains("Nothing here yet", page.Markup));
+        // Without a header the page still has its one heading, for screen readers and search engines.
+        Assert.Equal("Adrian Gaborek - Software Engineer (.NET, C#, Blazor)", Assert.Single(page.FindAll("h1")).TextContent);
+    }
+
+    [Fact]
+    public void The_header_shows_the_name_as_the_pages_heading_and_the_links_have_one_of_their_own()
+    {
+        _storyblok.Answer(HttpStatusCode.OK, Story("Home", """
+            { "_uid": "11111111-1111-1111-1111-111111111111", "component": "page", "body": [
+                { "_uid": "22222222-2222-2222-2222-222222222222", "component": "header" },
+                { "_uid": "33333333-3333-3333-3333-333333333333", "component": "list", "entries": [
+                    { "_uid": "44444444-4444-4444-4444-444444444444", "component": "link", "label": "GitHub",
+                      "url": { "linktype": "url", "url": "https://github.com/Layfully" } }
+                ] }
+            ] }
+            """));
+
+        IRenderedComponent<Home> page = _context.Render<Home>();
+
+        page.WaitForAssertion(() => Assert.Single(page.FindAll("header h1")));
+        AngleSharp.Dom.IElement heading = Assert.Single(page.FindAll("h1"));
+        Assert.Equal("Adrian Gaborek", heading.TextContent);
+        Assert.DoesNotContain("sr-only", heading.ClassName);
+        Assert.Equal("Profiles", page.Find("nav h2").TextContent);
     }
 
     [Fact]

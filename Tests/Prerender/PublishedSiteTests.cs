@@ -68,6 +68,18 @@ public sealed class PublishedSiteTests : IDisposable
     }
 
     [Fact]
+    public void Only_the_shell_asks_for_JavaScript()
+    {
+        string page = Index.Replace("<body>", "<body>\n<noscript>\n<p>This page needs JavaScript</p>\n</noscript>", StringComparison.Ordinal);
+        File.WriteAllText(Path.Combine(_wwwroot, "index.html"), page);
+
+        new PublishedSite(_wwwroot).WriteHome("<main>Links</main>", "{}", SiteProfile.None);
+
+        Assert.DoesNotContain("noscript", File.ReadAllText(Path.Combine(_wwwroot, "index.html")), StringComparison.Ordinal);
+        Assert.Equal(page, File.ReadAllText(Path.Combine(_wwwroot, "app-shell.html")));
+    }
+
+    [Fact]
     public void Only_the_shell_connects_to_the_api_at_load()
     {
         const string Deferred = """<link rel="preconnect" href="https://api.storyblok.com" crossorigin data-preconnect-on-start />""";

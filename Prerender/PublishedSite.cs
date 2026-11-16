@@ -63,6 +63,10 @@ public sealed partial class PublishedSite(string wwwroot)
         string canonical = $"""    <link rel="canonical" href="{Site.Url}/" />""" + newline + (string.IsNullOrWhiteSpace(headIndent) ? headIndent : string.Empty);
 
         string home = page[..headEnd] + canonical + page[headEnd..start] + html + page[(end + EndMarker.Length)..bodyEnd] + data + "\n" + page[bodyEnd..];
+        // The prerendered links work without JavaScript, so the home page drops the notice that covers the page asking for
+        // it. Left in, it hid the links from visitors without scripts and was the first text crawlers that don't run
+        // scripts read. The shell keeps it: certificate pages are empty until Blazor runs.
+        home = NoScript().Replace(home, string.Empty);
         // .NET starts seconds after the home page has loaded (js/blazor-start.js), so a connection opened for it at once
         // would close unused first, and Chrome warns about it. Without rel the link does nothing; blazor-start.js makes it
         // a preconnect again when .NET starts. The shell starts .NET at once and keeps it.
@@ -117,6 +121,10 @@ public sealed partial class PublishedSite(string wwwroot)
     }
 
     private static readonly JsonSerializerOptions IndentedJson = new() { WriteIndented = true, IndentSize = 4, NewLine = "\n" };
+
+    // The element with the whitespace before it, so no empty line is left behind.
+    [GeneratedRegex(@"[ \t]*<noscript>.*?</noscript>\r?\n?", RegexOptions.Singleline)]
+    private static partial Regex NoScript();
 
     [GeneratedRegex(@"<link\s+rel=""preconnect""(?=[^>]*\sdata-preconnect-on-start[\s/>=])")]
     private static partial Regex PreconnectOnStart();

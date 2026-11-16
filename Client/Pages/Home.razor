@@ -3,12 +3,17 @@
 @inject PrerenderedStories Prerendered
 @page "/"
 
-<PageTitle>Adrian Gaborek - Links</PageTitle>
+<PageTitle>Adrian Gaborek - Software Engineer (.NET, C#, Blazor)</PageTitle>
 @* Each page sets its own canonical address; one in index.html would claim every page is a copy of the home page. *@
 <HeadContent>
     <link rel="canonical" href="@($"{Site.Url}/")" />
 </HeadContent>
-<h1 class="sr-only" tabindex="-1">Adrian Gaborek - Links</h1>
+@* The header shows the name as the page's heading. Until it does (loading, nothing published, an error) the page has a
+   hidden one, so there is always exactly one. *@
+@if (_state is not Loaded { Header: not null })
+{
+    <h1 class="sr-only" tabindex="-1">Adrian Gaborek - Software Engineer (.NET, C#, Blazor)</h1>
+}
 @switch (_state)
 {
     case Loaded loaded:
