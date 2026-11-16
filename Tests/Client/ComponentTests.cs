@@ -26,6 +26,20 @@ public sealed class ComponentTests : IDisposable
     public void Dispose() => _context.Dispose();
 
     [Fact]
+    public void The_photo_is_downloaded_at_the_size_it_is_shown()
+    {
+        const string photo = "https://a.storyblok.com/f/268473/608x912/b7730a2cf6/profile.jpg";
+
+        IRenderedComponent<Header> header = _context.Render<Header>(parameters => parameters.Add(component => component.Model,
+            new StoryblokHeader { Profile = new StoryblokAsset { Url = photo } }));
+
+        // Shown 128 px square in a circle: the part the circle shows, 2x for sharp screens.
+        AngleSharp.Dom.IElement image = header.Find("img");
+        Assert.Equal($"{photo}/m/0x304:608x912/128x128", image.GetAttribute("src"));
+        Assert.Equal($"{photo}/m/0x304:608x912/128x128 1x, {photo}/m/0x304:608x912/256x256 2x", image.GetAttribute("srcset"));
+    }
+
+    [Fact]
     public void The_typed_line_shows_the_first_tagline_until_typing_starts()
     {
         IRenderedComponent<TypedText> typed = _context.Render<TypedText>(parameters => parameters.Add(text => text.Model,

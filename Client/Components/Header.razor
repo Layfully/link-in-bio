@@ -7,8 +7,10 @@
     {
         @* The gradient ring is the wrapper's padding, so photo and ring together stay 128 px, like the placeholder. *@
         <div class="avatar-ring halo size-32 p-[3px]">
-            @* Shown at 128 px; Storyblok's image service delivers 256 x 384 (2x for sharp screens, the photo's 2:3 ratio) instead of the original. *@
-            <img class="size-full rounded-full border-[3px] border-gray-900 bg-gray-900 object-cover object-bottom" src="@profile.Resize(256, 384, smart: false)" width="128" height="128"
+            @* Shown at 128 px: Storyblok's image service delivers just the square the circle shows, 128 px or 256 px for
+               sharp screens, instead of the original (WebP where the browser takes it). object-cover and
+               object-bottom still cut a photo whose address doesn't carry its size. *@
+            <img class="size-full rounded-full border-[3px] border-gray-900 bg-gray-900 object-cover object-bottom" src="@profile.SquareFromBottom(128)" srcset="@($"{profile.SquareFromBottom(128)} 1x, {profile.SquareFromBottom(256)} 2x")" width="128" height="128"
                  alt="@(string.IsNullOrWhiteSpace(profile.Alt) ? "Profile picture" : profile.Alt)" fetchpriority="high">
         </div>
     }
