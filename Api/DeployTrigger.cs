@@ -12,9 +12,10 @@ namespace Api;
 public sealed record DeployTriggerResult(HttpStatusCode Status, string Message);
 
 /// <summary>
-/// Starts the site's deploy when Storyblok reports a publish: GitHub's <c>workflow_dispatch</c>, the same as "Run
-/// workflow" in the Actions tab. Storyblok's webhooks can't send the Authorization header GitHub needs, so the token
-/// stays here. It needs only Actions: write, which can start runs but not change the repository.
+/// Starts the deploy of each site the published story goes into (<see cref="DeploySite"/>): GitHub's
+/// <c>workflow_dispatch</c>, the same as "Run workflow" in the Actions tab. Storyblok's webhooks can't send the
+/// Authorization header GitHub needs, so the token stays here. It needs only Actions: write on the sites' repositories,
+/// which can start runs but not change the repositories.
 /// </summary>
 /// <remarks>Without the Functions types, so tests can call it directly; <see cref="StoryblokWebhook"/> is the endpoint.</remarks>
 public sealed class DeployTrigger(HttpClient http, IOptions<DeployTriggerOptions> options, TimeProvider time, ILogger<DeployTrigger> logger)
@@ -27,13 +28,6 @@ public sealed class DeployTrigger(HttpClient http, IOptions<DeployTriggerOptions
 
     /// <summary>The pause before the second attempt; it doubles before each further one.</summary>
     private static readonly TimeSpan FirstDelay = TimeSpan.FromSeconds(1);
-
-    /// <summary>
-    /// The stories whose publish changes what the deploy builds: only the home story goes into the site at deploy time
-    /// (Prerender). The Storyblok space also holds the portfolio site's stories, and certificates load in the browser,
-    /// so publishing those needs no deploy here.
-    /// </summary>
-    public static readonly IReadOnlySet<string> DeployedStories = new HashSet<string>(StringComparer.Ordinal) { "home" };
 
     /// <param name="secret">The secret from the webhook's address.</param>
     /// <param name="body">What Storyblok sent: <c>{ "action": "published", "full_slug": "home", … }</c>.</param>
@@ -62,15 +56,27 @@ public sealed class DeployTrigger(HttpClient http, IOptions<DeployTriggerOptions
             return new(HttpStatusCode.InternalServerError, "The webhook isn't set up.");
         }
 
-        // A call that doesn't say which story it is about deploys, so a change in what Storyblok sends can't stop deploys.
-        if (StorySlug(body) is { } slug && !DeployedStories.Contains(slug))
+        // A call that doesn't say which story it is about deploys every site, so a change in what Storyblok sends can't
+        // stop deploys.
+        string? slug = StorySlug(body);
+        DeploySite[] sites = [.. DeploySite.All.Where(site => slug is null || site.Builds(slug))];
+        if (sites.Length == 0)
         {
-            logger.LogInformation("Story {Slug} isn't part of the deploy; nothing started.", slug);
-            return new(HttpStatusCode.OK, $"Story {slug} isn't part of this site's deploy; nothing started.");
+            logger.LogInformation("Story {Slug} isn't part of any site's deploy; nothing started.", slug);
+            return new(HttpStatusCode.OK, $"Story {slug} isn't part of any site's deploy; nothing started.");
         }
 
-        string address = $"https://api.github.com/repos/{settings.Repository}/actions/workflows/{settings.Workflow}/dispatches";
-        string dispatch = JsonSerializer.Serialize(new { @ref = settings.Ref });
+        // At the same time, so trying several sites again stays within the time Static Web Apps gives the request
+        // (Program.cs).
+        (bool Started, string Message)[] outcomes = await Task.WhenAll(sites.Select(site => DispatchAsync(site, settings.GitHubToken, cancellationToken)));
+        string message = string.Join(" ", outcomes.Select(outcome => outcome.Message));
+        return new(outcomes.All(outcome => outcome.Started) ? HttpStatusCode.Accepted : HttpStatusCode.BadGateway, message);
+    }
+
+    private async Task<(bool Started, string Message)> DispatchAsync(DeploySite site, string token, CancellationToken cancellationToken)
+    {
+        string address = $"https://api.github.com/repos/{site.Repository}/actions/workflows/{site.Workflow}/dispatches";
+        string dispatch = JsonSerializer.Serialize(new { @ref = site.Ref });
 
         for (int attempt = 1; ; attempt++)
         {
@@ -83,34 +89,34 @@ public sealed class DeployTrigger(HttpClient http, IOptions<DeployTriggerOptions
 
             try
             {
-                using HttpResponseMessage response = await http.SendAsync(Request(address, dispatch, settings.GitHubToken), cancellationToken);
+                using HttpResponseMessage response = await http.SendAsync(Request(address, dispatch, token), cancellationToken);
                 if (response.IsSuccessStatusCode)
                 {
-                    logger.LogInformation("Started the deploy of {Repository} ({Workflow} on {Ref}).", settings.Repository, settings.Workflow, settings.Ref);
-                    return new(HttpStatusCode.Accepted, $"Deploy of {settings.Repository} started.");
+                    logger.LogInformation("Started the deploy of {Repository} ({Workflow} on {Ref}).", site.Repository, site.Workflow, site.Ref);
+                    return (true, $"Deploy of {site.Repository} started.");
                 }
 
                 if (!isLastAttempt && IsTransient(response.StatusCode))
                 {
-                    logger.LogWarning("GitHub answered {Status} to the dispatch; trying again.", (int)response.StatusCode);
+                    logger.LogWarning("GitHub answered {Status} to the dispatch to {Repository}; trying again.", (int)response.StatusCode, site.Repository);
                     continue;
                 }
 
                 // GitHub's answer goes to the log only: it may name the token's permissions.
-                logger.LogError("GitHub refused the dispatch to {Repository}: {Status} {Body}", settings.Repository, (int)response.StatusCode,
+                logger.LogError("GitHub refused the dispatch to {Repository}: {Status} {Body}", site.Repository, (int)response.StatusCode,
                     await response.Content.ReadAsStringAsync(cancellationToken));
-                return new(HttpStatusCode.BadGateway, $"GitHub refused to start the deploy ({(int)response.StatusCode}).");
+                return (false, $"GitHub refused to start the deploy of {site.Repository} ({(int)response.StatusCode}).");
             }
             catch (Exception exception) when (IsUnreachable(exception, cancellationToken))
             {
                 if (!isLastAttempt)
                 {
-                    logger.LogWarning(exception, "GitHub couldn't be reached for the dispatch; trying again.");
+                    logger.LogWarning(exception, "GitHub couldn't be reached for the dispatch to {Repository}; trying again.", site.Repository);
                     continue;
                 }
 
-                logger.LogError(exception, "GitHub couldn't be reached to start the deploy of {Repository}.", settings.Repository);
-                return new(HttpStatusCode.BadGateway, "GitHub couldn't be reached.");
+                logger.LogError(exception, "GitHub couldn't be reached to start the deploy of {Repository}.", site.Repository);
+                return (false, $"GitHub couldn't be reached to start the deploy of {site.Repository}.");
             }
         }
     }

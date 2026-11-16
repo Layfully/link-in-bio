@@ -31,9 +31,9 @@ public sealed class DeployTriggerTests : IDisposable
     }
 
     [Fact]
-    public void The_workflow_named_in_the_settings_exists_and_can_be_started_this_way()
+    public void This_sites_workflow_exists_and_can_be_started_this_way()
     {
-        string workflow = Path.Combine(RepositoryRoot(), ".github", "workflows", new DeployTriggerOptions().Workflow);
+        string workflow = Path.Combine(RepositoryRoot(), ".github", "workflows", DeploySite.LinkInBio.Workflow);
 
         Assert.True(File.Exists(workflow), $"{workflow} doesn't exist.");
         Assert.Contains("workflow_dispatch:", File.ReadAllText(workflow), StringComparison.Ordinal);
@@ -135,10 +135,11 @@ public sealed class DeployTriggerTests : IDisposable
     }
 
     [Theory]
-    [InlineData("""{"text":"The user published the Story Portfolio (portfolio)","action":"published","space_id":268473,"story_id":1,"full_slug":"portfolio"}""")]
     [InlineData("""{"action":"published","full_slug":"certificates/aws"}""")]
-    [InlineData("""{"action":"published","full_slug":"pl/portfolio"}""")]
-    public async Task A_publish_of_a_story_the_deploy_doesnt_use_starts_nothing(string body)
+    [InlineData("""{"action":"published","full_slug":"about"}""")]
+    [InlineData("""{"action":"published","full_slug":"homepage"}""")]
+    [InlineData("""{"action":"published","full_slug":"de/portfolio"}""")]
+    public async Task A_publish_of_a_story_no_site_builds_starts_nothing(string body)
     {
         DeployTriggerResult result = await Trigger("s3cret", body: body);
 
@@ -149,12 +150,26 @@ public sealed class DeployTriggerTests : IDisposable
     [Theory]
     [InlineData("""{"action":"unpublished","full_slug":"home"}""")]
     [InlineData("""{"action":"published","full_slug":"/home/"}""")]
-    public async Task A_change_to_the_home_story_starts_the_deploy(string body)
+    public async Task A_change_to_the_home_story_starts_only_this_sites_deploy(string body)
     {
         DeployTriggerResult result = await Trigger("s3cret", body: body);
 
         Assert.Equal(HttpStatusCode.Accepted, result.Status);
-        Assert.Single(_github.Requests);
+        Assert.Equal([LinkInBioDispatch], _github.Addresses);
+    }
+
+    [Theory]
+    [InlineData("""{"text":"The user published the Story Portfolio (portfolio)","action":"published","space_id":268473,"story_id":1,"full_slug":"portfolio"}""")]
+    [InlineData("""{"action":"published","full_slug":"pl/portfolio"}""")]
+    [InlineData("""{"action":"published","full_slug":"en/portfolio"}""")]
+    [InlineData("""{"action":"published","full_slug":"portfolio/projects/website"}""")]
+    public async Task A_change_to_a_portfolio_story_starts_only_the_portfolios_deploy(string body)
+    {
+        DeployTriggerResult result = await Trigger("s3cret", body: body);
+
+        Assert.Equal(HttpStatusCode.Accepted, result.Status);
+        Assert.Equal([PortfolioDispatch], _github.Addresses);
+        Assert.Equal("""{"ref":"main"}""", _github.Bodies.Single());
     }
 
     // Storyblok may change what it sends; missing a deploy is worse than an extra one.
@@ -165,13 +180,32 @@ public sealed class DeployTriggerTests : IDisposable
     [InlineData("""{"action":"deleted","story_id":1}""")]
     [InlineData("""{"action":"published","full_slug":42}""")]
     [InlineData("""["home"]""")]
-    public async Task A_call_that_doesnt_name_a_story_starts_the_deploy(string? body)
+    public async Task A_call_that_doesnt_name_a_story_starts_every_sites_deploy(string? body)
     {
         DeployTriggerResult result = await Trigger("s3cret", body: body);
 
         Assert.Equal(HttpStatusCode.Accepted, result.Status);
-        Assert.Single(_github.Requests);
+        Assert.Equal([LinkInBioDispatch, PortfolioDispatch], _github.Addresses.Order(StringComparer.Ordinal));
     }
+
+    [Fact]
+    public async Task One_site_refused_is_reported_and_the_other_still_starts()
+    {
+        _github.Refused = "Layfully/portfolio";
+
+        DeployTriggerResult result = await Trigger("s3cret", body: null);
+
+        Assert.Equal(HttpStatusCode.BadGateway, result.Status);
+        Assert.Contains("Deploy of Layfully/link-in-bio started.", result.Message, StringComparison.Ordinal);
+        Assert.Contains("Layfully/portfolio (403)", result.Message, StringComparison.Ordinal);
+        Assert.Equal(2, _github.Requests.Count);
+    }
+
+    private const string LinkInBioDispatch =
+        "https://api.github.com/repos/Layfully/link-in-bio/actions/workflows/azure-static-web-apps-gray-tree-0c2e88d03.yml/dispatches";
+
+    private const string PortfolioDispatch =
+        "https://api.github.com/repos/Layfully/portfolio/actions/workflows/azure-static-web-apps-purple-tree-0510d5403.yml/dispatches";
 
     [Fact]
     public async Task Another_story_with_a_wrong_secret_is_still_refused()
@@ -216,21 +250,36 @@ public sealed class DeployTriggerTests : IDisposable
         return directory?.FullName ?? throw new InvalidOperationException("The repository root wasn't found above the test output.");
     }
 
-    // Answers with the queued answers in turn (a status or an exception), then with success; keeps what was sent.
+    // Answers with the queued answers in turn (a status or an exception), then with success; refuses every request for
+    // the repository in Refused; keeps what was sent. The sites' requests can arrive at the same time.
     private sealed class FakeGitHub : HttpMessageHandler
     {
+        private readonly Lock _lock = new();
+
         public Queue<object> Answers { get; } = [];
+
+        public string? Refused { get; set; }
 
         public List<HttpRequestMessage> Requests { get; } = [];
 
         public List<string> Bodies { get; } = [];
 
+        public IEnumerable<string> Addresses => Requests.Select(request => request.RequestUri!.ToString());
+
         protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {
-            Requests.Add(request);
-            Bodies.Add(request.Content is null ? string.Empty : await request.Content.ReadAsStringAsync(cancellationToken));
+            string body = request.Content is null ? string.Empty : await request.Content.ReadAsStringAsync(cancellationToken);
+            object? answer;
+            lock (_lock)
+            {
+                Requests.Add(request);
+                Bodies.Add(body);
+                answer = Refused is not null && request.RequestUri!.AbsolutePath.Contains($"/{Refused}/", StringComparison.Ordinal)
+                    ? HttpStatusCode.Forbidden
+                    : Answers.TryDequeue(out object? queued) ? queued : HttpStatusCode.OK;
+            }
 
-            return (Answers.TryDequeue(out object? answer) ? answer : HttpStatusCode.OK) switch
+            return answer switch
             {
                 Exception exception => throw exception,
                 HttpStatusCode status => new HttpResponseMessage(status)
