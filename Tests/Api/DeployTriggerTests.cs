@@ -134,12 +134,62 @@ public sealed class DeployTriggerTests : IDisposable
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => Trigger("s3cret", cancellationToken: cancelled.Token));
     }
 
-    private Task<DeployTriggerResult> Trigger(string? secret, DeployTriggerOptions? settings = null, CancellationToken? cancellationToken = null)
+    [Theory]
+    [InlineData("""{"text":"The user published the Story Portfolio (portfolio)","action":"published","space_id":268473,"story_id":1,"full_slug":"portfolio"}""")]
+    [InlineData("""{"action":"published","full_slug":"certificates/aws"}""")]
+    [InlineData("""{"action":"published","full_slug":"pl/portfolio"}""")]
+    public async Task A_publish_of_a_story_the_deploy_doesnt_use_starts_nothing(string body)
+    {
+        DeployTriggerResult result = await Trigger("s3cret", body: body);
+
+        Assert.Equal(HttpStatusCode.OK, result.Status);
+        Assert.Empty(_github.Requests);
+    }
+
+    [Theory]
+    [InlineData("""{"action":"unpublished","full_slug":"home"}""")]
+    [InlineData("""{"action":"published","full_slug":"/home/"}""")]
+    public async Task A_change_to_the_home_story_starts_the_deploy(string body)
+    {
+        DeployTriggerResult result = await Trigger("s3cret", body: body);
+
+        Assert.Equal(HttpStatusCode.Accepted, result.Status);
+        Assert.Single(_github.Requests);
+    }
+
+    // Storyblok may change what it sends; missing a deploy is worse than an extra one.
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("not json")]
+    [InlineData("""{"action":"deleted","story_id":1}""")]
+    [InlineData("""{"action":"published","full_slug":42}""")]
+    [InlineData("""["home"]""")]
+    public async Task A_call_that_doesnt_name_a_story_starts_the_deploy(string? body)
+    {
+        DeployTriggerResult result = await Trigger("s3cret", body: body);
+
+        Assert.Equal(HttpStatusCode.Accepted, result.Status);
+        Assert.Single(_github.Requests);
+    }
+
+    [Fact]
+    public async Task Another_story_with_a_wrong_secret_is_still_refused()
+    {
+        DeployTriggerResult result = await Trigger("wrong", body: """{"action":"published","full_slug":"portfolio"}""");
+
+        Assert.Equal(HttpStatusCode.Unauthorized, result.Status);
+    }
+
+    private const string HomePublished = """{"action":"published","space_id":268473,"story_id":1,"full_slug":"home"}""";
+
+    private Task<DeployTriggerResult> Trigger(string? secret, DeployTriggerOptions? settings = null, CancellationToken? cancellationToken = null,
+        string? body = HomePublished)
     {
         HttpClient http = new(_github, disposeHandler: false);
         DeployTrigger trigger = new(http, Options.Create(settings ?? new DeployTriggerOptions { WebhookSecret = "s3cret", GitHubToken = "github-token" }),
             _time, NullLogger<DeployTrigger>.Instance);
-        return trigger.TriggerAsync(secret, cancellationToken ?? TestContext.Current.CancellationToken);
+        return trigger.TriggerAsync(secret, body, cancellationToken ?? TestContext.Current.CancellationToken);
     }
 
     // Moves the fake clock on until the trigger has answered, so the pauses between attempts take no real time.

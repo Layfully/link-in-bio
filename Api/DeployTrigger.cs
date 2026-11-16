@@ -28,7 +28,17 @@ public sealed class DeployTrigger(HttpClient http, IOptions<DeployTriggerOptions
     /// <summary>The pause before the second attempt; it doubles before each further one.</summary>
     private static readonly TimeSpan FirstDelay = TimeSpan.FromSeconds(1);
 
-    public async Task<DeployTriggerResult> TriggerAsync(string? secret, CancellationToken cancellationToken)
+    /// <summary>
+    /// The stories whose publish changes what the deploy builds: only the home story goes into the site at deploy time
+    /// (Prerender). The Storyblok space also holds the portfolio site's stories, and certificates load in the browser,
+    /// so publishing those needs no deploy here.
+    /// </summary>
+    public static readonly IReadOnlySet<string> DeployedStories = new HashSet<string>(StringComparer.Ordinal) { "home" };
+
+    /// <param name="secret">The secret from the webhook's address.</param>
+    /// <param name="body">What Storyblok sent: <c>{ "action": "published", "full_slug": "home", … }</c>.</param>
+    /// <param name="cancellationToken">Ends the call when the host shuts down.</param>
+    public async Task<DeployTriggerResult> TriggerAsync(string? secret, string? body, CancellationToken cancellationToken)
     {
         DeployTriggerOptions settings = options.Value;
 
@@ -52,8 +62,15 @@ public sealed class DeployTrigger(HttpClient http, IOptions<DeployTriggerOptions
             return new(HttpStatusCode.InternalServerError, "The webhook isn't set up.");
         }
 
+        // A call that doesn't say which story it is about deploys, so a change in what Storyblok sends can't stop deploys.
+        if (StorySlug(body) is { } slug && !DeployedStories.Contains(slug))
+        {
+            logger.LogInformation("Story {Slug} isn't part of the deploy; nothing started.", slug);
+            return new(HttpStatusCode.OK, $"Story {slug} isn't part of this site's deploy; nothing started.");
+        }
+
         string address = $"https://api.github.com/repos/{settings.Repository}/actions/workflows/{settings.Workflow}/dispatches";
-        string body = JsonSerializer.Serialize(new { @ref = settings.Ref });
+        string dispatch = JsonSerializer.Serialize(new { @ref = settings.Ref });
 
         for (int attempt = 1; ; attempt++)
         {
@@ -66,7 +83,7 @@ public sealed class DeployTrigger(HttpClient http, IOptions<DeployTriggerOptions
 
             try
             {
-                using HttpResponseMessage response = await http.SendAsync(Request(address, body, settings.GitHubToken), cancellationToken);
+                using HttpResponseMessage response = await http.SendAsync(Request(address, dispatch, settings.GitHubToken), cancellationToken);
                 if (response.IsSuccessStatusCode)
                 {
                     logger.LogInformation("Started the deploy of {Repository} ({Workflow} on {Ref}).", settings.Repository, settings.Workflow, settings.Ref);
@@ -110,6 +127,30 @@ public sealed class DeployTrigger(HttpClient http, IOptions<DeployTriggerOptions
         request.Headers.UserAgent.Add(new ProductInfoHeaderValue("link-in-bio-deploy-trigger", "1.0"));
         request.Headers.Add("X-GitHub-Api-Version", "2022-11-28");
         return request;
+    }
+
+    // The story's full slug from the webhook's body, without slashes around it; null when the body doesn't name one.
+    private static string? StorySlug(string? body)
+    {
+        if (string.IsNullOrWhiteSpace(body))
+        {
+            return null;
+        }
+
+        try
+        {
+            using JsonDocument document = JsonDocument.Parse(body);
+            return document.RootElement.ValueKind == JsonValueKind.Object
+                && document.RootElement.TryGetProperty("full_slug", out JsonElement slug)
+                && slug.ValueKind == JsonValueKind.String
+                && slug.GetString()?.Trim('/') is { Length: > 0 } name
+                    ? name
+                    : null;
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
     }
 
     private static bool IsTransient(HttpStatusCode status) =>
