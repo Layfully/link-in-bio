@@ -8,4 +8,7 @@ public static class Site
     /// the editor environment never compete with the real site in search results.
     /// </summary>
     public const string Url = "https://adriangaborek.dev";
+
+    /// <summary>The person the site is about, shown as the home page's heading.</summary>
+    public const string Name = "Adrian Gaborek";
 }

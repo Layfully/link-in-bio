@@ -1,3 +1,5 @@
 # Every page may be crawled. The editor environment (the Storyblok preview) sends X-Robots-Tag: noindex instead.
 User-agent: *
 Allow: /
+
+Sitemap: https://adriangaborek.dev/sitemap.xml

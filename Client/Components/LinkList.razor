@@ -1,5 +1,8 @@
-@* A navigation landmark, so screen-reader users can jump straight to the profile links. *@
-<nav aria-label="Profiles" class="mt-2 flex w-full justify-center z-20 @(Reveal ? "reveal" : null)">
+@* A navigation landmark, so screen-reader users can jump straight to the profile links. Its heading names the landmark
+   and gives the page a heading below the name, which screen readers list and search engines read as the page's outline;
+   the cards say what they are, so it isn't shown. *@
+<nav aria-labelledby="profiles-heading" class="mt-2 flex w-full justify-center z-20 @(Reveal ? "reveal" : null)">
+    <h2 id="profiles-heading" class="sr-only">Profiles</h2>
     @* role="list": Safari stops announcing a list as a list once CSS removes its bullets, as Tailwind does.
        One width for every card, with a margin on narrow screens. *@
     <ul role="list" class="flex w-full max-w-md flex-col gap-y-3.5 px-6">
