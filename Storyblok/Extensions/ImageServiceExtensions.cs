@@ -9,7 +9,7 @@ public interface IImageService
 
 public static class ImageServiceExtensions
 {
-    // please note that SVG is not supported in ImageService
+    // The formats Storyblok's image service can resize. It can't resize SVG, so those addresses stay as they are.
     private static readonly string[] ImageExtensions = [".jpg", ".jpeg", ".png", ".webp", ".gif", ".bmp"];
 
     public static string? ResizeByWidth(this IImageService image, int newWidth)

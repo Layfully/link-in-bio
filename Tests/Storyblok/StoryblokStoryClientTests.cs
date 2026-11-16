@@ -221,6 +221,27 @@ public sealed class StoryblokStoryClientTests : IDisposable
         Assert.Contains("cv=1700000500", _storyblok.Requests[2].Query);
     }
 
+    // The CDN answers a request that sends a cache version with that same version. Its time must still count from when it
+    // was first seen, or loading another story now and then would keep it in use forever.
+    [Fact]
+    public async Task The_cache_version_expires_even_while_other_stories_are_loaded_with_it()
+    {
+        _storyblok.Answer(HttpStatusCode.OK, Story("A", Page(), cacheVersion: 1700000000));
+        _storyblok.Answer(HttpStatusCode.OK, Story("B", Page(), cacheVersion: 1700000000));
+        _storyblok.Answer(HttpStatusCode.OK, Story("A again", Page(), cacheVersion: 1700000500));
+        StoryblokStoryClient client = CreateClient(new StoryblokOptions { ApiKeyPublic = "public-token", CacheDurationSeconds = 60 });
+
+        await Load<TestPage>(client, "/a", TestContext.Current.CancellationToken);
+        _time.Advance(TimeSpan.FromSeconds(50));
+        await Load<TestPage>(client, "/b", TestContext.Current.CancellationToken);
+        _time.Advance(TimeSpan.FromSeconds(20));
+        StoryLoadResult<TestPage> again = await Load<TestPage>(client, "/a", TestContext.Current.CancellationToken);
+
+        Assert.Contains("cv=1700000000", _storyblok.Requests[1].Query);
+        Assert.DoesNotContain("cv=", _storyblok.Requests[2].Query);
+        Assert.Equal("A again", Assert.IsType<StoryblokStory<TestPage>>(again.Value).Name);
+    }
+
     [Fact]
     public async Task The_editor_loads_drafts_with_the_preview_token_and_never_caches_them()
     {

@@ -68,6 +68,22 @@ public sealed class PublishedSiteTests : IDisposable
     }
 
     [Fact]
+    public void Only_the_shell_connects_to_the_api_at_load()
+    {
+        const string Deferred = """<link rel="preconnect" href="https://api.storyblok.com" crossorigin data-preconnect-on-start />""";
+        const string Other = """<link rel="preconnect" href="https://a.storyblok.com" />""";
+        string page = Index.Replace("</head>", $"{Deferred}\n{Other}\n</head>", StringComparison.Ordinal);
+        File.WriteAllText(Path.Combine(_wwwroot, "index.html"), page);
+
+        new PublishedSite(_wwwroot).WriteHome("<main>Links</main>", "{}", SiteProfile.None);
+
+        string home = File.ReadAllText(Path.Combine(_wwwroot, "index.html"));
+        Assert.Contains("""<link href="https://api.storyblok.com" crossorigin data-preconnect-on-start />""", home, StringComparison.Ordinal);
+        Assert.Contains(Other, home, StringComparison.Ordinal);
+        Assert.Contains(Deferred, File.ReadAllText(Path.Combine(_wwwroot, "app-shell.html")), StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void A_page_without_a_head_is_left_alone()
     {
         File.WriteAllText(Path.Combine(_wwwroot, "index.html"), "<body><!--prerender--><!--/prerender--></body>");
