@@ -278,10 +278,13 @@ look, and after page-speed tests have finished measuring. Nothing visible waits 
 - The typed line shows its first tagline from the start (`data-first`, through CSS). When the typing starts, that
   tagline becomes the element's text, and typed.js carries on from it: it deletes it after the usual pause and types
   the next one, so nothing jumps.
-
 - Blazor's first render replaces the prerendered content with its own copy. A link that has keyboard focus at that
   moment keeps it (`blazor-start.js` moves focus to the same link in the copy), and the app moves focus to a page's
   heading only after navigating inside the app, never on its first render (`Client/App.razor`).
+- The connection to `api.storyblok.com`, which only .NET uses, opens when .NET starts, not at load. A preconnect at
+  load would close unused before then, and Chrome warns about it in the console. The prerender step takes the `rel`
+  off the link marked `data-preconnect-on-start`, and `blazor-start.js` makes it a preconnect again when it starts
+  .NET.
 
 Every other page, and every build without prerendering, starts Blazor at once.
 

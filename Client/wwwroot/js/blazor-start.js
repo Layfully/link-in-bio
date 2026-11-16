@@ -21,8 +21,20 @@
         setTimeout(() => whenIdle(() => {
             const app = document.getElementById('app');
             if (app) keepFocusAcrossFirstRender(app);
+            preconnectNow();
             Blazor.start();
         }), START_DELAY_MS);
+    }
+
+    // The deploy takes the rel off the preconnects .NET needs (data-preconnect-on-start), because one opened at load would
+    // close unused before .NET starts. They open now instead, while .NET downloads, in time for its first request. A
+    // fresh element rather than a changed rel, which browsers act on less reliably.
+    function preconnectNow() {
+        for (const link of document.querySelectorAll('link[data-preconnect-on-start]:not([rel])')) {
+            const preconnect = link.cloneNode();
+            preconnect.rel = 'preconnect';
+            link.replaceWith(preconnect);
+        }
     }
 
     // Blazor's first render replaces the prerendered content with its own, identical copy. A visitor who has tabbed to

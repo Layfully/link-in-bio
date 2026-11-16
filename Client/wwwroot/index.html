@@ -44,7 +44,9 @@
         </script>
 
         <base href="/" />
-        <link rel="preconnect" href="https://api.storyblok.com" crossorigin />
+        <!-- Only .NET talks to the API. On the prerendered home page it starts seconds after load, so the deploy takes this
+             link's rel away there and js/blazor-start.js opens the connection when .NET starts (data-preconnect-on-start). -->
+        <link rel="preconnect" href="https://api.storyblok.com" crossorigin data-preconnect-on-start />
         <link rel="preconnect" href="https://a.storyblok.com" />
         <link rel="preload" id="webassembly" />
         <link rel="stylesheet" href="css/app.css" />

@@ -63,6 +63,10 @@ public sealed partial class PublishedSite(string wwwroot)
         string canonical = $"""    <link rel="canonical" href="{Site.Url}/" />""" + newline + (string.IsNullOrWhiteSpace(headIndent) ? headIndent : string.Empty);
 
         string home = page[..headEnd] + canonical + page[headEnd..start] + html + page[(end + EndMarker.Length)..bodyEnd] + data + "\n" + page[bodyEnd..];
+        // .NET starts seconds after the home page has loaded (js/blazor-start.js), so a connection opened for it at once
+        // would close unused first, and Chrome warns about it. Without rel the link does nothing; blazor-start.js makes it
+        // a preconnect again when .NET starts. The shell starts .NET at once and keeps it.
+        home = PreconnectOnStart().Replace(home, "<link");
 
         File.WriteAllText(Path.Combine(wwwroot, ShellFile), page);
         File.WriteAllText(indexPath, home);
@@ -113,6 +117,9 @@ public sealed partial class PublishedSite(string wwwroot)
     }
 
     private static readonly JsonSerializerOptions IndentedJson = new() { WriteIndented = true, IndentSize = 4, NewLine = "\n" };
+
+    [GeneratedRegex(@"<link\s+rel=""preconnect""(?=[^>]*\sdata-preconnect-on-start[\s/>=])")]
+    private static partial Regex PreconnectOnStart();
 
     [GeneratedRegex(@"(?<start><meta property=""og:image"" content="")[^""]*""")]
     private static partial Regex PreviewImage();

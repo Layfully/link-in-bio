@@ -261,9 +261,11 @@ public sealed class StoryblokStoryClient : IDisposable
 
         // Drafts must always be fresh. Published content comes from the CDN for the cache version last seen, while that
         // is recent; after that, a request without one gets the latest.
+        bool sentCacheVersion = false;
         if (!LoadDrafts && _cacheVersion is { } cacheVersion && _time.GetUtcNow() < _cacheVersionExpires)
         {
             query.Add($"cv={cacheVersion}");
+            sentCacheVersion = true;
         }
 
         string request = $"stories/{path}?{string.Join('&', query)}";
@@ -289,7 +291,10 @@ public sealed class StoryblokStoryClient : IDisposable
             throw new JsonException($"Storyblok's response for {request} contains no story.");
         }
 
-        if (container.CacheVersion > 0)
+        // Only a cache version that is new to the client starts its time. An answer to a request that sent one carries the
+        // same one back; counting from that answer would keep an old version alive as long as the visitor keeps loading
+        // stories, and a story whose cache entry ran out would then come back unchanged.
+        if (container.CacheVersion > 0 && (!sentCacheVersion || container.CacheVersion != _cacheVersion))
         {
             _cacheVersion = container.CacheVersion;
             _cacheVersionExpires = _time.GetUtcNow() + TimeSpan.FromSeconds(Math.Max(_settings.CacheDurationSeconds, 0));

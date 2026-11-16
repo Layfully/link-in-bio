@@ -7,7 +7,7 @@ import vm from 'node:vm';
 const script = readFileSync(new URL('../../Client/wwwroot/js/blazor-start.js', import.meta.url), 'utf8');
 
 // Runs the script on a fake page and returns what it did: how often Blazor started, plus ways to move the page along.
-function load({ prerendered, parsed = true, loaded = false, idleCallbacks = true, app = null }) {
+function load({ prerendered, parsed = true, loaded = false, idleCallbacks = true, app = null, preconnects = [] }) {
     const listeners = new Map();
     const idle = [];
     const timers = [];
@@ -28,6 +28,8 @@ function load({ prerendered, parsed = true, loaded = false, idleCallbacks = true
         body: { tagName: 'BODY' },
         activeElement: null,
         get readyState() { return !parsed ? 'loading' : loaded ? 'complete' : 'interactive'; },
+        // Only the links the deploy left without rel, as the script's selector asks for.
+        querySelectorAll: () => preconnects.filter(link => link.rel === undefined && link.isConnected),
         getElementById: id => {
             if (!parsed) return null;
             if (id === 'storyblok-prerendered') return prerendered ? {} : null;
@@ -219,4 +221,29 @@ test('a data block further down the page than the script still counts', () => {
     page.runTimers();
     page.runIdle();
     assert.equal(page.starts, 1);
+});
+
+// A link as the deploy leaves it on the prerendered home page: data-preconnect-on-start, no rel.
+function deferredPreconnect(href) {
+    const link = {
+        href,
+        isConnected: true,
+        replacedWith: null,
+        cloneNode: () => ({ href }),
+        replaceWith(element) { link.isConnected = false; link.replacedWith = element; }
+    };
+    return link;
+}
+
+test('on the prerendered home page the connection to the API opens when Blazor starts, not at load', () => {
+    const link = deferredPreconnect('https://api.storyblok.com/');
+    const page = load({ prerendered: true, loaded: true, preconnects: [link] });
+
+    assert.equal(link.replacedWith, null);
+
+    page.runTimers();
+    page.runIdle();
+
+    assert.equal(page.starts, 1);
+    assert.deepEqual(link.replacedWith, { href: 'https://api.storyblok.com/', rel: 'preconnect' });
 });
