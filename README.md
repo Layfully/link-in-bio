@@ -185,16 +185,24 @@ The prerendered page, the cut-down Font Awesome and the page's metadata are made
 [Prerendering](#prerendering)), so a publish in Storyblok should start a deploy. Storyblok's webhooks can't send the
 `Authorization` header GitHub's API needs, so the site's own API passes them on: `Api` is an Azure Function that the
 Static Web App runs next to the site (managed functions, deployed with production only). At
-`POST /api/storyblok-webhook?secret=<secret>` it checks the secret and starts this workflow on `main`
+`POST /api/storyblok-webhook?secret=<secret>` it checks the secret and starts the deploy workflow on `main`
 (`workflow_dispatch`, the same as "Run workflow" in the Actions tab). Storyblok never repeats a webhook call that failed,
 so the API tries GitHub up to three times when it answers with a 5xx, 408 or 429, or can't be reached.
 
+The Storyblok space also holds the stories of the portfolio site
+([Layfully/portfolio](https://github.com/Layfully/portfolio)), and the free plan allows only two webhooks, so this one
+webhook starts the deploys of both sites. Storyblok's call names the story (`full_slug`), and `Api/DeploySite.cs` says
+which stories each site builds from: `home` for this one (certificates load in the browser and need no deploy), the
+stories starting with `portfolio` for the portfolio, whose workflow allows `workflow_dispatch` for that. A publish of any
+other story starts nothing; a call that names no story starts both, so a change in what Storyblok sends can't quietly
+stop deploys.
+
 Set it up once:
 
-1. Create a fine-grained GitHub token (Settings → Developer settings → Fine-grained tokens) for this repository only,
-   with **Actions: read and write** and nothing else. That lets it start workflow runs, but not push to the repository,
-   so a token that leaks can't change the site. Give it an expiry you'll remember: a token that has expired makes the
-   webhook answer 502, and publishes stop starting deploys.
+1. Create a fine-grained GitHub token (Settings → Developer settings → Fine-grained tokens) for this repository and
+   `Layfully/portfolio` only, with **Actions: read and write** and nothing else. That lets it start workflow runs, but
+   not push to the repositories, so a token that leaks can't change the sites. Give it an expiry you'll remember: a
+   token that has expired makes the webhook answer 502, and publishes stop starting deploys.
 2. Make up a long random secret, for example with `openssl rand -hex 32`. It goes in the webhook's address because
    Storyblok's own webhook secrets, which sign each call in a `webhook-signature` header and would keep the secret out
    of the address, come only with its paid plans, and this space is on the free one. An address can end up in logs
@@ -205,14 +213,9 @@ Set it up once:
    between deploys; the build never sees them.
 4. In Storyblok, open the space's **Settings → Webhooks** and add one on story **published**, **unpublished**,
    **deleted** and **moved**, with the address `https://adriangaborek.dev/api/storyblok-webhook?secret=<secret>`.
-   Storyblok's log shows each call's answer: 202 started a deploy, 200 means the story isn't part of the deploy, 401
-   is a wrong secret, 500 means a setting is missing, 502 means GitHub refused (expired token, missing permission) or
-   couldn't be reached.
-
-The space also holds the portfolio site's stories, which has a webhook of its own, so every publish calls both. Only the
-home story is built into this site at deploy time (certificates load in the browser), so the API starts a deploy only
-when the call's `full_slug` is `home` (`DeployTrigger.DeployedStories`). A call that names no story starts one anyway,
-so a change in what Storyblok sends can't quietly stop deploys.
+   Storyblok's log shows each call's answer and its text names the sites: 202 started their deploys, 200 means no
+   site builds from the story, 401 is a wrong secret, 500 means a setting is missing, 502 means GitHub refused a
+   deploy (expired token, missing permission) or couldn't be reached.
 
 Several publishes in a row end in one deploy: a newer run on `main` replaces one still in progress. Pull request
 environments don't get the API: Static Web Apps copies production's settings to them, and a branch's unreviewed code
