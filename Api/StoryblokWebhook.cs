@@ -15,7 +15,7 @@ public sealed class StoryblokWebhook(DeployTrigger trigger)
         [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "storyblok-webhook")] HttpRequestData request,
         CancellationToken cancellationToken)
     {
-        DeployTriggerResult result = await trigger.TriggerAsync(request.Query["secret"], cancellationToken);
+        DeployTriggerResult result = await trigger.TriggerAsync(request.Query["secret"], await request.ReadAsStringAsync(), cancellationToken);
 
         HttpResponseData response = request.CreateResponse(result.Status);
         await response.WriteStringAsync(result.Message, cancellationToken);

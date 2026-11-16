@@ -205,8 +205,14 @@ Set it up once:
    between deploys; the build never sees them.
 4. In Storyblok, open the space's **Settings → Webhooks** and add one on story **published**, **unpublished**,
    **deleted** and **moved**, with the address `https://adriangaborek.dev/api/storyblok-webhook?secret=<secret>`.
-   Storyblok's log shows each call's answer: 202 started a deploy, 401 is a wrong secret, 500 means a setting is
-   missing, 502 means GitHub refused (expired token, missing permission) or couldn't be reached.
+   Storyblok's log shows each call's answer: 202 started a deploy, 200 means the story isn't part of the deploy, 401
+   is a wrong secret, 500 means a setting is missing, 502 means GitHub refused (expired token, missing permission) or
+   couldn't be reached.
+
+The space also holds the portfolio site's stories, which has a webhook of its own, so every publish calls both. Only the
+home story is built into this site at deploy time (certificates load in the browser), so the API starts a deploy only
+when the call's `full_slug` is `home` (`DeployTrigger.DeployedStories`). A call that names no story starts one anyway,
+so a change in what Storyblok sends can't quietly stop deploys.
 
 Several publishes in a row end in one deploy: a newer run on `main` replaces one still in progress. Pull request
 environments don't get the API: Static Web Apps copies production's settings to them, and a branch's unreviewed code
