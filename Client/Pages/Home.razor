@@ -1,3 +1,4 @@
+@using Storyblok.Extensions
 @implements IAsyncDisposable
 @inject StoryblokStoryClient StoryblokClient
 @inject PrerenderedStories Prerendered
@@ -23,7 +24,7 @@
         }
         if (loaded.Links is { Count: > 0 })
         {
-            <LinkList Model="@loaded.Links" Reveal="@loaded.Reveal" />
+            <LinkList Model="@loaded.Links" EditorAttributes="@loaded.ListAttributes" Reveal="@loaded.Reveal" />
         }
         break;
 
@@ -41,12 +42,16 @@
     // The page is in exactly one of these states; each state carries only the data it needs.
     private union PageState(Loading, Loaded, Unavailable, Unreadable, NothingPublished);
     private sealed record Loading;
-    private sealed record Loaded(StoryblokHeader? Header, IReadOnlyList<StoryblokLink>? Links, bool Reveal);
+    private sealed record Loaded(StoryblokHeader? Header, IReadOnlyList<StoryblokLink>? Links, IReadOnlyDictionary<string, object>? ListAttributes, bool Reveal);
     private sealed record Unavailable;
     private sealed record Unreadable;
     private sealed record NothingPublished;
 
     private readonly CancellationTokenSource _cts = new();
+
+    // Set by the first edit in the Visual Editor. From then on the editor's story is the newest, so a load still in
+    // flight (the saved draft, or an error) no longer replaces what the page shows.
+    private bool _edited;
     private PageState _state = new Loading();
 
     private ContentStatus ContentStatus => _state switch
@@ -61,6 +66,9 @@
 
     protected override async Task OnInitializedAsync()
     {
+        // In the Visual Editor, every edit re-renders the page as it is typed.
+        StoryblokClient.StoryEdited += OnStoryEdited;
+
         // The deployed page arrives with its content already in the HTML (see the Prerender project). Its story then
         // loads without a request, so this first render shows the same content, and without fading it in a second time.
         bool prerendered = Prerendered.Contains(Slug);
@@ -75,6 +83,11 @@
             .WithSlug(Slug)
             .TryLoad<StoryblokPage>(_cts.Token);
 
+        if (_edited)
+        {
+            return;
+        }
+
         _state = result switch
         {
             StoryblokStory<StoryblokPage> story => FromBlocks(story.Content.Body, reveal),
@@ -84,7 +97,7 @@
             null => new Unavailable(),
         };
 
-        if (!prerendered)
+        if (!prerendered || _edited)
         {
             return;
         }
@@ -95,7 +108,7 @@
             .WithSlug(Slug)
             .TryRefresh<StoryblokPage>(_cts.Token);
 
-        if (refreshed?.Value is StoryblokStory<StoryblokPage> newer)
+        if (refreshed?.Value is StoryblokStory<StoryblokPage> newer && !_edited)
         {
             _state = FromBlocks(newer.Content.Body, reveal: false);
         }
@@ -104,7 +117,7 @@
     // Blocks are picked by type, so reordering or adding blocks in Storyblok can't break the page.
     // A story with neither block counts as nothing published, instead of rendering an empty header.
     private static PageState FromBlocks(StoryblokComponent[]? body, bool reveal) =>
-        HasContent(body) ? new Loaded(Header(body), Links(body), reveal) : new NothingPublished();
+        HasContent(body) ? new Loaded(Header(body), Links(body), List(body).EditorAttributes(), reveal) : new NothingPublished();
 
     /// <summary>True when the story has a header or at least one link; otherwise the page says nothing is published yet.</summary>
     public static bool HasContent(StoryblokComponent[]? body) => Header(body) is not null || Links(body) is { Count: > 0 };
@@ -112,13 +125,29 @@
     /// <summary>The header the page shows: the story's first header block.</summary>
     public static StoryblokHeader? Header(StoryblokComponent[]? body) => body?.OfType<StoryblokHeader>().FirstOrDefault();
 
+    // The story's first list block: the page shows its links, and in the Visual Editor its marker.
+    private static StoryblokList? List(StoryblokComponent[]? body) => body?.OfType<StoryblokList>().FirstOrDefault();
+
     /// <summary>The links the page lists: those of the story's first list block.</summary>
     public static IReadOnlyList<StoryblokLink>? Links(StoryblokComponent[]? body) =>
-        body?.OfType<StoryblokList>().FirstOrDefault()?.EntriesOf<StoryblokLink>();
+        List(body)?.EntriesOf<StoryblokLink>();
 
     public async ValueTask DisposeAsync()
     {
+        StoryblokClient.StoryEdited -= OnStoryEdited;
         await _cts.CancelAsync();
         _cts.Dispose();
+    }
+
+    // An edit replaces whatever the page shows, and a load still in flight then leaves it alone (_edited).
+    // It doesn't fade in: the content is already on screen and only changes.
+    private void OnStoryEdited(StoryblokEdit edit)
+    {
+        if (edit.TryGet(Slug, out StoryblokStory<StoryblokPage>? story))
+        {
+            _edited = true;
+            _state = FromBlocks(story.Content.Body, reveal: false);
+            _ = InvokeAsync(StateHasChanged);
+        }
     }
 }

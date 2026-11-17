@@ -73,6 +73,41 @@ public sealed class StoryblokStoryClient : IDisposable
 
     public void Dispose() => _client.Dispose();
 
+    /// <summary>A story as it is being edited in the Visual Editor, unsaved; pages showing it re-render from it.</summary>
+    public event Action<StoryblokEdit>? StoryEdited;
+
+    /// <summary>
+    /// Reads a story the Visual Editor's bridge sent while it is edited and raises <see cref="StoryEdited"/> with it.
+    /// Ignored outside the editor. Not cached: drafts never are, and the next save reloads the page anyway. A story that
+    /// can't be read is only logged, so a page keeps what it shows rather than turning into an error mid-edit.
+    /// </summary>
+    public void ReadEditedStory(string storyJson)
+    {
+        if (!LoadDrafts)
+        {
+            return;
+        }
+
+        StoryblokStory? story;
+        try
+        {
+            story = JsonSerializer.Deserialize<StoryblokStory>(storyJson, _jsonOptions);
+        }
+        catch (JsonException exception)
+        {
+            _logger.LogWarning(exception, "A story edited in the Visual Editor can't be read; the preview keeps what it shows.");
+            return;
+        }
+
+        if (story is null)
+        {
+            _logger.LogWarning("The Visual Editor sent no story; the preview keeps what it shows.");
+            return;
+        }
+
+        StoryEdited?.Invoke(new StoryblokEdit(story));
+    }
+
     internal Task<StoryLoadResult<T>> TryLoadStory<T>(string slug, CancellationToken cancellationToken) where T : StoryblokComponent
     {
         if (ToStoryPath(slug) is not { } path)

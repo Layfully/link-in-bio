@@ -41,11 +41,11 @@ the .NET runtime into a smaller file. A local publish works without them, only w
 ## Tests
 
 `Tests` holds the unit tests (xunit v3): the Storyblok client against a fake Storyblok (how each answer becomes a result,
-how Storyblok's values are read, how slugs are escaped, what is cached), the retries and timeouts of its requests, the
-component registry, the image addresses, the link converter's safety rules, the Visual Editor check, the JavaScript
-interop (a typing animation that finishes starting too late is stopped), and with
-[bUnit](https://bunit.dev) the pages (what each answer from Storyblok shows), the loading hints and the layout's error
-message, and the prerendering (the rendered page, the profile it takes from Storyblok, how it is written into the
+how Storyblok's values are read, how slugs are escaped, what is cached, how a story edited in the Visual Editor is read),
+the retries and timeouts of its requests, the component registry, the image addresses, the link converter's safety
+rules, the Visual Editor check and its click-to-edit markers, the JavaScript interop (a typing animation that finishes
+starting too late is stopped), and with [bUnit](https://bunit.dev) the pages (what each answer from Storyblok shows,
+and each edit in the Visual Editor), the loading hints and the layout's error message, and the prerendering (the rendered page, the profile it takes from Storyblok, how it is written into the
 published site, which Font Awesome icons stay, what a failure says), and the webhook that starts a deploy (which calls
 it refuses, what it sends GitHub, which failures it tries again). Run them with:
 
@@ -149,7 +149,9 @@ deploys to Azure Static Web Apps:
 - **The `editor` environment** (`main`) is built with the preview token as well. It's the address Storyblok's
   Visual Editor previews, `https://<app>-editor.<region>.azurestaticapps.net`, so drafts appear there and nowhere else.
   Set it as the preview URL in Storyblok's space settings. Its responses carry `X-Robots-Tag: noindex, nofollow`
-  (added by `Client/Csp.targets`), so search engines leave it out.
+  (added by `Client/Csp.targets`), so search engines leave it out. In the editor the preview follows each edit as it is
+  typed, and clicking a block opens its fields. Storyblok adds a story's slug to the preview URL, so the home story
+  needs `/` as its real path (its Config tab): the app shows it at `/`, not `/home`.
 
 Everything in a WebAssembly app's `appsettings.json` can be downloaded by any visitor, which is why the preview token,
 which reads drafts, is never part of the production build.
@@ -316,7 +318,9 @@ checked. The dev server keeps the `<link>`: the policy applies only on Azure.
 
 The same step removes `https://app.storyblok.com` from the policy unless the build has the preview token. Only the editor
 build runs inside the Visual Editor, which frames the page and loads its bridge script from that origin; the app starts
-the bridge only there (`Client/Components/StoryblokBridge.razor`).
+the bridge only there (`Client/Components/StoryblokBridge.razor`). The bridge styles its outlines and overlays with a
+`<style>` element, which the policy blocks; the bridge module applies the same text as a stylesheet made from script,
+which the policy doesn't govern, so the editor build needs no `'unsafe-inline'`.
 
 A hash that doesn't match shows only in a visitor's browser, as a page that stays blank or unstyled, so CI checks the
 published pages against the filled-in policy before every deploy (see [Deployment](#deployment)). To check a local

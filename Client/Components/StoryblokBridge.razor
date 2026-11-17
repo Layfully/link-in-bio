@@ -1,13 +1,18 @@
 @using Microsoft.Extensions.Options
+@implements IDisposable
 @inject IOptions<StoryblokOptions> StoryblokOptions
+@inject StoryblokStoryClient StoryblokClient
 @inject IJSRuntime Js
 @inject ILogger<StoryblokBridge> Logger
 
-@* Renders nothing. Inside the Visual Editor it loads Storyblok's bridge, which reloads the preview whenever the editor
-   saves or publishes. Only the editor build can be in the editor (it alone has the preview token), so production never
-   loads the bridge, and its Content Security Policy doesn't allow it either (see Csp.targets). *@
+@* Renders nothing. Inside the Visual Editor it loads Storyblok's bridge, which hands every edit to the pages as it is
+   typed (live preview) and reloads the preview whenever the editor saves or publishes. Only the editor build can be in
+   the editor (it alone has the preview token), so production never loads the bridge, and its Content Security Policy
+   doesn't allow it either (see Csp.targets). *@
 
 @code {
+    private DotNetObjectReference<StoryblokBridge>? _self;
+
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
         if (!firstRender || !StoryblokOptions.Value.IsInEditor)
@@ -17,12 +22,19 @@
 
         try
         {
+            _self = DotNetObjectReference.Create(this);
             await using IJSObjectReference module = await Js.InvokeAsync<IJSObjectReference>("import", "./Components/StoryblokBridge.razor.js");
-            await module.InvokeVoidAsync("start");
+            await module.InvokeVoidAsync("start", _self);
         }
         catch (JSException exception)
         {
-            Logger.LogWarning(exception, "The Storyblok bridge could not start, so the preview won't refresh when the editor saves.");
+            Logger.LogWarning(exception, "The Storyblok bridge could not start, so the preview won't follow edits.");
         }
     }
+
+    /// <summary>Called by the bridge with the story as it is being edited, unsaved; the pages showing it re-render.</summary>
+    [JSInvokable]
+    public void ReadEditedStory(string storyJson) => StoryblokClient.ReadEditedStory(storyJson);
+
+    public void Dispose() => _self?.Dispose();
 }

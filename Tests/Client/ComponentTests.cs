@@ -4,9 +4,11 @@ using Client.Data.Components;
 using Client.Layout;
 using Microsoft.AspNetCore.Components;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Microsoft.Extensions.Time.Testing;
 using Storyblok;
+using Storyblok.Client;
 
 namespace LinkInBio.Tests.Client;
 
@@ -15,15 +17,28 @@ public sealed class ComponentTests : IDisposable
 {
     private readonly BunitContext _context = new();
     private readonly FakeTimeProvider _time = new();
+    private readonly FakeStoryblok _storyblok = new();
 
     public ComponentTests()
     {
         _context.JSInterop.Mode = JSRuntimeMode.Loose;
         _context.Services.AddSingleton<TimeProvider>(_time);
         _context.Services.AddSingleton(Options.Create(new StoryblokOptions { ApiKeyPublic = "public-token" }));
+        // The layout renders the Visual Editor bridge, which needs the client; nothing here loads a story.
+        _context.Services.AddSingleton(new StoryblokStoryClient(
+            Options.Create(new StoryblokOptions { ApiKeyPublic = "public-token" }),
+            new StoryblokComponentTypes(Array.Empty<System.Reflection.Assembly>()),
+            _storyblok,
+            new PrerenderedStories(),
+            _time,
+            NullLogger<StoryblokStoryClient>.Instance));
     }
 
-    public void Dispose() => _context.Dispose();
+    public void Dispose()
+    {
+        _context.Dispose();
+        _storyblok.Dispose();
+    }
 
     [Fact]
     public void The_photo_is_downloaded_at_the_size_it_is_shown()
@@ -37,6 +52,27 @@ public sealed class ComponentTests : IDisposable
         AngleSharp.Dom.IElement image = header.Find("img");
         Assert.Equal($"{photo}/m/0x304:608x912/128x128", image.GetAttribute("src"));
         Assert.Equal($"{photo}/m/0x304:608x912/128x128 1x, {photo}/m/0x304:608x912/256x256 2x", image.GetAttribute("srcset"));
+    }
+
+    [Fact]
+    public void A_header_from_the_editor_carries_its_marker()
+    {
+        IRenderedComponent<Header> header = _context.Render<Header>(parameters => parameters.Add(component => component.Model,
+            new StoryblokHeader { Editable = """<!--#storyblok#{"uid":"abc","id":"42"}-->""" }));
+
+        Assert.Equal("42-abc", header.Find("header").GetAttribute("data-blok-uid"));
+    }
+
+    [Fact]
+    public void Published_blocks_carry_no_editor_markers()
+    {
+        IRenderedComponent<Header> header = _context.Render<Header>(parameters => parameters.Add(component => component.Model,
+            new StoryblokHeader()));
+        IRenderedComponent<LinkList> list = _context.Render<LinkList>(parameters => parameters.Add(component => component.Model,
+            [new StoryblokLink { Label = "GitHub" }]));
+
+        Assert.DoesNotContain("data-blok", header.Markup);
+        Assert.DoesNotContain("data-blok", list.Markup);
     }
 
     [Fact]

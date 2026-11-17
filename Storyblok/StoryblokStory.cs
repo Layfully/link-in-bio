@@ -8,6 +8,10 @@ public class StoryblokStory
     [JsonPropertyName("name")]
     public string? Name { get; set; }
 
+    /// <summary>The story's slug with its folders, such as <c>certificates/az-204</c>; tells which page an edit belongs to.</summary>
+    [JsonPropertyName("full_slug")]
+    public string? FullSlug { get; set; }
+
     /// <summary>The story's content block. Null when Storyblok sends <c>"content": null</c>, which System.Text.Json sets without asking a converter.</summary>
     [JsonPropertyName("content")]
     public StoryblokComponent? Content { get; set; } = new();

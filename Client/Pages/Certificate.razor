@@ -14,7 +14,7 @@
     </HeadContent>
     @* Same card as CertificateSkeleton (width and padding on the outermost element), so nothing moves when the
        certificate replaces the placeholder. width/height let the browser reserve the image's space before it arrives. *@
-    <figure class="card z-20 relative w-10/12 sm:w-9/12 xl:w-1/2 p-2 sm:p-3 reveal">
+    <figure class="card z-20 relative w-10/12 sm:w-9/12 xl:w-1/2 p-2 sm:p-3 reveal" @attributes="@loaded.EditorAttributes">
         <img class="block w-full h-auto rounded-xl" src="@loaded.ImageUrl" width="@loaded.Width" height="@loaded.Height"
              alt="@(string.IsNullOrWhiteSpace(loaded.Alt) ? $"Certificate: {loaded.Title}" : loaded.Alt)" fetchpriority="high">
     </figure>
@@ -33,7 +33,7 @@
     // The page is in exactly one of these states. Missing hands over to the app's not-found page.
     private union PageState(Loading, Loaded, Unavailable, Unreadable, Missing);
     private sealed record Loading;
-    private sealed record Loaded(string Title, string ImageUrl, string? Alt, int? Width, int? Height);
+    private sealed record Loaded(string Title, string ImageUrl, string? Alt, int? Width, int? Height, IReadOnlyDictionary<string, object>? EditorAttributes);
     private sealed record Unavailable;
     private sealed record Unreadable;
     private sealed record Missing;
@@ -41,6 +41,10 @@
     private PageState _state = new Loading();
     private CancellationTokenSource? _cts;
     private string? _loadedName;
+
+    // Set by the first edit in the Visual Editor to this certificate. From then on the editor's story is the newest, so
+    // a load still in flight no longer replaces it, nor ends the preview with the not-found page.
+    private bool _edited;
 
     private ContentStatus ContentStatus => _state switch
     {
@@ -52,6 +56,9 @@
 
     private string Title => _state is Loaded loaded ? loaded.Title : "Certificate";
 
+    // In the Visual Editor, every edit re-renders the certificate as it is typed.
+    protected override void OnInitialized() => StoryblokClient.StoryEdited += OnStoryEdited;
+
     // Runs again when the address switches to another certificate without recreating the page.
     protected override async Task OnParametersSetAsync()
     {
@@ -61,6 +68,7 @@
         }
 
         _loadedName = Name;
+        _edited = false;
 
         // A previous load still in flight belongs to the old certificate.
         if (_cts is not null)
@@ -78,14 +86,14 @@
             .WithSlug($"/certificates/{Name}")
             .TryLoad<StoryblokCertificate>(cancellationToken);
 
-        if (cancellationToken.IsCancellationRequested)
+        if (cancellationToken.IsCancellationRequested || _edited)
         {
             return;
         }
 
         _state = result switch
         {
-            StoryblokStory<StoryblokCertificate> story when story.Content.Image is { Url.Length: > 0 } image => FromImage(story.Name, image),
+            StoryblokStory<StoryblokCertificate> story when story.Content.Image is { Url.Length: > 0 } image => FromImage(story, image),
             StoryblokStory<StoryblokCertificate> => new Missing(), // published without an image
             StoryNotFound => new Missing(),
             StoryblokUnavailable => new Unavailable(),
@@ -101,14 +109,28 @@
     }
 
     // Shown at most about 640 px wide: 1280 px keeps it sharp without downloading the original scan.
-    private static Loaded FromImage(string? name, StoryblokAsset image)
+    private static Loaded FromImage(StoryblokStory<StoryblokCertificate> story, StoryblokAsset image)
     {
         (int Width, int Height)? size = image.Dimensions();
-        return new Loaded(name ?? "Certificate", image.ResizeByWidth(1280) ?? image.Url!, image.Alt, size?.Width, size?.Height);
+        return new Loaded(story.Name ?? "Certificate", image.ResizeByWidth(1280) ?? image.Url!, image.Alt, size?.Width, size?.Height,
+            story.Content.EditorAttributes());
+    }
+
+    // An edit without an image shows nothing rather than the not-found page: the image may be on its way, and leaving
+    // for the not-found page would end the preview of this certificate.
+    private void OnStoryEdited(StoryblokEdit edit)
+    {
+        if (edit.TryGet($"/certificates/{Name}", out StoryblokStory<StoryblokCertificate>? story))
+        {
+            _edited = true;
+            _state = story.Content.Image is { Url.Length: > 0 } image ? FromImage(story, image) : new Missing();
+            _ = InvokeAsync(StateHasChanged);
+        }
     }
 
     public async ValueTask DisposeAsync()
     {
+        StoryblokClient.StoryEdited -= OnStoryEdited;
         if (_cts is not null)
         {
             await _cts.CancelAsync();
