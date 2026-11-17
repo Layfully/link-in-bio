@@ -366,6 +366,106 @@ public sealed class StoryblokStoryClientTests : IDisposable
         Assert.False(_prerendered.Contains("/home"));
     }
 
+    [Fact]
+    public void An_edited_story_is_raised_with_its_slug_and_component_classes()
+    {
+        StoryblokStoryClient client = CreateEditorClient();
+        List<StoryblokEdit> edits = [];
+        client.StoryEdited += edits.Add;
+
+        client.ReadEditedStory(EditedStory("home", """
+            { "_uid": "11111111-1111-1111-1111-111111111111", "component": "test_page", "body": [
+                { "_uid": "22222222-2222-2222-2222-222222222222", "component": "test_fields", "text": "Hello" }
+            ] }
+            """));
+
+        StoryblokEdit edit = Assert.Single(edits);
+        Assert.True(edit.TryGet("/home", out StoryblokStory<TestPage>? story));
+        Assert.Equal("Home", story.Name);
+        Assert.Equal("Hello", Assert.IsType<TestFields>(Assert.Single(story.Content.Body!)).Text);
+    }
+
+    [Theory]
+    [InlineData("certificates/az-204", "/certificates/AZ-204")]
+    [InlineData("home", "home/")]
+    public void A_slug_matches_whatever_its_case_and_slashes(string fullSlug, string asked)
+    {
+        Assert.True(Edit(fullSlug, Page()).TryGet(asked, out StoryblokStory<TestPage>? _));
+    }
+
+    [Fact]
+    public void An_edited_story_is_not_another_slugs_story()
+    {
+        Assert.False(Edit("certificates/x", Page()).TryGet("/home", out StoryblokStory<TestPage>? _));
+    }
+
+    [Fact]
+    public void An_edited_story_of_another_kind_is_not_taken()
+    {
+        string fields = """{ "_uid": "22222222-2222-2222-2222-222222222222", "component": "test_fields" }""";
+
+        Assert.False(Edit("home", fields).TryGet("/home", out StoryblokStory<TestPage>? _));
+    }
+
+    [Fact]
+    public void Outside_the_editor_an_edited_story_is_ignored()
+    {
+        StoryblokStoryClient client = CreateClient();
+        List<StoryblokEdit> edits = [];
+        client.StoryEdited += edits.Add;
+
+        client.ReadEditedStory(EditedStory("home", Page()));
+
+        Assert.Empty(edits);
+    }
+
+    [Theory]
+    [InlineData("{ not json")]
+    [InlineData("null")]
+    public void An_edited_story_that_cant_be_read_raises_nothing(string json)
+    {
+        StoryblokStoryClient client = CreateEditorClient();
+        List<StoryblokEdit> edits = [];
+        client.StoryEdited += edits.Add;
+
+        client.ReadEditedStory(json);
+
+        Assert.Empty(edits);
+    }
+
+    [Fact]
+    public async Task An_edited_story_doesnt_reach_the_cache()
+    {
+        _storyblok.Answer(HttpStatusCode.OK, Story("Home", Page()));
+        StoryblokStoryClient client = CreateEditorClient(cacheDurationSeconds: 60);
+
+        client.ReadEditedStory(EditedStory("home", Page()));
+        await Load<TestPage>(client, "/home", TestContext.Current.CancellationToken);
+
+        Assert.Single(_storyblok.Requests);
+    }
+
+    private StoryblokEdit Edit(string fullSlug, string content)
+    {
+        StoryblokStoryClient client = CreateEditorClient();
+        StoryblokEdit? edit = null;
+        client.StoryEdited += raised => edit = raised;
+        client.ReadEditedStory(EditedStory(fullSlug, content));
+        return Assert.IsType<StoryblokEdit>(edit);
+    }
+
+    private StoryblokStoryClient CreateEditorClient(int cacheDurationSeconds = 0) => CreateClient(new StoryblokOptions
+    {
+        ApiKeyPublic = "public-token",
+        ApiKeyPreview = "preview-token",
+        IsInEditor = true,
+        CacheDurationSeconds = cacheDurationSeconds,
+    });
+
+    // The bridge sends the story itself, without the { "story": ... } around it that the API answers with.
+    private static string EditedStory(string fullSlug, string content) =>
+        $$"""{ "name": "Home", "full_slug": "{{fullSlug}}", "content": {{content}} }""";
+
     private static Task<StoryLoadResult<T>?> Refresh<T>(StoryblokStoryClient client, string slug) where T : StoryblokComponent =>
         client.Story().WithSlug(slug).TryRefresh<T>(TestContext.Current.CancellationToken);
 

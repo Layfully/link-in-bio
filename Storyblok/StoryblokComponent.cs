@@ -13,4 +13,11 @@ public class StoryblokComponent
 
     [JsonPropertyName("component")]
     public string Component { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Where the block is in Storyblok, for the Visual Editor's click-to-edit (see
+    /// <see cref="Extensions.VisualEditorExtensions.EditorAttributes"/>). Only drafts carry it.
+    /// </summary>
+    [JsonPropertyName("_editable")]
+    public string? Editable { get; set; }
 }

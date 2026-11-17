@@ -19,6 +19,18 @@ internal sealed class FakeStoryblok : HttpMessageHandler
     public void Answer(HttpStatusCode status, RetryConditionHeaderValue retryAfter) =>
         _answers.Enqueue(_ => Task.FromResult(new HttpResponseMessage(status) { Headers = { RetryAfter = retryAfter } }));
 
+    /// <summary>An answer that arrives only when the test completes the returned source, like a slow Storyblok.</summary>
+    public TaskCompletionSource AnswerLater(HttpStatusCode status, string body = "{}")
+    {
+        TaskCompletionSource release = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        _answers.Enqueue(async _ =>
+        {
+            await release.Task;
+            return new HttpResponseMessage(status) { Content = new StringContent(body, Encoding.UTF8, "application/json") };
+        });
+        return release;
+    }
+
     public void Fail(Exception exception) => _answers.Enqueue(_ => Task.FromException<HttpResponseMessage>(exception));
 
     /// <summary>Never answers, like a Storyblok that hangs: the request ends only when it is cancelled.</summary>
