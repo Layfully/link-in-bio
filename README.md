@@ -69,8 +69,8 @@ every push and pull request, before anything is deployed.
 ## Code style
 
 `.editorconfig` describes the code style (explicit types rather than `var`, braces everywhere, `_camelCase` private
-fields, no unused usings), and the build checks it together with the .NET analyzers' recommended rules. Release builds,
-which CI makes, treat every warning as an error.
+fields, no unused usings), and the build checks it together with the .NET analyzers' recommended rules. Every build
+treats a warning as an error, so a slip shows up in the editor rather than first in CI.
 
 ## Styles
 
