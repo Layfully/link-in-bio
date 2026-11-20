@@ -75,3 +75,7 @@ dotnet_diagnostic.CA1707.severity = none
 # The fake JavaScript runtime forwards calls without any JavaScript behind them, so there's nothing to guard.
 [Tests/FakeJs.cs]
 dotnet_diagnostic.BL0016.severity = none
+
+# This test fixture disposes a fake JS object without calling the browser.
+[Tests/Client/InteropTests.cs]
+dotnet_diagnostic.BL0016.severity = none

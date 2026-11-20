@@ -1,4 +1,3 @@
-using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using System.Net;
 using System.Net.Http.Headers;
@@ -32,7 +31,11 @@ public sealed class DeployTrigger(HttpClient http, IOptions<DeployTriggerOptions
     /// <param name="secret">The secret from the webhook's address.</param>
     /// <param name="body">What Storyblok sent: <c>{ "action": "published", "full_slug": "home", … }</c>.</param>
     /// <param name="cancellationToken">Ends the call when the host shuts down.</param>
-    public async Task<DeployTriggerResult> TriggerAsync(string? secret, string? body, CancellationToken cancellationToken)
+    public Task<DeployTriggerResult> TriggerAsync(string? secret, string? body, CancellationToken cancellationToken) =>
+        TriggerFromRequestAsync(secret, _ => Task.FromResult(body), cancellationToken);
+
+    internal async Task<DeployTriggerResult> TriggerFromRequestAsync(string? secret, Func<CancellationToken, Task<string?>> readBodyAsync,
+        CancellationToken cancellationToken)
     {
         DeployTriggerOptions settings = options.Value;
 
@@ -58,7 +61,7 @@ public sealed class DeployTrigger(HttpClient http, IOptions<DeployTriggerOptions
 
         // A call that doesn't say which story it is about deploys every site, so a change in what Storyblok sends can't
         // stop deploys.
-        string? slug = StorySlug(body);
+        string? slug = StorySlug(await readBodyAsync(cancellationToken));
         DeploySite[] sites = [.. DeploySite.All.Where(site => slug is null || site.Builds(slug))];
         if (sites.Length == 0)
         {
@@ -89,7 +92,8 @@ public sealed class DeployTrigger(HttpClient http, IOptions<DeployTriggerOptions
 
             try
             {
-                using HttpResponseMessage response = await http.SendAsync(Request(address, dispatch, token), cancellationToken);
+                using HttpRequestMessage request = Request(address, dispatch, token);
+                using HttpResponseMessage response = await http.SendAsync(request, cancellationToken);
                 if (response.IsSuccessStatusCode)
                 {
                     logger.LogInformation("Started the deploy of {Repository} ({Workflow} on {Ref}).", site.Repository, site.Workflow, site.Ref);
