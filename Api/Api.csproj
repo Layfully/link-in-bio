@@ -1,4 +1,9 @@
 <Project Sdk="Azure.Functions.Sdk/1.1.0">
+  <PropertyGroup>
+    <!-- Match the isolated worker runtime supported by Static Web Apps managed APIs. -->
+    <TargetFramework>net10.0</TargetFramework>
+  </PropertyGroup>
+
   <ItemGroup>
     <PackageReference Include="Microsoft.Extensions.Http.Resilience" />
     <PackageReference Include="Microsoft.Azure.Functions.Worker" PrivateAssets="compile;contentfiles;analyzers;build" />
