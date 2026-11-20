@@ -184,7 +184,8 @@ The prerendered page, the cut-down Font Awesome and the page's metadata are made
 Static Web App runs next to the site (managed functions, deployed with production only). At
 `POST /api/storyblok-webhook?secret=<secret>` it checks the secret and starts the deploy workflow on `main`
 (`workflow_dispatch`, the same as "Run workflow" in the Actions tab). Storyblok never repeats a webhook call that failed,
-so the API tries GitHub up to three times when it answers with a 5xx, 408 or 429, or can't be reached.
+so the API tries GitHub up to three times for connection failures, timeouts, and ordinary 5xx responses.
+A 429 or a response with `Retry-After` ends the dispatch immediately.
 
 The Storyblok space also holds the stories of the portfolio site
 ([Layfully/portfolio](https://github.com/Layfully/portfolio)), and the free plan allows only two webhooks, so this one

@@ -1,6 +1,6 @@
 using Api;
 using Microsoft.Extensions.Configuration;
-using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using Microsoft.Extensions.Time.Testing;
 using System.Net;
@@ -43,7 +43,9 @@ public sealed class DeployTriggerTests : IDisposable
         Assert.Equal("https://api.github.com/repos/Layfully/link-in-bio/actions/workflows/azure-static-web-apps-gray-tree-0c2e88d03.yml/dispatches",
             request.RequestUri!.ToString());
         Assert.Equal("Bearer github-token", request.Headers.Authorization!.ToString());
-        Assert.NotEmpty(request.Headers.UserAgent); // GitHub refuses requests without one
+        Assert.Equal("link-in-bio-deploy-trigger/1.0", request.Headers.UserAgent.ToString());
+        Assert.Equal("application/vnd.github+json", request.Headers.Accept.ToString());
+        Assert.Equal("2022-11-28", Assert.Single(request.Headers.GetValues("X-GitHub-Api-Version")));
         Assert.Equal("""{"ref":"main"}""", _github.Bodies.Single());
     }
 
@@ -101,6 +103,25 @@ public sealed class DeployTriggerTests : IDisposable
         Assert.Single(_github.Requests);
     }
 
+    [Theory]
+    [InlineData(HttpStatusCode.TooManyRequests, null)]
+    [InlineData(HttpStatusCode.TooManyRequests, 5)]
+    [InlineData(HttpStatusCode.ServiceUnavailable, 60)]
+    public async Task A_rate_limit_or_retry_after_fails_without_retrying(HttpStatusCode status, int? delaySeconds)
+    {
+        using HttpResponseMessage response = new(status);
+        if (delaySeconds.HasValue)
+        {
+            response.Headers.RetryAfter = new(TimeSpan.FromSeconds(delaySeconds.Value));
+        }
+        _github.Answers.Enqueue(response);
+
+        DeployTriggerResult result = await TriggerWhileTimePasses("s3cret");
+
+        Assert.Equal(HttpStatusCode.BadGateway, result.Status);
+        Assert.Single(_github.Requests);
+    }
+
     [Fact]
     public async Task A_passing_failure_at_GitHub_is_tried_again()
     {
@@ -116,7 +137,7 @@ public sealed class DeployTriggerTests : IDisposable
     [Fact]
     public async Task GitHub_out_of_reach_on_every_attempt_is_reported()
     {
-        for (int i = 0; i < DeployTrigger.MaxAttempts; i++)
+        for (int i = 0; i < 3; i++)
         {
             _github.Answers.Enqueue(new HttpRequestException("No such host is known."));
         }
@@ -124,21 +145,21 @@ public sealed class DeployTriggerTests : IDisposable
         DeployTriggerResult result = await TriggerWhileTimePasses("s3cret");
 
         Assert.Equal(HttpStatusCode.BadGateway, result.Status);
-        Assert.Equal(DeployTrigger.MaxAttempts, _github.Requests.Count);
+        Assert.Equal(3, _github.Requests.Count);
     }
 
     [Fact]
-    public async Task HttpClients_timeout_counts_as_out_of_reach()
+    public async Task Each_timed_out_attempt_is_retried_until_the_limit()
     {
-        for (int i = 0; i < DeployTrigger.MaxAttempts; i++)
+        for (int i = 0; i < 3; i++)
         {
-            // What HttpClient throws when its Timeout passes: a cancellation the caller didn't ask for.
-            _github.Answers.Enqueue(new TaskCanceledException("The request was canceled due to the configured HttpClient.Timeout."));
+            _github.Answers.Enqueue(Timeout.InfiniteTimeSpan);
         }
 
         DeployTriggerResult result = await TriggerWhileTimePasses("s3cret");
 
         Assert.Equal(HttpStatusCode.BadGateway, result.Status);
+        Assert.Equal(3, _github.Requests.Count);
     }
 
     [Fact]
@@ -234,13 +255,16 @@ public sealed class DeployTriggerTests : IDisposable
 
     private const string HomePublished = """{"action":"published","space_id":268473,"story_id":1,"full_slug":"home"}""";
 
-    private Task<DeployTriggerResult> Trigger(string? secret, DeployTriggerOptions? settings = null, CancellationToken? cancellationToken = null,
+    private async Task<DeployTriggerResult> Trigger(string? secret, DeployTriggerOptions? settings = null, CancellationToken? cancellationToken = null,
         string? body = HomePublished)
     {
-        HttpClient http = new(_github, disposeHandler: false);
-        DeployTrigger trigger = new(http, Options.Create(settings ?? new DeployTriggerOptions { WebhookSecret = "s3cret", GitHubToken = "github-token" }),
-            _time, NullLogger<DeployTrigger>.Instance);
-        return trigger.TriggerAsync(secret, body, cancellationToken ?? TestContext.Current.CancellationToken);
+        ServiceCollection services = new();
+        services.AddSingleton<TimeProvider>(_time);
+        services.AddSingleton(Options.Create(settings ?? new DeployTriggerOptions { WebhookSecret = "s3cret", GitHubToken = "github-token" }));
+        services.AddDeployTriggerClient().ConfigurePrimaryHttpMessageHandler(() => _github);
+        using ServiceProvider provider = services.BuildServiceProvider();
+        DeployTrigger trigger = provider.GetRequiredService<DeployTrigger>();
+        return await trigger.TriggerAsync(secret, body, cancellationToken ?? TestContext.Current.CancellationToken);
     }
 
     // Moves the fake clock on until the trigger has answered, so the pauses between attempts take no real time.
@@ -296,8 +320,14 @@ public sealed class DeployTriggerTests : IDisposable
                     : Answers.TryDequeue(out object? queued) ? queued : HttpStatusCode.OK;
             }
 
+            if (answer is TimeSpan delay)
+            {
+                await Task.Delay(delay, cancellationToken);
+            }
+
             return answer switch
             {
+                HttpResponseMessage response => response,
                 Exception exception => throw exception,
                 HttpStatusCode status => new HttpResponseMessage(status)
                 {
