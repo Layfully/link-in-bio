@@ -10,11 +10,14 @@ trim_trailing_whitespace = true
 [*.{json,webmanifest,yml,yaml,csproj,props,targets,slnx}]
 indent_size = 2
 
+[*.sh]
+end_of_line = lf
+
 [*.md]
 trim_trailing_whitespace = false
 
-# The style the code is written in. Rules marked :warning are checked in the build (EnforceCodeStyleInBuild in
-# Directory.Build.props), so in Release, which CI builds, a departure fails the build.
+# Directory.Build.props enables code style analysis and treats warnings as errors in all configurations.
+# Code style diagnostics emitted as warnings can fail both Debug and Release builds.
 [*.cs]
 csharp_style_namespace_declarations = file_scoped:warning
 dotnet_diagnostic.IDE0161.severity = warning
@@ -68,5 +71,7 @@ dotnet_diagnostic.CA1873.severity = none
 # Tests are named as sentences (A_missing_story_is_not_found).
 [Tests/**.cs]
 dotnet_diagnostic.CA1707.severity = none
+
 # The fake JavaScript runtime forwards calls without any JavaScript behind them, so there's nothing to guard.
+[Tests/FakeJs.cs]
 dotnet_diagnostic.BL0016.severity = none
