@@ -1,4 +1,5 @@
 using Api;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Microsoft.Extensions.Time.Testing;
@@ -14,6 +15,22 @@ public sealed class DeployTriggerTests : IDisposable
     private readonly FakeTimeProvider _time = new();
 
     public void Dispose() => _github.Dispose();
+
+    [Fact]
+    public void Configuration_binds_both_webhook_credentials()
+    {
+        IConfiguration configuration = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["DeployTrigger:WebhookSecret"] = "test-secret",
+            ["DeployTrigger:GitHubToken"] = "test-token",
+        }).Build();
+
+        DeployTriggerOptions settings = new();
+        configuration.GetSection(DeployTriggerOptions.Section).Bind(settings);
+
+        Assert.Equal("test-secret", settings.WebhookSecret);
+        Assert.Equal("test-token", settings.GitHubToken);
+    }
 
     [Fact]
     public async Task The_right_secret_starts_the_deploy_workflow_on_main()
