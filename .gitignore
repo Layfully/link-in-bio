@@ -409,5 +409,12 @@ local.settings.json
 # Environment files with secrets
 *.env
 
+# Local environment overrides
+.env.local
+.env.*.local
+
+# Python virtual environments for prerender tooling
+.venv/
+
 # Rider and other JetBrains IDEs
 .idea/

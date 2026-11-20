@@ -70,7 +70,10 @@ jobs:
 
       # Release, like the deploy: warnings are errors there. Builds the whole solution, then runs the tests.
       - name: Build and test
-        run: dotnet test --solution link-in-bio.slnx --configuration Release
+        run: |
+          # Restoring the API directly also restores its generated Functions extension project.
+          dotnet restore Api/Api.csproj
+          dotnet test --solution link-in-bio.slnx --configuration Release
 
       # The particle background, when Blazor starts, the analytics consent and the CSP check; Node comes with the runner,
       # the tests need no packages.
