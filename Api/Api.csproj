@@ -1,20 +1,14 @@
-<Project Sdk="Microsoft.NET.Sdk">
-  <!-- The site's API: an Azure Function the Static Web App runs next to the site (managed functions). It passes
-       Storyblok's webhook on to GitHub, so a publish starts a deploy (see README, Deployment). -->
+<Project Sdk="Azure.Functions.Sdk/1.1.0">
   <PropertyGroup>
-    <!-- The newest runtime Static Web Apps offers for managed functions (dotnet-isolated:10.0 in staticwebapp.config.json). -->
+    <!-- Match the isolated worker runtime supported by Static Web Apps managed APIs. -->
     <TargetFramework>net10.0</TargetFramework>
-    <AzureFunctionsVersion>v4</AzureFunctionsVersion>
-    <OutputType>Exe</OutputType>
-    <IsPackable>false</IsPackable>
   </PropertyGroup>
 
   <ItemGroup>
-    <!-- The Functions types stay out of projects that reference this one (the tests call DeployTrigger directly), where
-         their extension classes would clash with others of the same name: compile is private, besides the defaults. -->
+    <PackageReference Include="Microsoft.Extensions.Http.Resilience" />
     <PackageReference Include="Microsoft.Azure.Functions.Worker" PrivateAssets="compile;contentfiles;analyzers;build" />
-    <PackageReference Include="Microsoft.Azure.Functions.Worker.Extensions.Http" PrivateAssets="compile;contentfiles;analyzers;build" />
-    <PackageReference Include="Microsoft.Azure.Functions.Worker.Sdk" />
+    <PackageReference Include="Microsoft.Azure.Functions.Worker.Extensions.Http"
+      PrivateAssets="compile;contentfiles;analyzers;build" />
   </ItemGroup>
 
   <ItemGroup>

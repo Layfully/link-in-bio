@@ -4,7 +4,7 @@ README.md describes the projects, how to run and test them, and how the deploy w
 
 ## Checks before a change is done
 
-- `dotnet test --solution link-in-bio.slnx --configuration Release`: the configuration CI builds and tests.
+- `dotnet test --solution link-in-bio.slnx --configuration Release`: Release is what CI builds, and every build treats warnings as errors.
 - `node --test "Tests/js/*.test.mjs"` after changing anything in `Client/wwwroot/js` or `.github/scripts`.
 - After changing classes in a `.razor` file or `Client/Styles/app.css`, rebuild `Client/wwwroot/css/app.css` (README,
   Styles) and commit it with the change.

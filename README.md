@@ -40,37 +40,32 @@ the .NET runtime into a smaller file. A local publish works without them, only w
 
 ## Tests
 
-`Tests` holds the unit tests (xunit v3): the Storyblok client against a fake Storyblok (how each answer becomes a result,
-how Storyblok's values are read, how slugs are escaped, what is cached, how a story edited in the Visual Editor is read),
-the retries and timeouts of its requests, the component registry, the image addresses, the link converter's safety
-rules, the Visual Editor check and its click-to-edit markers, the JavaScript interop (a typing animation that finishes
-starting too late is stopped), and with [bUnit](https://bunit.dev) the pages (what each answer from Storyblok shows,
-and each edit in the Visual Editor), the loading hints and the layout's error message, and the prerendering (the rendered page, the profile it takes from Storyblok, how it is written into the
-published site, which Font Awesome icons stay, what a failure says), and the webhook that starts a deploy (which calls
-it refuses, what it sends GitHub, which failures it tries again). Run them with:
+Run the .NET tests with:
 
 ```bash
 dotnet test --solution link-in-bio.slnx
 ```
 
-The particle background's movement rules and drawing (`particle-field.js`, `particle-scene.js`), when Blazor starts
-(`blazor-start.js`) and the analytics consent (`analytics-consent.js`: nothing of Google before a yes), all in
-`Client/wwwroot/js`, and the deploy's Content Security Policy check (`.github/scripts/check-published-csp.mjs`) have
-tests of their own in `Tests/js`, run with Node's built-in test runner, no packages needed:
+The xUnit v3 suite covers the Storyblok client, Blazor components and JavaScript interop, prerendering, and webhook
+dispatch. Component tests use [bUnit](https://bunit.dev).
+
+Run the JavaScript tests with Node's built-in test runner:
 
 ```bash
 node --test "Tests/js/*.test.mjs"
 ```
 
-`global.json` switches `dotnet test` to Microsoft Testing Platform, which xunit v3 needs on .NET 10 and later. It also pins
-the SDK: CI installs the same one, and Dependabot proposes newer ones as pull requests. CI runs the tests in Release on
-every push and pull request, before anything is deployed.
+The JavaScript suite covers the particle background, Blazor startup, analytics consent, and the published Content
+Security Policy check. It needs no npm packages.
+
+`global.json` selects Microsoft Testing Platform for `dotnet test` and pins the SDK used locally and in CI.
+Dependabot proposes SDK updates. CI tests pushes to `main` and pull request updates targeting `main` before deployment.
 
 ## Code style
 
 `.editorconfig` describes the code style (explicit types rather than `var`, braces everywhere, `_camelCase` private
-fields, no unused usings), and the build checks it together with the .NET analyzers' recommended rules. Every build
-treats a warning as an error, so a slip shows up in the editor rather than first in CI.
+fields, no unused usings), and the build checks it together with the .NET analyzers' recommended rules. Builds treat
+warnings as errors in both Debug and Release. CI builds in Release.
 
 ## Styles
 
@@ -144,8 +139,8 @@ Blazor's `#[.{fingerprint}]` placeholder in `index.html` is documented for JavaS
 
 ## Deployment
 
-`.github/workflows/azure-static-web-apps-gray-tree-0c2e88d03.yml` builds every push and pull request, then
-deploys to Azure Static Web Apps:
+`.github/workflows/azure-static-web-apps-gray-tree-0c2e88d03.yml` checks pushes to `main` and pull request updates
+targeting `main`. Eligible runs deploy to Azure Static Web Apps:
 
 - **Production** (`main`) and **pull request staging environments** are built with the public token only.
 - **The `editor` environment** (`main`) is built with the preview token as well. It's the address Storyblok's
@@ -179,7 +174,7 @@ The workflow needs these repository secrets:
 
 | Secret | Used for |
 | --- | --- |
-| `STORYBLOK_API_KEY_PUBLIC` | Published content, in every build. |
+| `STORYBLOK_API_KEY_PUBLIC` | Published content in production, staging, and editor deployments. |
 | `STORYBLOK_API_KEY_PREVIEW` | Drafts, in the `editor` build only. |
 | `AZURE_STATIC_WEB_APPS_API_TOKEN_GRAY_TREE_0C2E88D03` | Deploying to Azure Static Web Apps. |
 
@@ -191,7 +186,8 @@ The prerendered page, the cut-down Font Awesome and the page's metadata are made
 Static Web App runs next to the site (managed functions, deployed with production only). At
 `POST /api/storyblok-webhook?secret=<secret>` it checks the secret and starts the deploy workflow on `main`
 (`workflow_dispatch`, the same as "Run workflow" in the Actions tab). Storyblok never repeats a webhook call that failed,
-so the API tries GitHub up to three times when it answers with a 5xx, 408 or 429, or can't be reached.
+so the API tries GitHub up to three times for connection failures, timeouts, and ordinary 5xx responses.
+A 429 or a response with `Retry-After` ends the dispatch immediately.
 
 The Storyblok space also holds the stories of the portfolio site
 ([Layfully/portfolio](https://github.com/Layfully/portfolio)), and the free plan allows only two webhooks, so this one
@@ -269,10 +265,9 @@ production and pull request builds, after `dotnet publish`, run the `Prerender` 
   `lib/fontawesome-7.3.1-<content hash>`. An icon added to a link in Storyblok shows once the deploy its publish
   starts has finished.
 
-On the prerendered home page, .NET doesn't start right away: starting it takes about a second of the browser's main
-thread, and the page has nothing it needs it for at first. `index.html` loads Blazor with `autostart="false"`, and
-`Client/wwwroot/js/blazor-start.js` starts it 5 seconds after the page has loaded, at an idle moment: after the first
-look, and after page-speed tests have finished measuring. Nothing visible waits for it:
+On the prerendered home page, `index.html` loads Blazor with `autostart="false"`.
+`Client/wwwroot/js/blazor-start.js` waits five seconds after the page loads, then schedules startup with an idle
+callback where supported. The prerendered content is visible while Blazor waits:
 
 - The particles don't belong to Blazor. `js/particle-background.js` puts them in `#particles`, outside `#app`, from
   the first paint on every page, and Blazor never replaces them. The drawing (`js/particle-scene.js`) runs in a worker

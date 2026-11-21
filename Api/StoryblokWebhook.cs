@@ -4,9 +4,7 @@ using Microsoft.Azure.Functions.Worker.Http;
 namespace Api;
 
 /// <summary>
-/// <c>POST /api/storyblok-webhook?secret=…</c>: the address Storyblok's webhook calls on a publish. Anonymous, because
-/// Storyblok sends no credentials; the secret in the address is checked instead (<see cref="DeployTrigger"/>). Storyblok's
-/// signed webhooks (a <c>webhook-signature</c> header) would keep the secret out of the address, but they need a paid plan.
+/// Receives Storyblok publish events. <see cref="DeployTrigger"/> validates the shared secret from the query string.
 /// </summary>
 public sealed class StoryblokWebhook(DeployTrigger trigger)
 {
@@ -15,10 +13,17 @@ public sealed class StoryblokWebhook(DeployTrigger trigger)
         [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "storyblok-webhook")] HttpRequestData request,
         CancellationToken cancellationToken)
     {
-        DeployTriggerResult result = await trigger.TriggerAsync(request.Query["secret"], await request.ReadAsStringAsync(), cancellationToken);
+        DeployTriggerResult result = await trigger.TriggerFromRequestAsync(request.Query["secret"], ReadBodyAsync, cancellationToken);
 
         HttpResponseData response = request.CreateResponse(result.Status);
+        response.Headers.Add("Content-Type", "text/plain; charset=utf-8");
         await response.WriteStringAsync(result.Message, cancellationToken);
         return response;
+
+        async Task<string?> ReadBodyAsync(CancellationToken token)
+        {
+            using StreamReader reader = new(request.Body, leaveOpen: true);
+            return await reader.ReadToEndAsync(token);
+        }
     }
 }

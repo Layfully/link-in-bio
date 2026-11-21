@@ -54,7 +54,10 @@ jobs:
           echo "WASM_TOOLS_INSTALLED=true" >> "$GITHUB_ENV"
 
       - name: Build and test
-        run: dotnet test --solution link-in-bio.slnx --configuration Release
+        run: |
+          # Restoring the API directly also restores its generated Functions extension project.
+          dotnet restore Api/Api.csproj
+          dotnet test --solution link-in-bio.slnx --configuration Release
 
       - name: Test the JavaScript
         run: node --test "Tests/js/*.test.mjs"
