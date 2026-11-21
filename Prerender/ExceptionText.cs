@@ -3,18 +3,30 @@ namespace Prerender;
 /// <summary>Exceptions as one line for a GitHub Actions warning.</summary>
 public static class ExceptionText
 {
-    /// <summary>
-    /// The message of the exception and of each exception inside it: the outer one says what failed, the inner ones why
-    /// ("Storyblok is unavailable: Response status code does not indicate success: 401 (Unauthorized)").
-    /// </summary>
+    /// <summary>Joins distinct exception messages from the outermost exception to the innermost.</summary>
     public static string Describe(Exception exception)
     {
+        if (exception.InnerException is null)
+        {
+            return TrimMessage(exception.Message);
+        }
+
         List<string> messages = [];
         for (Exception? current = exception; current is not null; current = current.InnerException)
         {
-            messages.Add(current.Message.Trim().TrimEnd('.'));
+            string message = TrimMessage(current.Message);
+            if (message.Length > 0 && !messages.Contains(message))
+            {
+                messages.Add(message);
+            }
         }
 
-        return string.Join(": ", messages.Where(message => message.Length > 0).Distinct(StringComparer.Ordinal));
+        return string.Join(": ", messages);
+    }
+
+    private static string TrimMessage(string message)
+    {
+        ReadOnlySpan<char> trimmed = message.AsSpan().Trim().TrimEnd('.');
+        return trimmed.Length == message.Length ? message : trimmed.ToString();
     }
 }

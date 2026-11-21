@@ -7,26 +7,16 @@ using System.Text.RegularExpressions;
 
 namespace Prerender;
 
-/// <summary>
-/// Cuts Font Awesome in a published site down to the icons the site uses: its stylesheet has a rule for each of about
-/// 2,000 icons and its fonts a glyph for each, while the site shows about ten. The cut-down copy goes to a new folder
-/// named after its content, because browsers keep everything under <c>lib/</c> for a year (README, Caching).
-/// </summary>
-/// <param name="pyftsubset">The fonttools command that subsets the fonts; the deploy installs it.</param>
+/// <summary>Publishes the site's Font Awesome subset under a content hash for browser caching.</summary>
+/// <param name="pyftsubset">Path or command name for the fontTools subsetter.</param>
 public sealed partial class FontAwesomeSubset(string pyftsubset = "pyftsubset")
 {
     private const string Stylesheet = "css/all.min.css";
 
-    // The fonts with the icons the site uses. The others (regular, v4 compatibility) are small and copied as they are.
+    // Other font files are copied in full.
     private static readonly string[] SubsetFonts = ["fa-brands-400.woff2", "fa-solid-900.woff2"];
 
-    // Classes that choose a style or size rather than an icon.
-    private static readonly HashSet<string> StyleClasses = new(StringComparer.Ordinal) { "fa-solid", "fa-regular", "fa-brands", "fa-classic" };
-
-    /// <summary>
-    /// Icons the components show whatever Storyblok says, including ones the home page doesn't render (error and
-    /// not-found notices). A test checks that every icon in a .razor file is listed here.
-    /// </summary>
+    /// <summary>Icons required by components, including error and not-found pages.</summary>
     public static IReadOnlySet<string> ComponentIcons { get; } = new HashSet<string>(StringComparer.Ordinal)
     {
         "fa-arrow-right",
@@ -37,76 +27,95 @@ public sealed partial class FontAwesomeSubset(string pyftsubset = "pyftsubset")
         "fa-triangle-exclamation",
     };
 
-    /// <summary>The Font Awesome icon classes in a piece of HTML or Razor, without the style classes.</summary>
-    public static IReadOnlySet<string> IconsIn(string html) =>
-        IconClass().Matches(html).Select(match => match.Value).Where(icon => !StyleClasses.Contains(icon)).ToHashSet(StringComparer.Ordinal);
+    /// <summary>Extracts icon classes from HTML or Razor markup.</summary>
+    public static IReadOnlySet<string> IconsIn(string html)
+    {
+        HashSet<string> icons = new(StringComparer.Ordinal);
+        HashSet<string>.AlternateLookup<ReadOnlySpan<char>> found = icons.GetAlternateLookup<ReadOnlySpan<char>>();
+        foreach (ValueMatch match in IconClass().EnumerateMatches(html))
+        {
+            ReadOnlySpan<char> icon = html.AsSpan(match.Index, match.Length);
+            if (icon is not ("fa-solid" or "fa-regular" or "fa-brands" or "fa-classic"))
+            {
+                found.Add(icon);
+            }
+        }
 
-    /// <summary>
-    /// The stylesheet without the rules of icons that aren't used (<c>.fa-gitlab{--fa:"\f296"}</c>); every other rule
-    /// stays. A rule for several names of one icon stays when any of them is used. Also returns the characters the kept
-    /// icons draw, which the fonts must keep.
-    /// </summary>
+        return icons;
+    }
+
+    /// <summary>Removes unused icon rules and returns the codepoints to keep. Any matching alias keeps its rule.</summary>
     public static (string Css, IReadOnlySet<int> Codepoints) Filter(string css, IReadOnlySet<string> icons)
     {
         HashSet<int> codepoints = [];
+        Func<ReadOnlySpan<char>, bool> containsIcon = IconLookup(icons);
         string filtered = IconRule().Replace(css, rule =>
         {
-            if (!rule.Groups["selectors"].Value.Split(',').Any(selector => icons.Contains(selector.TrimStart('.'))))
+            if (!UsesIcon(rule.Groups["selectors"].ValueSpan, containsIcon))
             {
                 return string.Empty;
             }
 
-            codepoints.UnionWith(Codepoints(rule.Groups["content"].Value));
+            AddCodepoints(rule.Groups["content"].Value, codepoints);
             return rule.Value;
         });
 
         return (filtered, codepoints);
     }
 
-    /// <summary>
-    /// Writes the cut-down copy and points <c>index.html</c> and <c>app-shell.html</c> at it. False, with nothing
-    /// changed, when <c>pyftsubset</c> isn't installed.
-    /// </summary>
+    private static Func<ReadOnlySpan<char>, bool> IconLookup(IReadOnlySet<string> icons)
+    {
+        if (icons is HashSet<string> set && set.TryGetAlternateLookup(out HashSet<string>.AlternateLookup<ReadOnlySpan<char>> lookup))
+        {
+            return lookup.Contains;
+        }
+
+        return icon => icons.Contains(icon.ToString());
+    }
+
+    private static bool UsesIcon(ReadOnlySpan<char> selectors, Func<ReadOnlySpan<char>, bool> containsIcon)
+    {
+        foreach (Range range in selectors.Split(','))
+        {
+            ReadOnlySpan<char> selector = selectors[range];
+            if (containsIcon(selector[1..])) // Skip the leading dot.
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>Publishes the subset and updates the page links. Returns false if the subsetter cannot start.</summary>
     public bool Apply(string wwwroot, IReadOnlySet<string> icons)
     {
-        // The version folder index.html links (lib/fontawesome-7.3.1), so updating Font Awesome needs no change here.
-        string folder = StylesheetLink().Match(File.ReadAllText(Path.Combine(wwwroot, "index.html"))) is { Success: true } link
-            ? link.Groups["folder"].Value
-            : throw new InvalidOperationException($"index.html links no lib/fontawesome-<version>/{Stylesheet}.");
+        Match link = StylesheetLink().Match(File.ReadAllText(Path.Combine(wwwroot, "index.html")));
+        if (!link.Success)
+        {
+            throw new InvalidOperationException($"index.html links no lib/fontawesome-<version>/{Stylesheet}.");
+        }
+
+        string folder = link.Groups["folder"].Value;
         string source = Path.Combine(wwwroot, "lib", folder);
+        string sourceFonts = Path.Combine(source, "webfonts");
         (string css, IReadOnlySet<int> codepoints) = Filter(File.ReadAllText(Path.Combine(source, Stylesheet)), icons);
+        string unicodes = string.Join(',', codepoints.Order().Select(codepoint => $"U+{codepoint:X4}"));
 
         string work = Directory.CreateTempSubdirectory("fontawesome-").FullName;
         try
         {
             foreach (string font in SubsetFonts)
             {
-                if (!TrySubset(Path.Combine(source, "webfonts", font), codepoints, Path.Combine(work, font)))
+                if (!TrySubset(Path.Combine(sourceFonts, font), unicodes, Path.Combine(work, font)))
                 {
                     return false;
                 }
             }
 
-            string target = Path.Combine(wwwroot, "lib", $"{folder}-{ContentHash(css, work)}");
-            Directory.CreateDirectory(Path.Combine(target, "css"));
-            Directory.CreateDirectory(Path.Combine(target, "webfonts"));
-            File.WriteAllText(Path.Combine(target, Stylesheet), css);
-            foreach (string font in Directory.EnumerateFiles(Path.Combine(source, "webfonts")))
-            {
-                string name = Path.GetFileName(font);
-                File.Copy(SubsetFonts.Contains(name) ? Path.Combine(work, name) : font, Path.Combine(target, "webfonts", name), overwrite: true);
-            }
-
-            // The fonts' license (SIL OFL) asks for it to travel with them.
-            File.Copy(Path.Combine(source, "LICENSE.txt"), Path.Combine(target, "LICENSE.txt"), overwrite: true);
-
-            string from = $"lib/{folder}/{Stylesheet}";
-            string to = $"lib/{Path.GetFileName(target)}/{Stylesheet}";
-            foreach (string page in new[] { "index.html", PublishedSite.ShellFile }.Select(page => Path.Combine(wwwroot, page)).Where(File.Exists))
-            {
-                File.WriteAllText(page, File.ReadAllText(page).Replace(from, to, StringComparison.Ordinal));
-            }
-
+            string targetFolder = $"{folder}-{ContentHash(css, work)}";
+            WriteAssets(source, Path.Combine(wwwroot, "lib", targetFolder), work, css);
+            UpdateStylesheetLinks(wwwroot, link.Value, $"lib/{targetFolder}/{Stylesheet}");
             return true;
         }
         finally
@@ -115,35 +124,65 @@ public sealed partial class FontAwesomeSubset(string pyftsubset = "pyftsubset")
         }
     }
 
-    private bool TrySubset(string font, IReadOnlySet<int> codepoints, string output)
+    private static void WriteAssets(string source, string target, string subsetFonts, string css)
     {
-        ProcessStartInfo start = new(pyftsubset) { UseShellExecute = false, RedirectStandardError = true };
-        start.ArgumentList.Add(font);
-        start.ArgumentList.Add("--unicodes=" + string.Join(',', codepoints.Order().Select(codepoint => $"U+{codepoint:X4}")));
-        start.ArgumentList.Add("--flavor=woff2");
-        start.ArgumentList.Add("--output-file=" + output);
+        Directory.CreateDirectory(Path.Combine(target, "css"));
+        File.WriteAllText(Path.Combine(target, Stylesheet), css);
+        File.Copy(Path.Combine(source, "LICENSE.txt"), Path.Combine(target, "LICENSE.txt"), overwrite: true);
 
-        Process process;
-        try
+        string targetFonts = Directory.CreateDirectory(Path.Combine(target, "webfonts")).FullName;
+        foreach (string font in Directory.EnumerateFiles(Path.Combine(source, "webfonts")))
         {
-            process = Process.Start(start) ?? throw new InvalidOperationException($"{pyftsubset} didn't start.");
-        }
-        catch (Win32Exception)
-        {
-            return false; // not installed
-        }
-
-        using (process)
-        {
-            string errors = process.StandardError.ReadToEnd();
-            process.WaitForExit();
-            return process.ExitCode == 0
-                ? true
-                : throw new InvalidOperationException($"{pyftsubset} failed for {Path.GetFileName(font)}: {errors}");
+            string name = Path.GetFileName(font);
+            string selectedFont = SubsetFonts.Contains(name) ? Path.Combine(subsetFonts, name) : font;
+            File.Copy(selectedFont, Path.Combine(targetFonts, name), overwrite: true);
         }
     }
 
-    // The folder name changes whenever the stylesheet or a font does, so a browser never keeps an outdated copy.
+    private static void UpdateStylesheetLinks(string wwwroot, string from, string to)
+    {
+        foreach (string name in new[] { "index.html", PublishedSite.ShellFile })
+        {
+            string page = Path.Combine(wwwroot, name);
+            if (File.Exists(page))
+            {
+                File.WriteAllText(page, File.ReadAllText(page).Replace(from, to, StringComparison.Ordinal));
+            }
+        }
+    }
+
+    private bool TrySubset(string font, string unicodes, string output)
+    {
+        ProcessStartInfo start = new(pyftsubset)
+        {
+            UseShellExecute = false,
+            RedirectStandardError = true,
+            ArgumentList = { font, $"--unicodes={unicodes}", "--flavor=woff2", $"--output-file={output}" },
+        };
+
+        using Process process = new() { StartInfo = start };
+        try
+        {
+            if (!process.Start())
+            {
+                throw new InvalidOperationException($"{pyftsubset} didn't start.");
+            }
+        }
+        catch (Win32Exception)
+        {
+            return false;
+        }
+
+        string errors = process.StandardError.ReadToEnd();
+        process.WaitForExit();
+        if (process.ExitCode != 0)
+        {
+            throw new InvalidOperationException($"{pyftsubset} failed for {Path.GetFileName(font)}: {errors}");
+        }
+
+        return true;
+    }
+
     private static string ContentHash(string css, string fonts)
     {
         using IncrementalHash hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
@@ -156,23 +195,20 @@ public sealed partial class FontAwesomeSubset(string pyftsubset = "pyftsubset")
         return Convert.ToHexStringLower(hash.GetHashAndReset())[..8];
     }
 
-    // A CSS string's characters: "\f09b" (hex, optionally ended by a space), "\$" (an escaped character) or plain text.
-    private static IEnumerable<int> Codepoints(string content)
+    // CSS content can contain hex escapes, escaped characters, or literal text.
+    private static void AddCodepoints(string content, HashSet<int> codepoints)
     {
-        foreach (Match escape in CssCharacter().Matches(content))
+        foreach (Match character in CssCharacter().Matches(content))
         {
-            if (escape.Groups["hex"].Success)
-            {
-                yield return int.Parse(escape.Groups["hex"].Value, NumberStyles.HexNumber, CultureInfo.InvariantCulture);
-            }
-            else
-            {
-                yield return char.ConvertToUtf32(escape.Groups["char"].Value, 0);
-            }
+            Group hex = character.Groups["hex"];
+            int codepoint = hex.Success
+                ? int.Parse(hex.ValueSpan, NumberStyles.HexNumber, CultureInfo.InvariantCulture)
+                : char.ConvertToUtf32(content, character.Groups["char"].Index);
+            codepoints.Add(codepoint);
         }
     }
 
-    // A version folder as published, never a cut-down copy (fontawesome-7.3.1-1a2b3c4d).
+    // Match the original versioned folder so subsetting always starts from the full fonts.
     [GeneratedRegex(@"lib/(?<folder>fontawesome-[0-9][0-9.]*)/css/all\.min\.css")]
     private static partial Regex StylesheetLink();
 
@@ -182,6 +218,6 @@ public sealed partial class FontAwesomeSubset(string pyftsubset = "pyftsubset")
     [GeneratedRegex(@"(?<selectors>\.fa-[a-z0-9-]+(?:,\.fa-[a-z0-9-]+)*)\{--fa:""(?<content>(?:\\[0-9a-fA-F]{1,6} ?|\\.|[^""\\])+)""\}")]
     private static partial Regex IconRule();
 
-    [GeneratedRegex(@"\\(?<hex>[0-9a-fA-F]{1,6}) ?|\\(?<char>.)|(?<char>.)", RegexOptions.Singleline)]
+    [GeneratedRegex(@"\\(?<hex>[0-9a-fA-F]{1,6}) ?|\\?(?<char>.)", RegexOptions.Singleline)]
     private static partial Regex CssCharacter();
 }
