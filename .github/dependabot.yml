@@ -1,5 +1,4 @@
-# Dependabot's pull requests get no repository secrets, so CI builds them but doesn't deploy them.
-# The libraries in Client/wwwroot/lib are not covered; the README says how to update them.
+# See the README for manual updates to Client/wwwroot/lib.
 version: 2
 updates:
   - package-ecosystem: "nuget"
@@ -7,24 +6,22 @@ updates:
     schedule:
       interval: "weekly"
     groups:
-      # .NET's packages are released together, so they arrive as one pull request.
       dotnet:
         patterns:
           - "Microsoft.AspNetCore.*"
           - "Microsoft.Extensions.*"
-      # The API's Azure Functions packages (Api), likewise released together.
+      # Review major Azure Functions upgrades individually.
       azure-functions:
+        update-types: ["minor", "patch"]
         patterns:
           - "Microsoft.Azure.Functions.*"
 
-  # The SDK pinned in global.json, which CI installs too: a new release arrives as a pull request instead of silently.
   - package-ecosystem: "dotnet-sdk"
     directory: "/"
     schedule:
       interval: "weekly"
 
-  # fonttools and brotli, which the deploy uses to cut Font Awesome down (Prerender/requirements.txt). Dependabot updates
-  # the versions and their hashes together.
+  # The deploy uses these tools to subset Font Awesome.
   - package-ecosystem: "pip"
     directory: "/Prerender"
     schedule:
