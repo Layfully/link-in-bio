@@ -1,19 +1,17 @@
 #!/usr/bin/env bash
-# Builds Client/wwwroot/css/app.css from Client/Styles/app.css with the standalone Tailwind CLI, checked against its
-# SHA-256, into the file given as the only argument:
-#   .github/scripts/build-app-css.sh <output file>
-# Needs TAILWIND_VERSION and TAILWIND_SHA256 (set in the workflow). Run from the repository root.
+# Run from the repository root on Linux x64.
 set -euo pipefail
 
-output="$(realpath -m "$1")"
-cli="${RUNNER_TEMP:-/tmp}/tailwindcss-$TAILWIND_VERSION"
+version=v4.3.5
+sha256=e47695cee3f0d90623a91f3939b08bdee610eb5ad99340adff9d4145b284d6cc
+output="$(realpath -m "${1:?Usage: build-app-css.sh <output-file>}")"
+cli="$(mktemp "${RUNNER_TEMP:-${TMPDIR:-/tmp}}/tailwindcss.XXXXXXXX")"
+trap 'rm -f -- "$cli"' EXIT
 
-if [ ! -x "$cli" ]; then
-  curl --fail --silent --show-error --location --output "$cli" \
-    "https://github.com/tailwindlabs/tailwindcss/releases/download/$TAILWIND_VERSION/tailwindcss-linux-x64"
-  echo "$TAILWIND_SHA256  $cli" | sha256sum --check --status
-  chmod +x "$cli"
-fi
+curl --fail --silent --show-error --location --output "$cli" \
+  "https://github.com/tailwindlabs/tailwindcss/releases/download/$version/tailwindcss-linux-x64"
+printf '%s  %s\n' "$sha256" "$cli" | sha256sum --check
+chmod +x "$cli"
 
 cd Client
 "$cli" --input Styles/app.css --output "$output" --minify

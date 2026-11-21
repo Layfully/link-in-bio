@@ -10,31 +10,21 @@ on:
     types: [opened, synchronize, reopened, closed]
     branches:
       - main
-  # By hand from the Actions tab, and on a publish in Storyblok: its webhook calls the site's own API (Api,
-  # /api/storyblok-webhook), which starts this workflow on main, so the content in the first HTML, the cut-down Font
-  # Awesome and the page's metadata follow the change.
+  # Storyblok dispatches this workflow on main after a content publish.
   workflow_dispatch:
 
-# A newer push to the same branch or pull request replaces a run still in progress: the last deploy would win anyway.
-# Publishes in Storyblok share the group of main, so several in a row end in one deploy.
+# A Storyblok publish can supersede a push to main, so both runs rebuild the editor site.
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
-# The Tailwind CLI that builds app.css, in both jobs (.github/scripts/build-app-css.sh). Dependabot doesn't see it.
-env:
-  TAILWIND_VERSION: v4.3.5
-  TAILWIND_SHA256: e47695cee3f0d90623a91f3939b08bdee610eb5ad99340adff9d4145b284d6cc
-
 jobs:
-  # Needs no secrets, so it also runs for Dependabot's pull requests and pull requests from forks.
   build_job:
     if: github.event_name != 'pull_request' || github.event.action != 'closed'
     runs-on: ubuntu-latest
     name: Build Job
     env:
-      # True when the deploy job runs and publishes the site itself (the same condition as its own). This job then only
-      # tests, and leaves the WebAssembly build tools and publishing to it, rather than doing both twice.
+      # Runs that deploy check publishing in the deploy job.
       DEPLOYS: ${{ (github.event_name != 'pull_request' && github.ref == 'refs/heads/main') || (github.event.pull_request.user.login != 'dependabot[bot]' && github.event.pull_request.head.repo.full_name == github.repository) }}
 
     steps:
@@ -43,14 +33,12 @@ jobs:
         with:
           persist-credentials: false
 
-      # app.css is built by hand and committed (see README) for the dev server. The deploy builds its own from the sources,
-      # so a stale copy never reaches visitors; this warns so the committed one gets rebuilt too, and then uses the
-      # fresh one, like the deploy.
+      # The committed stylesheet serves local development. CI uses the rebuilt copy.
       - name: Check that app.css is up to date
         run: |
           .github/scripts/build-app-css.sh "$RUNNER_TEMP/app.css"
           if ! cmp --silent "$RUNNER_TEMP/app.css" Client/wwwroot/css/app.css; then
-            echo "::warning file=Client/wwwroot/css/app.css::app.css differs from what Tailwind $TAILWIND_VERSION builds from the current sources. Rebuild it as the README describes and commit the result; the deploy uses the rebuilt one meanwhile."
+            echo "::warning file=Client/wwwroot/css/app.css::Rebuild app.css as described in the README and commit the result."
             cp "$RUNNER_TEMP/app.css" Client/wwwroot/css/app.css
           fi
 
@@ -59,31 +47,22 @@ jobs:
         with:
           global-json-file: global.json
 
-      # Without it, publish ships the .NET runtime's WebAssembly file as it comes; with it, the file is relinked for
-      # this app and smaller.
-      # Also tells the build that they're there (Client.csproj turns on the options that need them).
       - name: Install the WebAssembly build tools
         if: env.DEPLOYS != 'true'
         run: |
           dotnet workload install wasm-tools
           echo "WASM_TOOLS_INSTALLED=true" >> "$GITHUB_ENV"
 
-      # Release, like the deploy: warnings are errors there. Builds the whole solution, then runs the tests.
       - name: Build and test
         run: |
           # Restoring the API directly also restores its generated Functions extension project.
           dotnet restore Api/Api.csproj
           dotnet test --solution link-in-bio.slnx --configuration Release
 
-      # The particle background, when Blazor starts, the analytics consent and the CSP check; Node comes with the runner,
-      # the tests need no packages.
       - name: Test the JavaScript
         run: node --test "Tests/js/*.test.mjs"
 
-      # Publishing does more than building: trimming, fingerprinting and the Content Security Policy hash (Csp.targets),
-      # and for the API the Functions metadata. Done here, without tokens, for the runs that don't deploy (Dependabot's
-      # pull requests, forks'), so a change that breaks it fails before it is merged. Every other run publishes in the
-      # deploy job and checks the same there.
+      # Exercise the full publish on PRs that cannot deploy.
       - name: Check that the site and the API publish
         if: env.DEPLOYS != 'true'
         run: |
@@ -91,14 +70,9 @@ jobs:
           node .github/scripts/check-published-csp.mjs "$RUNNER_TEMP/publish/wwwroot"
           dotnet publish Api --configuration Release --output "$RUNNER_TEMP/publish-api"
 
-  # Production gets the public token only. On pushes to main, the "editor" environment, which the Storyblok Visual Editor
-  # previews, is also built with the preview token. That token reads drafts and ships inside the app, so it must
-  # never be part of the production build.
   build_and_deploy_job:
     needs: build_job
-    # Dependabot's pull requests and pull requests from forks get no secrets, so they're built but not deployed.
-    # The pull request's author decides, not who started the run: a re-run of Dependabot's pull request still has no secrets.
-    # Every other run deploys production, so only from main: a run started by hand on another branch is only built.
+    # Check the PR author so rerunning a Dependabot PR still skips deployment.
     if: >-
       (github.event_name != 'pull_request' && github.ref == 'refs/heads/main') ||
       (github.event.action != 'closed' &&
@@ -121,19 +95,14 @@ jobs:
         with:
           global-json-file: global.json
 
-      # Without it, publish ships the .NET runtime's WebAssembly file as it comes; with it, the file is relinked for
-      # this app and smaller.
-      # Also tells the build that they're there (Client.csproj turns on the options that need them).
       - name: Install the WebAssembly build tools
         run: |
           dotnet workload install wasm-tools
           echo "WASM_TOOLS_INSTALLED=true" >> "$GITHUB_ENV"
 
-      # From the sources, so the deploy never ships a committed copy that missed a rebuild. The build job warns about one.
       - name: Build app.css
         run: .github/scripts/build-app-css.sh Client/wwwroot/css/app.css
 
-      # jq writes the values as JSON strings, so characters such as & or # in a token arrive unchanged.
       - name: Publish the site with the public token
         env:
           APPSETTINGS_PATH: Client/wwwroot/appsettings.json
@@ -148,10 +117,6 @@ jobs:
           mv "$RUNNER_TEMP/appsettings.json" "$APPSETTINGS_PATH"
           dotnet publish Client --configuration Release --output publish/site
 
-      # Puts the home page's content and the profile from Storyblok into the published index.html and cuts Font Awesome
-      # down to the icons in use (the Prerender project, see the README's Deployment section). It never fails the deploy:
-      # whatever goes wrong, it warns and leaves the site as published. fonttools (pyftsubset) is installed exactly as
-      # Prerender/requirements.txt pins it, hashes included, into a virtual environment of its own.
       - name: Prerender the home page
         run: |
           if python3 -m venv "$RUNNER_TEMP/fonttools" \
@@ -162,18 +127,14 @@ jobs:
           fi
           dotnet run --project Prerender --configuration Release -- publish/site/wwwroot
 
-      # The prerendered page is a different page from the one Csp.targets hashed: check it against the policy before
-      # it goes live. A failure stops here, and the site stays as last deployed.
+      # Prerendering changes the HTML after publish generates its CSP hashes.
       - name: Check the pages against the Content Security Policy
         run: node .github/scripts/check-published-csp.mjs publish/site/wwwroot
 
-      # The site's API, which passes Storyblok's webhook on to GitHub. Published here and deployed with the site as its
-      # managed functions (README, Deployment); its settings live in the Static Web App, not in the build.
       - name: Publish the API
         run: dotnet publish Api --configuration Release --output publish/api
 
-      # The API goes to production only. Static Web Apps copies production's settings, the GitHub token included, to
-      # pull request environments, where the API would run a branch's unreviewed code with them.
+      # Azure copies production settings to PR environments. Keep the API and its credentials in production.
       - name: Deploy to Azure Static Web Apps
         uses: Azure/static-web-apps-deploy@1a947af9992250f3bc2e68ad0754c0b0c11566c9 # v1
         with:
@@ -186,8 +147,7 @@ jobs:
           skip_app_build: true
           skip_api_build: true
 
-      # Every run on main, also those a publish in Storyblok starts: such a run may have replaced a push's run before
-      # that one reached this step.
+      # The preview token grants draft access. Add it only after publishing the public site.
       - name: Publish the editor build with the preview token
         if: github.event_name != 'pull_request'
         env:
@@ -204,7 +164,6 @@ jobs:
           dotnet publish Client --configuration Release --output publish/editor
           node .github/scripts/check-published-csp.mjs publish/editor/wwwroot
 
-      # A named preview environment: https://<app>-editor.<region>.azurestaticapps.net. Storyblok's preview URL points here.
       - name: Deploy the editor build
         if: github.event_name != 'pull_request'
         uses: Azure/static-web-apps-deploy@1a947af9992250f3bc2e68ad0754c0b0c11566c9 # v1
@@ -218,8 +177,6 @@ jobs:
           skip_app_build: true
           deployment_environment: "editor"
 
-  # Removes the pull request's staging environment; Azure doesn't do this on its own. Pull requests that were never
-  # deployed (Dependabot's, forks') have none.
   close_pull_request_job:
     if: >-
       github.event_name == 'pull_request' && github.event.action == 'closed' &&

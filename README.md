@@ -71,12 +71,15 @@ warnings as errors in both Debug and Release. CI builds in Release.
 
 `Client/Styles/app.css` is the Tailwind CSS 4 source; `Client/wwwroot/css/app.css` is the built file and is committed.
 Publishing puts it inline into `index.html` (see [Content Security Policy](#content-security-policy)).
-After changing classes in a `.razor` file or the source stylesheet, rebuild it from the `Client` folder, using either
-the [standalone Tailwind CLI](https://tailwindcss.com/docs/installation/tailwind-cli) or npm:
+After changing classes in a `.razor` file or the source stylesheet, run the CI build script from the repository root
+on Linux x64 (including WSL):
 
 ```bash
-npx @tailwindcss/cli@4.3.5 --input Styles/app.css --output wwwroot/css/app.css --minify
+.github/scripts/build-app-css.sh Client/wwwroot/css/app.css
 ```
+
+On other platforms, run `npx @tailwindcss/cli@<version> --input Styles/app.css --output wwwroot/css/app.css --minify`
+from `Client`, replacing `<version>` with the version pinned in the script.
 
 CI rebuilds it the same way and warns when the committed file differs. The deploy always ships the file it builds
 itself (`.github/scripts/build-app-css.sh`), so a forgotten rebuild never reaches visitors; the committed copy is for the
@@ -111,8 +114,7 @@ For typed.js, also check that the taglines still take turns without the first on
 `Client/Components/TypedText.razor.js` resets `typed.strPos`, which is typed.js's internal state, not its documented
 API, and a new version may rename or drop it.
 
-The Tailwind CLI is pinned in the workflow, where Dependabot doesn't see it either (`TAILWIND_VERSION` and its
-`TAILWIND_SHA256`, also named in [Styles](#styles)); update it by hand now and then. fonttools and brotli, for the Font
+Update the Tailwind CLI version and SHA-256 together in `.github/scripts/build-app-css.sh`. fonttools and brotli, for the Font
 Awesome cut, are pinned with their hashes in `Prerender/requirements.txt`, which Dependabot keeps up to date.
 
 The particle background used tsParticles until November 2026; it is now drawn by the site's own script
