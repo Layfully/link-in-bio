@@ -1,0 +1,8 @@
+{
+  "name": "link-in-bio-build",
+  "type": "module",
+  "private": true,
+  "devDependencies": {
+    "parse5": "8.0.0"
+  }
+}
