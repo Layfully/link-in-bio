@@ -49,10 +49,15 @@ Add one instance to the `home` story alongside the existing `header` and `list` 
 | `professional_title` | Text | Home page title and structured data job title |
 | `seo_description` | Text | Search and social descriptions in the prerendered HTML |
 | `social_image` | Asset | Optional preview image. Falls back to the header photo. |
+| `canonical_url` | Text | Optional public site origin, such as `https://links.example.com`. |
 
 Publish the `home` story and run the prerender step to update the static metadata. Without this block, the site uses
 the generic title `Links` and can still use the header photo for social previews. The deployment domain and analytics
 settings are configured separately.
+
+Set `canonical_url` on the published `home` story to use it for canonical links, social metadata, `sitemap.xml`, and
+the sitemap link in `robots.txt`. Use an HTTP or HTTPS origin without a path, query, or fragment. The value in
+`Client/wwwroot/appsettings.json` under `Site:Url` is used when the field is missing or invalid, or prerendering is skipped.
 
 ## Tests
 

@@ -10,6 +10,7 @@ builder.RootComponents.Add<App>("#app");
 builder.RootComponents.Add<HeadOutlet>("head::after");
 
 builder.Services.AddSingleton(TimeProvider.System);
+builder.Services.AddSingleton(Site.FromConfiguration(builder.Configuration));
 builder.Services.AddStoryblok(builder.Configuration.GetSection("Storyblok"), typeof(App).Assembly);
 builder.Services.AddHostedService<PrerenderedStoryLoader>();
 

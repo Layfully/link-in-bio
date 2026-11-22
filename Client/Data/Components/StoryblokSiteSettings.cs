@@ -19,6 +19,11 @@ public sealed class StoryblokSiteSettings : StoryblokComponent
     [JsonPropertyName("social_image")]
     public StoryblokAsset? SocialImage { get; set; }
 
+    [JsonPropertyName("canonical_url")]
+    public string? CanonicalUrl { get; set; }
+
+    public string? CanonicalOrigin => Site.ParseOrigin(CanonicalUrl);
+
     public string? PageTitle => (Name, JobTitle) switch
     {
         ({ } name, { } title) => $"{name} - {title}",

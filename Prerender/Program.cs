@@ -1,3 +1,4 @@
+using Client;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Prerender;
@@ -11,10 +12,10 @@ if (args is not [string wwwroot])
 
 try
 {
-    IConfigurationSection storyblok = new ConfigurationBuilder()
+    IConfiguration configuration = new ConfigurationBuilder()
         .AddJsonFile(Path.GetFullPath(Path.Combine(wwwroot, "appsettings.json")))
-        .Build()
-        .GetSection("Storyblok");
+        .Build();
+    IConfigurationSection storyblok = configuration.GetSection("Storyblok");
 
     if (string.IsNullOrWhiteSpace(storyblok["ApiKeyPublic"]))
     {
@@ -26,11 +27,12 @@ try
         return Skip("this is the editor build, which shows drafts");
     }
 
-    await using ServiceProvider services = new ServiceCollection().AddPrerendering(storyblok).BuildServiceProvider();
+    Site site = Site.FromConfiguration(configuration);
+    await using ServiceProvider services = new ServiceCollection().AddPrerendering(storyblok, site).BuildServiceProvider();
 
     RenderedHome home = await HomeRenderer.RenderAsync(services);
     string stories = services.GetRequiredService<PrerenderedStories>().ToJson();
-    new PublishedSite(wwwroot).WriteHome(home.Html, stories, home.Profile);
+    new PublishedSite(wwwroot, site).WriteHome(home.Html, stories, home.Profile);
     Console.WriteLine($"Prerendered the home page into index.html; every other route now falls back to {PublishedSite.ShellFile}.");
 
     foreach (string label in home.LinksWithoutAddress)

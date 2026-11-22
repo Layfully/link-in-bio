@@ -19,13 +19,14 @@ namespace Prerender;
 public static class HomeRenderer
 {
     /// <summary>Registers rendering services and records Storyblok responses for the browser.</summary>
-    public static IServiceCollection AddPrerendering(this IServiceCollection services, IConfiguration storyblok)
+    public static IServiceCollection AddPrerendering(this IServiceCollection services, IConfiguration storyblok, Site site)
     {
         services.AddLogging();
         services.AddSingleton(new PrerenderedStories { IsRecording = true });
         services.AddStoryblok(storyblok, typeof(App).Assembly);
         services.AddSingleton(TimeProvider.System);
-        services.AddSingleton<NavigationManager>(new SiteNavigationManager());
+        services.AddSingleton(site);
+        services.AddSingleton<NavigationManager>(new SiteNavigationManager(site.Url));
         services.AddSingleton<IJSRuntime, NoJavaScript>();
         services.AddSingleton<RenderErrors>();
         services.AddSingleton<IErrorBoundaryLogger>(provider => provider.GetRequiredService<RenderErrors>());
@@ -113,6 +114,7 @@ public static class HomeRenderer
             Title = settings?.PageTitle,
             Description = settings?.Description,
             ImageAlt = string.IsNullOrWhiteSpace(photo?.Alt) ? settings?.Name : photo.Alt,
+            CanonicalOrigin = settings?.CanonicalOrigin,
         };
     }
 
@@ -129,7 +131,7 @@ public static class HomeRenderer
 
     private sealed class SiteNavigationManager : NavigationManager
     {
-        public SiteNavigationManager() => Initialize($"{Site.Url}/", $"{Site.Url}/");
+        public SiteNavigationManager(string url) => Initialize($"{url}/", $"{url}/");
 
         protected override void NavigateToCore(string uri, NavigationOptions options) =>
             throw new NotSupportedException("Nothing navigates while the home page is prerendered.");

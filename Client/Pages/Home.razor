@@ -2,11 +2,12 @@
 @implements IAsyncDisposable
 @inject StoryblokStoryClient StoryblokClient
 @inject PrerenderedStories Prerendered
+@inject Site CanonicalSite
 @page "/"
 
 <PageTitle>@Title</PageTitle>
 <HeadContent>
-    <link rel="canonical" href="@($"{Site.Url}/")" />
+    <link rel="canonical" href="@($"{CanonicalUrl}/")" />
 </HeadContent>
 @* Provide a heading while the profile header is absent. *@
 @if (_state is not Loaded { Header: not null })
@@ -53,6 +54,7 @@
     private bool _edited;
     private PageState _state = new Loading();
     private string Title => _state is Loaded { Settings.PageTitle: { } title } ? title : Site.Name;
+    private string CanonicalUrl => _state is Loaded { Settings.CanonicalOrigin: { } url } ? url : CanonicalSite.Url;
 
     private ContentStatus ContentStatus => _state switch
     {

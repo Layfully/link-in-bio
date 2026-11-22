@@ -2,6 +2,7 @@
 @implements IAsyncDisposable
 @inject StoryblokStoryClient StoryblokClient
 @inject NavigationManager Navigation
+@inject Site CanonicalSite
 @page "/Certificate/{name}"
 
 <PageTitle>@Title</PageTitle>
@@ -9,7 +10,7 @@
 @if (_state is Loaded loaded)
 {
     <HeadContent>
-        <link rel="canonical" href="@($"{Site.Url}/Certificate/{Uri.EscapeDataString(Name ?? string.Empty)}")" />
+        <link rel="canonical" href="@($"{CanonicalSite.Url}/Certificate/{Uri.EscapeDataString(Name ?? string.Empty)}")" />
     </HeadContent>
     @* Match the skeleton's card size and reserve space for the image. *@
     <figure class="card z-20 relative w-10/12 sm:w-9/12 xl:w-1/2 p-2 sm:p-3 reveal" @attributes="@loaded.EditorAttributes">
