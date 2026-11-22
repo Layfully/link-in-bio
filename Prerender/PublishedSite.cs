@@ -9,7 +9,7 @@ using System.Text.RegularExpressions;
 namespace Prerender;
 
 /// <summary>Writes the prerendered home page into the published <c>wwwroot</c>.</summary>
-public sealed partial class PublishedSite(string wwwroot)
+public sealed partial class PublishedSite(string wwwroot, Site site)
 {
     /// <summary>The app shell served for non-home routes.</summary>
     public const string ShellFile = "app-shell.html";
@@ -27,10 +27,11 @@ public sealed partial class PublishedSite(string wwwroot)
     {
         string indexPath = Path.Combine(wwwroot, "index.html");
         string configPath = Path.Combine(wwwroot, "staticwebapp.config.json");
-        string page = WithProfile(File.ReadAllText(indexPath), profile);
+        string origin = profile.CanonicalOrigin ?? site.Url;
+        string page = WithProfile(ReadWithOrigin(indexPath, origin), profile);
         string config = File.ReadAllText(configPath);
 
-        string home = BuildHomePage(page, html, prerenderedJson, indexPath);
+        string home = BuildHomePage(page, html, prerenderedJson, indexPath, origin);
 
         // Replace the rewrite as text to preserve the config's formatting.
         if (!config.Contains(RewriteToIndex, StringComparison.Ordinal))
@@ -38,16 +39,43 @@ public sealed partial class PublishedSite(string wwwroot)
             throw new InvalidOperationException($"{configPath} has no {RewriteToIndex} to change.");
         }
 
-        File.WriteAllText(Path.Combine(wwwroot, ShellFile), page);
-        File.WriteAllText(indexPath, home);
-        File.WriteAllText(configPath, config.Replace(RewriteToIndex, $"\"rewrite\": \"/{ShellFile}\"", StringComparison.Ordinal));
+        if (origin != site.Url)
+        {
+            WriteCanonicalFiles(origin);
+        }
 
-        // The compressed copies still contain the original page.
-        File.Delete(indexPath + ".br");
-        File.Delete(indexPath + ".gz");
+        WriteUncompressed(Path.Combine(wwwroot, ShellFile), page);
+        WriteUncompressed(indexPath, home);
+        WriteUncompressed(configPath, config.Replace(RewriteToIndex, $"\"rewrite\": \"/{ShellFile}\"", StringComparison.Ordinal));
     }
 
-    private static string BuildHomePage(string page, string html, string prerenderedJson, string indexPath)
+    private void WriteCanonicalFiles(string origin)
+    {
+        string settingsPath = Path.Combine(wwwroot, "appsettings.json");
+        string robotsPath = Path.Combine(wwwroot, "robots.txt");
+        string sitemapPath = Path.Combine(wwwroot, "sitemap.xml");
+
+        JsonNode settings = JsonNode.Parse(File.ReadAllText(settingsPath))!;
+        settings["Site"]!["Url"] = origin;
+        string robots = ReadWithOrigin(robotsPath, origin);
+        string sitemap = ReadWithOrigin(sitemapPath, origin);
+
+        WriteUncompressed(settingsPath, settings.ToJsonString(IndentedJson));
+        WriteUncompressed(robotsPath, robots);
+        WriteUncompressed(sitemapPath, sitemap);
+    }
+
+    private string ReadWithOrigin(string path, string origin) =>
+        File.ReadAllText(path).Replace($"{site.Url}/", $"{origin}/", StringComparison.Ordinal);
+
+    private static void WriteUncompressed(string path, string contents)
+    {
+        File.WriteAllText(path, contents);
+        File.Delete(path + ".br");
+        File.Delete(path + ".gz");
+    }
+
+    private static string BuildHomePage(string page, string html, string prerenderedJson, string indexPath, string origin)
     {
         int headEnd = page.IndexOf("</head>", StringComparison.OrdinalIgnoreCase);
         int start = page.IndexOf(StartMarker, StringComparison.Ordinal);
@@ -61,7 +89,7 @@ public sealed partial class PublishedSite(string wwwroot)
         // PrerenderedStories.ToJson escapes HTML delimiters for this JSON data block.
         string data = $"""<script type="application/json" id="{PrerenderedStories.ElementId}">{prerenderedJson}</script>""";
         ReadOnlySpan<char> template = page.AsSpan();
-        string canonical = HeadTags(page, headEnd, [$"""<link rel="canonical" href="{Site.Url}/" />"""]);
+        string canonical = HeadTags(page, headEnd, [$"""<link rel="canonical" href="{WebUtility.HtmlEncode(origin)}/" />"""]);
 
         string home = $"{template[..headEnd]}{canonical}" +
             $"{template[headEnd..start]}{html}{template[(end + EndMarker.Length)..bodyEnd]}" +

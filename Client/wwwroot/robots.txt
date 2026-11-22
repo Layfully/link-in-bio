@@ -1,4 +1,4 @@
 User-agent: *
 Allow: /
 
-Sitemap: https://adriangaborek.dev/sitemap.xml
+Sitemap: __SITE_ORIGIN__/sitemap.xml

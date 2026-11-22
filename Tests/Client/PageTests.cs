@@ -27,6 +27,7 @@ public sealed class PageTests : IDisposable
     {
         _context.JSInterop.Mode = JSRuntimeMode.Loose;
         _context.Services.AddSingleton(TimeProvider.System);
+        _context.Services.AddSingleton(new Site("https://site.example"));
         _context.Services.AddSingleton(_prerendered);
         _context.Services.AddSingleton(new StoryblokStoryClient(
             Options.Create(new StoryblokOptions { ApiKeyPublic = "public-token" }),
