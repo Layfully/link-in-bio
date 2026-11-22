@@ -10,5 +10,5 @@ public sealed class StoryblokList : StoryblokComponent
     [JsonPropertyName("entries")]
     public StoryblokComponent[]? Entries { get; set; }
 
-    public IReadOnlyList<T> EntriesOf<T>() where T : StoryblokComponent => Entries?.OfType<T>().ToList() ?? [];
+    public IReadOnlyList<T> EntriesOf<T>() where T : StoryblokComponent => Entries?.OfType<T>().ToArray() ?? [];
 }

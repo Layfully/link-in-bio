@@ -25,8 +25,8 @@ public sealed class ComponentTests : IDisposable
         _context.Services.AddSingleton<TimeProvider>(_time);
         _context.Services.AddSingleton(Options.Create(new StoryblokOptions { ApiKeyPublic = "public-token" }));
         // The layout renders the Visual Editor bridge, which needs the client; nothing here loads a story.
-        _context.Services.AddSingleton(new StoryblokStoryClient(
-            Options.Create(new StoryblokOptions { ApiKeyPublic = "public-token" }),
+        _context.Services.AddSingleton(services => new StoryblokStoryClient(
+            services.GetRequiredService<IOptions<StoryblokOptions>>(),
             new StoryblokComponentTypes(Array.Empty<System.Reflection.Assembly>()),
             _storyblok,
             new PrerenderedStories(),
@@ -103,18 +103,11 @@ public sealed class ComponentTests : IDisposable
     {
         IRenderedComponent<StoryblokStatus> status = RenderStatus(ContentStatus.Loading);
 
-        for (int second = 1; second <= 3; second++)
-        {
-            _time.Advance(TimeSpan.FromSeconds(1));
-        }
+        _time.Advance(TimeSpan.FromSeconds(3));
 
         status.WaitForAssertion(() => Assert.StartsWith("Still loading.", LiveRegion(status)));
 
-        for (int second = 4; second <= 8; second++)
-        {
-            _time.Advance(TimeSpan.FromSeconds(1));
-        }
-
+        _time.Advance(TimeSpan.FromSeconds(5));
         status.WaitForAssertion(() => Assert.StartsWith("This is taking longer than usual.", LiveRegion(status)));
     }
 
@@ -122,10 +115,7 @@ public sealed class ComponentTests : IDisposable
     public void A_new_load_counts_from_zero_again()
     {
         IRenderedComponent<StoryblokStatus> status = RenderStatus(ContentStatus.Loading);
-        for (int second = 1; second <= 4; second++)
-        {
-            _time.Advance(TimeSpan.FromSeconds(1));
-        }
+        _time.Advance(TimeSpan.FromSeconds(4));
 
         status.WaitForAssertion(() => Assert.StartsWith("Still loading.", LiveRegion(status)));
 

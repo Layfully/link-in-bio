@@ -2,17 +2,17 @@ using System.Text.Json.Serialization;
 
 namespace Storyblok;
 
-/// <summary>A story as Storyblok delivers it. Only the fields the site uses are read.</summary>
+/// <summary>A story from the Storyblok API.</summary>
 public class StoryblokStory
 {
     [JsonPropertyName("name")]
     public string? Name { get; set; }
 
-    /// <summary>The story's slug with its folders, such as <c>certificates/az-204</c>; tells which page an edit belongs to.</summary>
+    /// <summary>The story's slug including its folders, used to match live edits.</summary>
     [JsonPropertyName("full_slug")]
     public string? FullSlug { get; set; }
 
-    /// <summary>The story's content block. Null when Storyblok sends <c>"content": null</c>, which System.Text.Json sets without asking a converter.</summary>
+    /// <summary>The content block. An omitted field keeps the default block, while an explicit JSON <c>null</c> clears it.</summary>
     [JsonPropertyName("content")]
     public StoryblokComponent? Content { get; set; } = new();
 }
@@ -30,7 +30,7 @@ internal sealed class StoryblokStoryContainer
     [JsonPropertyName("story")]
     public StoryblokStory? Story { get; set; }
 
-    /// <summary>The cache version Storyblok returned with this response. It is passed back as <c>cv</c> on later requests.</summary>
+    /// <summary>The cache version for subsequent requests.</summary>
     [JsonPropertyName("cv")]
     public long CacheVersion { get; set; }
 }

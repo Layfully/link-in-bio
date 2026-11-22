@@ -2,16 +2,12 @@
 @inject NavigationManager Navigation
 @inject TimeProvider Time
 
-@* The screen reader's view of the loading hint, announced politely (role="status"). It stays on the page and gets its
-   text only after the first second: screen readers often skip a live region that arrives together with its text,
-   and a load that finishes within a second isn't worth announcing. *@
+@* Mount the live region before adding the first loading announcement. *@
 <p class="sr-only" role="status">@(Status == ContentStatus.Loading && _secondsWaiting > 0 ? LoadingHint : null)</p>
 
 @if (Status == ContentStatus.Loading)
 {
-    @* The status line hangs below the placeholder without taking up layout space: the page centres its content
-       vertically, so a line that disappears on load would shift the real content compared with the placeholder.
-       It is hidden from screen readers, which hear the same text from the live region above. *@
+    @* Position the hint below the placeholder so it doesn't shift the layout. *@
     <div class="relative z-20 flex w-full flex-col items-center">
         @Placeholder
         <p class="absolute inset-x-0 top-full mt-8 flex items-center justify-center gap-x-3 px-8 text-center text-sm text-neutral-400" aria-hidden="true">
@@ -28,7 +24,7 @@ else if (Status == ContentStatus.Unavailable)
 {
     <Notice Icon="fa-cloud-bolt" Title="@Message" Text="The content service isn't responding at the moment. Please try again in a little while.">
         <Actions>
-            <button type="button" class="action-button" @onclick="Retry">Try again</button>
+            <button type="button" class="action-button" @onclick="() => Navigation.Refresh(forceReload: true)">Try again</button>
         </Actions>
     </Notice>
 }
@@ -69,24 +65,19 @@ else if (Status == ContentStatus.Unreadable)
     // Each load counts from zero. A page can load again without being recreated (another certificate, say).
     protected override void OnParametersSet()
     {
-        if (Status == ContentStatus.Loading)
-        {
-            if (_waitingTimer is null)
-            {
-                _secondsWaiting = 0;
-                _waitingTimer = new PeriodicTimer(TimeSpan.FromSeconds(1), Time);
-                _ = CountWaitingSecondsAsync(_waitingTimer, Time.GetTimestamp());
-            }
-        }
-        else
+        if (Status != ContentStatus.Loading)
         {
             StopWaitingTimer();
         }
+        else if (_waitingTimer is null)
+        {
+            _secondsWaiting = 0;
+            _waitingTimer = new PeriodicTimer(TimeSpan.FromSeconds(1), Time);
+            _ = CountWaitingSecondsAsync(_waitingTimer, Time.GetTimestamp());
+        }
     }
 
-    // Ends on its own once the timer is disposed: WaitForNextTickAsync then returns false.
-    // Each tick measures the time since the load began rather than counting ticks: a timer that falls behind, as in a
-    // background tab where browsers throttle timers, delivers one tick for several seconds.
+    // Measure elapsed time because browsers may throttle background timers.
     private async Task CountWaitingSecondsAsync(PeriodicTimer timer, long loadStarted)
     {
         while (await timer.WaitForNextTickAsync())
@@ -101,9 +92,6 @@ else if (Status == ContentStatus.Unreadable)
         _waitingTimer?.Dispose();
         _waitingTimer = null;
     }
-
-    // A full reload starts the app over, including the Storyblok client's cached state, rather than repeating one request.
-    private void Retry() => Navigation.NavigateTo(Navigation.Uri, forceLoad: true);
 
     public void Dispose() => StopWaitingTimer();
 }

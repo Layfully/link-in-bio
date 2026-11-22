@@ -1,21 +1,19 @@
+@using Microsoft.JSInterop
+@using Client.Interop
 @implements IAsyncDisposable
 @inject IJSRuntime Js
 @inject ILogger<TypedText> Logger
 
 @if (_texts.Length > 0)
 {
-    @* Screen readers get every tagline as its own paragraph; the animated line would only ever offer a half-typed fragment. *@
+    @* Give screen readers complete taglines. *@
     <div class="sr-only">
         @foreach (string text in _texts)
         {
             <p>@text</p>
         }
     </div>
-    @* A fixed size, because the line is typed and deleted letter by letter and the header shouldn't move with it:
-       the height for wrapped lines (up to four on a phone, two in the larger type from tablet width up), the full
-       width so the header's width doesn't follow the text.
-       Until the typing starts, CSS shows the first tagline from data-first: on the prerendered home page Blazor, and so
-       the typing, starts only seconds after the page has loaded. Not as the element's text, which typed.js owns. *@
+    @* Reserve space for wrapped text and show the first tagline before JavaScript starts. *@
     <p @ref="_output" data-first="@_texts[0]" class="flex h-32 sm:h-24 w-full items-center justify-center px-8 text-center text-2xl font-bold tracking-tight text-white sm:text-3xl not-data-started:before:content-[attr(data-first)]" aria-hidden="true"></p>
 }
 
@@ -29,8 +27,7 @@
     private string[] _texts = [];
     private bool _textsChanged;
 
-    // The header re-renders with the same list, so only a new list restarts the animation.
-    // Blank taglines are left out of both the animation and the screen reader copy.
+    // Restart only when the source list changes.
     protected override void OnParametersSet()
     {
         if (ReferenceEquals(Model, _textsSource))
@@ -43,35 +40,23 @@
         _textsChanged = true;
     }
 
-    protected override async Task OnAfterRenderAsync(bool firstRender)
+    protected override Task OnAfterRenderAsync(bool firstRender)
     {
         if (!_textsChanged)
         {
-            return;
+            return Task.CompletedTask;
         }
 
         _textsChanged = false;
 
         if (_texts.Length == 0)
         {
-            // The line is gone from the page; an animation started for earlier texts must not keep running.
-            if (_interop is not null)
-            {
-                await _interop.StopAsync();
-            }
-
-            return;
+            return _interop?.StopAsync().AsTask() ?? Task.CompletedTask;
         }
 
         _interop ??= new TypedTextInterop(Js, Logger);
-        await _interop.StartAsync(_output, _texts);
+        return _interop.StartAsync(_output, _texts).AsTask();
     }
 
-    public async ValueTask DisposeAsync()
-    {
-        if (_interop is not null)
-        {
-            await _interop.DisposeAsync();
-        }
-    }
+    public ValueTask DisposeAsync() => _interop?.DisposeAsync() ?? ValueTask.CompletedTask;
 }

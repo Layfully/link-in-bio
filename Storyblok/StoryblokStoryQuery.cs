@@ -14,21 +14,14 @@ public sealed class StoryblokStoryQuery(StoryblokStoryClient client)
     }
 
     /// <summary>
-    /// Loads the story. Instead of throwing, a story that doesn't exist is <see cref="StoryNotFound"/>, a Storyblok outage
-    /// is <see cref="StoryblokUnavailable"/> and content that doesn't fit <typeparamref name="T"/> is <see cref="StoryUnreadable"/>,
-    /// so a page can still render without its content.
+    /// Loads the story and returns its content or a typed failure result.
     /// </summary>
     public Task<StoryLoadResult<T>> TryLoad<T>(CancellationToken cancellationToken = default) where T : StoryblokComponent
-    {
-        return client.TryLoadStory<T>(_slug, cancellationToken);
-    }
+        => client.TryLoadStory<T>(_slug, cancellationToken);
 
     /// <summary>
-    /// Asks Storyblok again for a story the page came with (see <see cref="PrerenderedStories"/>), past every cache. Null when
-    /// the page came without it or the story hasn't changed since; otherwise the outcome, like <see cref="TryLoad{T}"/>.
+    /// Refreshes a prerendered story. Returns <c>null</c> when there's nothing to refresh or the story is unchanged.
     /// </summary>
     public Task<StoryLoadResult<T>?> TryRefresh<T>(CancellationToken cancellationToken = default) where T : StoryblokComponent
-    {
-        return client.TryRefreshStory<T>(_slug, cancellationToken);
-    }
+        => client.TryRefreshStory<T>(_slug, cancellationToken);
 }

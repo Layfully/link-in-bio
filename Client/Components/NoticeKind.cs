@@ -1,11 +1,11 @@
 namespace Client.Components;
 
-/// <summary>What a <c>Notice</c> tells the visitor, which decides how urgently screen readers announce it.</summary>
+/// <summary>Controls how a notice is announced.</summary>
 public enum NoticeKind
 {
-    /// <summary>Something went wrong. Announced immediately (<c>role="alert"</c>).</summary>
+    /// <summary>Announced as an alert.</summary>
     Problem,
 
-    /// <summary>Neutral information, such as "nothing here". Announced when the screen reader is idle (<c>role="status"</c>).</summary>
+    /// <summary>Announced as a polite status update.</summary>
     Information,
 }

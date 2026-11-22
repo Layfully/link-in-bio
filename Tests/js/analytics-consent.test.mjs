@@ -1,6 +1,4 @@
-// Google Analytics only with consent (Client/wwwroot/js/analytics-consent.js). Run with: node --test "Tests/js/*.test.mjs"
-// The promise these tests keep: no Google script, no Google cookie and no request before the visitor says yes, and a
-// "No thanks" later removes what an earlier "Allow" set.
+// Run with: node --test Tests/js/analytics-consent.test.mjs
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
@@ -91,12 +89,14 @@ test('Allow loads Analytics, with cookies that last 13 months, and remembers the
     page.answer('granted');
 
     assert.equal(page.banner.hidden, true);
-    assert.equal(googleScripts(page).length, 1);
-    assert.match(googleScripts(page)[0].src, new RegExp(`id=${MEASUREMENT_ID}$`));
+    assert.deepEqual(googleScripts(page).map(({ src }) => src), [
+        `https://www.googletagmanager.com/gtag/js?id=${MEASUREMENT_ID}`
+    ]);
     assert.equal(page.window[`ga-disable-${MEASUREMENT_ID}`], false);
     // Compared as JSON: the script's objects come from its own realm (vm), with prototypes of their own.
-    const config = page.window.dataLayer.map(entry => JSON.stringify([...entry])).find(entry => entry.startsWith('["config"'));
-    assert.equal(config, JSON.stringify(['config', MEASUREMENT_ID, { cookie_expires: 395 * 24 * 60 * 60 }]));
+    const config = page.window.dataLayer.find(entry => entry[0] === 'config');
+    assert.ok(config);
+    assert.equal(JSON.stringify([...config]), JSON.stringify(['config', MEASUREMENT_ID, { cookie_expires: 395 * 24 * 60 * 60 }]));
     assert.equal(JSON.parse(page.storage.get(STORAGE_KEY)).choice, 'granted');
 });
 

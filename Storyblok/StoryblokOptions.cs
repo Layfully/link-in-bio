@@ -2,27 +2,17 @@ namespace Storyblok;
 
 public sealed class StoryblokOptions
 {
-    /// <summary>
-    /// The public token, which reads published content. It ships with the site, so anyone can read it; that is what it's for.
-    /// </summary>
+    /// <summary>The public token for published content, included in the site build.</summary>
     public string? ApiKeyPublic { get; set; }
 
-    /// <summary>
-    /// The preview token, which also reads drafts. Only the build for the Visual Editor has it; production never does,
-    /// because everything in a WebAssembly app's configuration can be downloaded by any visitor.
-    /// </summary>
+    /// <summary>The token for reading drafts, included only in the Visual Editor build.</summary>
     public string? ApiKeyPreview { get; set; }
 
-    /// <summary>
-    /// True while the app runs inside the Storyblok Visual Editor (and has the preview token).
-    /// Stories are then loaded as drafts with the preview token and are never cached.
-    /// </summary>
+    /// <summary>Loads uncached drafts using the preview token when the Visual Editor is active.</summary>
     public bool IsInEditor { get; set; }
 
     public string BaseUrl { get; set; } = "https://api.storyblok.com/v2/cdn";
 
-    /// <summary>
-    /// The duration (in seconds) that all loaded stories will be cached locally. 0 turns caching off.
-    /// </summary>
+    /// <summary>Local cache lifetime in seconds. Zero disables caching.</summary>
     public int CacheDurationSeconds { get; set; } = 60 * 15;
 }

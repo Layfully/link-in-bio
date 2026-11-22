@@ -234,14 +234,8 @@ public sealed class StoryblokStoryClient : IDisposable
             return prerendered;
         }
 
-        // Drafts in the Visual Editor must always be fresh. A cache duration of 0 turns caching off.
-        if (LoadDrafts || _settings.CacheDurationSeconds <= 0)
-        {
-            return (await LoadStoryFromStoryblok(path, cancellationToken)).Story;
-        }
-
         // A story Storyblok said doesn't exist is cached too (as null), so a mistyped address isn't asked about again.
-        if (_cache.TryGet(path, out StoryblokStory? cached))
+        if (CanCache && _cache.TryGet(path, out StoryblokStory? cached))
         {
             _logger.LogTrace("Using the cached answer for {Path}.", path);
             return cached;
@@ -252,11 +246,11 @@ public sealed class StoryblokStoryClient : IDisposable
         return story;
     }
 
-    // Caches an answer (a story, or null for one that doesn't exist) the way a load from Storyblok does, unless caching
-    // is off.
+    private bool CanCache => !LoadDrafts && _settings.CacheDurationSeconds > 0;
+
     private void Remember(string path, StoryblokStory? story)
     {
-        if (!LoadDrafts && _settings.CacheDurationSeconds > 0)
+        if (CanCache)
         {
             _cache.Set(path, story, TimeSpan.FromSeconds(_settings.CacheDurationSeconds));
         }
@@ -292,18 +286,16 @@ public sealed class StoryblokStoryClient : IDisposable
     // Also returns the response as Storyblok sent it, for recording (PrerenderedStories) and for comparing on a refresh.
     private async Task<(StoryblokStory? Story, string? Response)> LoadStoryFromStoryblok(string path, CancellationToken cancellationToken)
     {
-        List<string> query = [$"version={(LoadDrafts ? "draft" : "published")}"];
+        string request = $"stories/{path}?version={(LoadDrafts ? "draft" : "published")}";
 
         // Drafts must always be fresh. Published content comes from the CDN for the cache version last seen, while that
         // is recent; after that, a request without one gets the latest.
         bool sentCacheVersion = false;
         if (!LoadDrafts && _cacheVersion is { } cacheVersion && _time.GetUtcNow() < _cacheVersionExpires)
         {
-            query.Add($"cv={cacheVersion}");
+            request += $"&cv={cacheVersion}";
             sentCacheVersion = true;
         }
-
-        string request = $"stories/{path}?{string.Join('&', query)}";
 
         // Logged without the token, which is added only to the address actually requested.
         _logger.LogTrace("Loading {Request} from Storyblok.", request);

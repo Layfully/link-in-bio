@@ -2,10 +2,7 @@ using System.Text.Json.Serialization;
 
 namespace Storyblok;
 
-/// <summary>
-/// A block from Storyblok. Blocks the app has a class for are read into that class (see <see cref="StoryblokComponentTypes"/>);
-/// any other block is kept as this base type with only its id and name.
-/// </summary>
+/// <summary>The base type for Storyblok blocks and the fallback for unregistered component names.</summary>
 public class StoryblokComponent
 {
     [JsonPropertyName("_uid")]
@@ -14,10 +11,7 @@ public class StoryblokComponent
     [JsonPropertyName("component")]
     public string Component { get; set; } = string.Empty;
 
-    /// <summary>
-    /// Where the block is in Storyblok, for the Visual Editor's click-to-edit (see
-    /// <see cref="Extensions.VisualEditorExtensions.EditorAttributes"/>). Only drafts carry it.
-    /// </summary>
+    /// <summary>The draft block's click-to-edit marker for the Visual Editor.</summary>
     [JsonPropertyName("_editable")]
     public string? Editable { get; set; }
 }

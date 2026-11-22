@@ -5,10 +5,7 @@ using System.Reflection;
 
 namespace Storyblok;
 
-/// <summary>
-/// The classes Storyblok components are read into, by technical component name (<c>[StoryblokComponent("page")]</c>).
-/// Built once from the assemblies the app names, rather than by scanning every loaded assembly, framework included.
-/// </summary>
+/// <summary>Maps Storyblok component names to classes in the supplied assemblies.</summary>
 public sealed class StoryblokComponentTypes
 {
     private readonly FrozenDictionary<string, Type> _types;
@@ -18,7 +15,7 @@ public sealed class StoryblokComponentTypes
     {
     }
 
-    /// <summary>Only the given classes, for tests: an assembly holds every test's classes, deliberately broken ones included.</summary>
+    /// <summary>Builds a registry from explicit types for tests.</summary>
     internal StoryblokComponentTypes(IEnumerable<Type> candidates)
     {
         Dictionary<string, Type> types = new(StringComparer.Ordinal);
@@ -41,7 +38,7 @@ public sealed class StoryblokComponentTypes
             }
         }
 
-        _types = types.ToFrozenDictionary(StringComparer.Ordinal);
+        _types = types.ToFrozenDictionary(types.Comparer);
     }
 
     public bool TryGetType(string componentName, [NotNullWhen(true)] out Type? type) => _types.TryGetValue(componentName, out type);

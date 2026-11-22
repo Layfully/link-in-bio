@@ -2,10 +2,7 @@ using Microsoft.JSInterop;
 
 namespace LinkInBio.Tests;
 
-/// <summary>
-/// A JavaScript runtime for the interop classes: <c>import</c> answers with <see cref="OnImport"/>, any other call fails.
-/// Unlike bUnit's JS interop, a test decides exactly when each import or call finishes.
-/// </summary>
+/// <summary>Records module imports and lets tests control when they complete.</summary>
 internal sealed class FakeJs : IJSRuntime
 {
     public List<string> Imports { get; } = [];
@@ -28,14 +25,14 @@ internal sealed class FakeJs : IJSRuntime
         InvokeAsync<TValue>(identifier, args);
 }
 
-/// <summary>A JavaScript object, a module or a handle it returned: records the calls it gets and answers with <see cref="OnCall"/>.</summary>
+/// <summary>Records JavaScript calls and delegates their results to <see cref="OnCall"/>.</summary>
 internal sealed class FakeJsObject : IJSObjectReference
 {
     public List<string> Calls { get; } = [];
 
     public bool IsReleased { get; private set; }
 
-    /// <summary>Answers a call by its method name. By default every call finishes at once without a value.</summary>
+    /// <summary>Returns a result by method name. Defaults to a completed call with no value.</summary>
     public Func<string, Task<object?>> OnCall { get; set; } = _ => Task.FromResult<object?>(null);
 
     public async ValueTask<TValue> InvokeAsync<TValue>(string identifier, object?[]? args)

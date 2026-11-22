@@ -59,7 +59,7 @@ function load({ prerendered, parsed = true, loaded = false, idleCallbacks = true
 // A fake #app holding links. render() swaps them for fresh copies, as Blazor's first render does with the prerendered
 // content: the old elements leave the page, and focus on one of them goes back to the body.
 function fakeApp(page, hrefs) {
-    const focusListeners = [];
+    const focusListeners = new Set();
     const link = href => {
         const element = {
             isConnected: true,
@@ -72,7 +72,8 @@ function fakeApp(page, hrefs) {
         links: hrefs.map(link),
         get childNodes() { return app.links; },
         querySelectorAll: () => app.links,
-        addEventListener: (type, listener) => { if (type === 'focusin') focusListeners.push(listener); },
+        addEventListener: (type, listener) => { if (type === 'focusin') focusListeners.add(listener); },
+        removeEventListener: (type, listener) => { if (type === 'focusin') focusListeners.delete(listener); },
         focus(element) {
             page.document.activeElement = element;
             for (const listener of focusListeners) listener({ target: element });

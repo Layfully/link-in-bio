@@ -1,17 +1,17 @@
 namespace Client.Components;
 
-/// <summary>Where a page's Storyblok content is, which decides what <c>StoryblokStatus</c> shows.</summary>
+/// <summary>Controls what the Storyblok status component displays.</summary>
 public enum ContentStatus
 {
-    /// <summary>Still being requested: a placeholder and a loading hint.</summary>
+    /// <summary>Show a placeholder and loading hint.</summary>
     Loading,
 
-    /// <summary>The request finished and the page shows its own outcome (the content, "not found" or "nothing here yet").</summary>
+    /// <summary>Let the page display the result.</summary>
     Done,
 
-    /// <summary>Storyblok couldn't deliver the content, even after retries: a notice with a retry button.</summary>
+    /// <summary>Show a retry notice when Storyblok is unavailable.</summary>
     Unavailable,
 
-    /// <summary>Storyblok delivered content the site can't read: a notice without a retry button, which wouldn't help.</summary>
+    /// <summary>Show a notice when the published content can't be read.</summary>
     Unreadable,
 }

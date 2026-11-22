@@ -1,14 +1,8 @@
-// Turns stylesheets that index.html only preloads (marked data-deferred-style) into real stylesheets, so they download early
-// without blocking the first paint. A script file rather than an inline onload handler, which the Content Security Policy blocks.
+// Apply preloaded styles asynchronously without an inline handler.
 for (const preload of document.querySelectorAll('link[rel="preload"][as="style"][data-deferred-style]')) {
-    const stylesheet = document.createElement('link');
+    const stylesheet = preload.cloneNode();
     stylesheet.rel = 'stylesheet';
-    stylesheet.href = preload.href;
-
-    // Same integrity, CORS mode and referrer policy as the preload, so the browser reuses the preloaded file.
-    for (const attribute of ['integrity', 'crossorigin', 'referrerpolicy']) {
-        if (preload.hasAttribute(attribute)) stylesheet.setAttribute(attribute, preload.getAttribute(attribute));
-    }
-
+    stylesheet.removeAttribute('as');
+    stylesheet.removeAttribute('data-deferred-style');
     preload.after(stylesheet);
 }

@@ -4,10 +4,7 @@ using Microsoft.JSInterop;
 
 namespace LinkInBio.Tests.Client;
 
-/// <summary>
-/// The classes behind the typing animation and the particle background: an effect that finishes starting after it
-/// was replaced or its page was left is stopped, and a failed import is tried again.
-/// </summary>
+/// <summary>Tests typing animation cleanup and module import retries.</summary>
 public sealed class InteropTests : IAsyncDisposable
 {
     private static readonly string[] Taglines = ["Developer", "Climber"];
@@ -30,8 +27,7 @@ public sealed class InteropTests : IAsyncDisposable
         await interop.StartAsync(default, Taglines);
         await interop.StartAsync(default, Taglines);
 
-        Assert.Equal(["stop"], first.Calls);
-        Assert.True(first.IsReleased);
+        AssertStopped(first);
         Assert.Empty(second.Calls);
     }
 
@@ -39,8 +35,8 @@ public sealed class InteropTests : IAsyncDisposable
     public async Task A_start_that_finishes_after_a_newer_one_began_is_stopped()
     {
         TaskCompletionSource<object?> olderStart = new(), newerStart = new();
-        Queue<TaskCompletionSource<object?>> starts = new([olderStart, newerStart]);
-        _module.OnCall = _ => starts.Dequeue().Task;
+        Queue<Task<object?>> starts = new([olderStart.Task, newerStart.Task]);
+        _module.OnCall = _ => starts.Dequeue();
         FakeJsObject older = new(), newer = new();
         await using TypedTextInterop interop = new(_js, NullLogger.Instance);
 
@@ -51,8 +47,7 @@ public sealed class InteropTests : IAsyncDisposable
         await olderTask;
         await newerTask;
 
-        Assert.Equal(["stop"], older.Calls);
-        Assert.True(older.IsReleased);
+        AssertStopped(older);
         Assert.Empty(newer.Calls);
         Assert.False(newer.IsReleased);
     }
@@ -67,8 +62,7 @@ public sealed class InteropTests : IAsyncDisposable
         await interop.StartAsync(default, Taglines);
         await interop.StopAsync();
 
-        Assert.Equal(["stop"], animation.Calls);
-        Assert.True(animation.IsReleased);
+        AssertStopped(animation);
     }
 
     [Fact]
@@ -81,8 +75,7 @@ public sealed class InteropTests : IAsyncDisposable
         await interop.StartAsync(default, Taglines);
         await interop.DisposeAsync();
 
-        Assert.Equal(["stop"], animation.Calls);
-        Assert.True(animation.IsReleased);
+        AssertStopped(animation);
         Assert.True(_module.IsReleased);
     }
 
@@ -98,5 +91,11 @@ public sealed class InteropTests : IAsyncDisposable
 
         Assert.Equal(2, _js.Imports.Count);
         Assert.Equal(["start"], _module.Calls);
+    }
+
+    private static void AssertStopped(FakeJsObject animation)
+    {
+        Assert.Equal(["stop"], animation.Calls);
+        Assert.True(animation.IsReleased);
     }
 }

@@ -17,8 +17,10 @@ public sealed class ExceptionTextTests
     [Fact]
     public void A_message_repeated_inside_is_written_once()
     {
-        TimeoutException timeout = new("Storyblok didn't answer within 15 seconds.");
+        const string message = "Storyblok didn't answer within 15 seconds";
+        TimeoutException inner = new(message + ".");
+        TimeoutException outer = new(inner.Message, inner);
 
-        Assert.Equal("Storyblok didn't answer within 15 seconds", ExceptionText.Describe(new TimeoutException(timeout.Message, timeout)));
+        Assert.Equal(message, ExceptionText.Describe(outer));
     }
 }

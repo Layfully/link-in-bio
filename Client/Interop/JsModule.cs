@@ -2,17 +2,13 @@ using Microsoft.JSInterop;
 
 namespace Client.Interop;
 
-/// <summary>
-/// A collocated JavaScript module, imported once on first use and released on dispose.
-/// Callers that start at the same time share the one import.
-/// </summary>
+/// <summary>Shares a lazy JavaScript module import among callers and releases it on disposal.</summary>
 internal sealed class JsModule(IJSRuntime js, string path) : IAsyncDisposable
 {
     private Task<IJSObjectReference>? _import;
 
     /// <summary>
-    /// Returns the module, importing it on the first call. After <see cref="DisposeAsync"/> this still returns the released
-    /// module; calls on it then fail with a <see cref="JSException"/>, which the interop classes treat as "page already left".
+    /// Returns the shared module. After disposal, the cached reference is already released.
     /// </summary>
     public async Task<IJSObjectReference> GetAsync()
     {
@@ -23,15 +19,10 @@ internal sealed class JsModule(IJSRuntime js, string path) : IAsyncDisposable
             attempt = _import ??= js.InvokeAsync<IJSObjectReference>("import", path).AsTask();
             return await attempt;
         }
-        catch (JSException)
+        catch (JSException) when (_import == attempt)
         {
-            // A failed import (a network hiccup, say) is retried on the next call instead of failing forever.
-            // Only this failed attempt is forgotten: another caller may already have started a newer import.
-            if (_import == attempt)
-            {
-                _import = null;
-            }
-
+            // Let the next call retry while preserving any newer attempt.
+            _import = null;
             throw;
         }
     }
@@ -47,19 +38,13 @@ internal sealed class JsModule(IJSRuntime js, string path) : IAsyncDisposable
         {
             await (await import).DisposeAsync();
         }
-        catch (JSException)
+        catch (Exception exception) when (exception is JSException or JSDisconnectedException)
         {
             // Never imported successfully, or already gone: nothing to release.
         }
-        catch (JSDisconnectedException)
-        {
-        }
     }
 
-    /// <summary>
-    /// Stops a running effect and releases its handle. Each step runs even if the other fails,
-    /// so a failing stop can't leave the handle behind.
-    /// </summary>
+    /// <summary>Stops an effect and releases its handle even if JavaScript fails to stop it.</summary>
     public static async ValueTask StopAndReleaseAsync(IJSObjectReference handle, string stopMethod, ILogger logger, string effect)
     {
         try
@@ -78,10 +63,7 @@ internal sealed class JsModule(IJSRuntime js, string path) : IAsyncDisposable
         {
             await handle.DisposeAsync();
         }
-        catch (JSException)
-        {
-        }
-        catch (JSDisconnectedException)
+        catch (Exception exception) when (exception is JSException or JSDisconnectedException)
         {
         }
     }

@@ -41,10 +41,13 @@ public sealed class PublishedSiteTests : IDisposable
 
     public void Dispose() => Directory.Delete(_wwwroot, recursive: true);
 
+    private void WriteHome(string stories = "{}", SiteProfile? profile = null) =>
+        new PublishedSite(_wwwroot).WriteHome("<main>Links</main>", stories, profile ?? SiteProfile.None);
+
     [Fact]
     public void The_home_page_is_written_between_the_markers_and_the_shell_is_kept()
     {
-        new PublishedSite(_wwwroot).WriteHome("<main>Links</main>", """{"home":{}}""", SiteProfile.None);
+        WriteHome("""{"home":{}}""");
 
         string index = File.ReadAllText(Path.Combine(_wwwroot, "index.html"));
         Assert.Contains("""<div id="app"><main>Links</main></div>""", index, StringComparison.Ordinal);
@@ -56,7 +59,7 @@ public sealed class PublishedSiteTests : IDisposable
     [Fact]
     public void Only_the_home_page_names_its_canonical_address()
     {
-        new PublishedSite(_wwwroot).WriteHome("<main>Links</main>", "{}", SiteProfile.None);
+        WriteHome();
 
         string index = File.ReadAllText(Path.Combine(_wwwroot, "index.html"));
         Assert.Contains("""
@@ -73,7 +76,7 @@ public sealed class PublishedSiteTests : IDisposable
         string page = Index.Replace("<body>", "<body>\n<noscript>\n<p>This page needs JavaScript</p>\n</noscript>", StringComparison.Ordinal);
         File.WriteAllText(Path.Combine(_wwwroot, "index.html"), page);
 
-        new PublishedSite(_wwwroot).WriteHome("<main>Links</main>", "{}", SiteProfile.None);
+        WriteHome();
 
         Assert.DoesNotContain("noscript", File.ReadAllText(Path.Combine(_wwwroot, "index.html")), StringComparison.Ordinal);
         Assert.Equal(page, File.ReadAllText(Path.Combine(_wwwroot, "app-shell.html")));
@@ -87,7 +90,7 @@ public sealed class PublishedSiteTests : IDisposable
         string page = Index.Replace("</head>", $"{Deferred}\n{Other}\n</head>", StringComparison.Ordinal);
         File.WriteAllText(Path.Combine(_wwwroot, "index.html"), page);
 
-        new PublishedSite(_wwwroot).WriteHome("<main>Links</main>", "{}", SiteProfile.None);
+        WriteHome();
 
         string home = File.ReadAllText(Path.Combine(_wwwroot, "index.html"));
         Assert.Contains("""<link href="https://api.storyblok.com" crossorigin data-preconnect-on-start />""", home, StringComparison.Ordinal);
@@ -100,14 +103,14 @@ public sealed class PublishedSiteTests : IDisposable
     {
         File.WriteAllText(Path.Combine(_wwwroot, "index.html"), "<body><!--prerender--><!--/prerender--></body>");
 
-        Assert.Throws<InvalidOperationException>(() => new PublishedSite(_wwwroot).WriteHome("<main>Links</main>", "{}", SiteProfile.None));
+        Assert.Throws<InvalidOperationException>(() => WriteHome());
         Assert.False(File.Exists(Path.Combine(_wwwroot, "app-shell.html")));
     }
 
     [Fact]
     public void Every_other_route_falls_back_to_the_shell()
     {
-        new PublishedSite(_wwwroot).WriteHome("<main>Links</main>", "{}", SiteProfile.None);
+        WriteHome();
 
         JsonNode config = JsonNode.Parse(File.ReadAllText(Path.Combine(_wwwroot, "staticwebapp.config.json")))!;
         Assert.Equal("/app-shell.html", (string?)config["routes"]![0]!["rewrite"]);
@@ -122,7 +125,7 @@ public sealed class PublishedSiteTests : IDisposable
         File.WriteAllText(Path.Combine(_wwwroot, "index.html"), IndexWithMetadata);
         SiteProfile profile = new("https://a.storyblok.com/f/1/600x900/new/me.jpg/m/600x600/smart", ["https://github.com/Layfully", "https://example.com/?a=1&b=<2>"]);
 
-        new PublishedSite(_wwwroot).WriteHome("<main>Links</main>", "{}", profile);
+        WriteHome(profile: profile);
 
         foreach (string page in Pages.Select(page => File.ReadAllText(Path.Combine(_wwwroot, page))))
         {
@@ -143,7 +146,7 @@ public sealed class PublishedSiteTests : IDisposable
     {
         File.WriteAllText(Path.Combine(_wwwroot, "index.html"), IndexWithMetadata);
 
-        new PublishedSite(_wwwroot).WriteHome("<main>Links</main>", "{}", SiteProfile.None);
+        WriteHome();
 
         string index = File.ReadAllText(Path.Combine(_wwwroot, "index.html"));
         Assert.Contains("""<meta property="og:image" content="https://example.com/old.jpg" />""", index, StringComparison.Ordinal);
@@ -180,7 +183,7 @@ public sealed class PublishedSiteTests : IDisposable
         File.WriteAllText(Path.Combine(_wwwroot, "index.html.br"), "old");
         File.WriteAllText(Path.Combine(_wwwroot, "index.html.gz"), "old");
 
-        new PublishedSite(_wwwroot).WriteHome("<main>Links</main>", "{}", SiteProfile.None);
+        WriteHome();
 
         Assert.False(File.Exists(Path.Combine(_wwwroot, "index.html.br")));
         Assert.False(File.Exists(Path.Combine(_wwwroot, "index.html.gz")));

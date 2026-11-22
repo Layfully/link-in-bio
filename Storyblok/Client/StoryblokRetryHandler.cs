@@ -2,11 +2,11 @@ using System.Net;
 
 namespace Storyblok.Client;
 
-/// <summary>How often and how long a Storyblok request is tried.</summary>
+/// <summary>Retry limits, timeouts, and backoff for Storyblok requests.</summary>
 /// <param name="MaxRetries">Retries after the first attempt.</param>
-/// <param name="AttemptTimeout">How long one attempt may take before it counts as failed and is retried.</param>
-/// <param name="TotalTimeout">How long a page waits at most, retries and the pauses between them included.</param>
-/// <param name="FirstDelay">The pause before the first retry; it doubles before each further one.</param>
+/// <param name="AttemptTimeout">Time limit for one attempt.</param>
+/// <param name="TotalTimeout">Time limit including attempts and delays.</param>
+/// <param name="FirstDelay">Initial backoff interval, doubled for each subsequent retry.</param>
 internal sealed record RetryPolicy(int MaxRetries, TimeSpan AttemptTimeout, TimeSpan TotalTimeout, TimeSpan FirstDelay)
 {
     public static RetryPolicy Default { get; } = new(
@@ -19,9 +19,7 @@ internal sealed record RetryPolicy(int MaxRetries, TimeSpan AttemptTimeout, Time
 }
 
 /// <summary>
-/// Retries Storyblok requests that failed for a passing reason (no connection, a timeout, 408, 429 or a 5xx answer) and
-/// caps how long a page waits when Storyblok hangs. A few lines instead of Polly, which would add about 100 KB of
-/// assemblies to every visitor's download for a single GET request.
+/// Retries transient Storyblok failures within a total time limit.
 /// </summary>
 /// <remarks>
 /// Every attempt sends the same request message again, which is safe for a GET without a body. A timeout throws
@@ -40,8 +38,7 @@ internal sealed class StoryblokRetryHandler(RetryPolicy policy, TimeProvider tim
         using CancellationTokenSource total = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, totalTimeout.Token);
         long started = time.GetTimestamp();
 
-        // The pause Storyblok asked for with its last answer, if any.
-        TimeSpan retryAfter = TimeSpan.Zero;
+        TimeSpan? nextDelay = null;
 
         for (int retry = 0; ; retry++)
         {
@@ -49,15 +46,14 @@ internal sealed class StoryblokRetryHandler(RetryPolicy policy, TimeProvider tim
             {
                 try
                 {
-                    await Task.Delay(Max(policy.DelayBefore(retry), retryAfter), time, total.Token);
+                    await Task.Delay(nextDelay ?? Max(policy.DelayBefore(retry), TimeSpan.Zero), time, total.Token);
                 }
                 catch (OperationCanceledException exception) when (!cancellationToken.IsCancellationRequested)
                 {
                     throw TimedOut(policy.TotalTimeout, exception);
                 }
 
-                // The pause it asked for is over. An attempt that ends without an answer must not repeat it.
-                retryAfter = TimeSpan.Zero;
+                nextDelay = null;
             }
 
             bool isLastAttempt = retry == policy.MaxRetries;
@@ -73,33 +69,30 @@ internal sealed class StoryblokRetryHandler(RetryPolicy policy, TimeProvider tim
                     return response;
                 }
 
-                // Storyblok may say how long to wait, usually when it limits requests (429). Asking sooner would only
-                // be refused again, and a pause that ends past the whole request's limit would only end in a timeout,
-                // so its answer is returned instead.
-                retryAfter = RetryAfter(response);
-                if (retryAfter > TimeSpan.Zero
-                    && time.GetElapsedTime(started) + Max(policy.DelayBefore(retry + 1), retryAfter) >= policy.TotalTimeout)
+                // Return the response if its requested delay would exhaust the time budget.
+                TimeSpan retryAfter = RetryAfter(response);
+                if (retryAfter > TimeSpan.Zero)
                 {
-                    return response;
+                    TimeSpan delay = Max(policy.DelayBefore(retry + 1), retryAfter);
+                    if (time.GetElapsedTime(started) + delay >= policy.TotalTimeout)
+                    {
+                        return response;
+                    }
+
+                    nextDelay = delay;
                 }
 
                 response.Dispose();
             }
             catch (HttpRequestException) when (!isLastAttempt)
             {
-                // No connection, or the connection broke: the next attempt may get through.
             }
             catch (OperationCanceledException exception) when (!cancellationToken.IsCancellationRequested)
             {
-                // Not the caller's cancellation, so a timeout: the whole request's ends it, one attempt's is retried.
-                if (total.IsCancellationRequested)
+                bool totalExpired = total.IsCancellationRequested;
+                if (totalExpired || isLastAttempt)
                 {
-                    throw TimedOut(policy.TotalTimeout, exception);
-                }
-
-                if (isLastAttempt)
-                {
-                    throw TimedOut(policy.AttemptTimeout, exception);
+                    throw TimedOut(totalExpired ? policy.TotalTimeout : policy.AttemptTimeout, exception);
                 }
             }
         }

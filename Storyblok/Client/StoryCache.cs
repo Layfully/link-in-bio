@@ -1,10 +1,6 @@
 namespace Storyblok.Client;
 
-/// <summary>
-/// Stories loaded during a visit, and stories Storyblok said don't exist, each kept for a while. A dictionary rather than
-/// Microsoft.Extensions.Caching.Memory: the site caches one or two stories, and the library is two more assemblies for
-/// every visitor to download and load.
-/// </summary>
+/// <summary>Temporarily caches both stories and not-found responses.</summary>
 internal sealed class StoryCache(TimeProvider time)
 {
     private readonly Dictionary<string, (StoryblokStory? Story, DateTimeOffset Expires)> _entries = new(StringComparer.Ordinal);
@@ -12,15 +8,20 @@ internal sealed class StoryCache(TimeProvider time)
     /// <summary>True for a cached answer that is still fresh; <paramref name="story"/> is null when the story doesn't exist.</summary>
     public bool TryGet(string path, out StoryblokStory? story)
     {
-        if (_entries.TryGetValue(path, out (StoryblokStory? Story, DateTimeOffset Expires) entry) && time.GetUtcNow() < entry.Expires)
+        story = null;
+        if (!_entries.TryGetValue(path, out (StoryblokStory? Story, DateTimeOffset Expires) entry))
         {
-            story = entry.Story;
-            return true;
+            return false;
         }
 
-        _entries.Remove(path);
-        story = null;
-        return false;
+        if (time.GetUtcNow() >= entry.Expires)
+        {
+            _entries.Remove(path);
+            return false;
+        }
+
+        story = entry.Story;
+        return true;
     }
 
     /// <summary>Keeps the answer for <paramref name="path"/>, a story or null for one that doesn't exist.</summary>

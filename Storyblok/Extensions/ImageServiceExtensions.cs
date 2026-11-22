@@ -9,28 +9,19 @@ public interface IImageService
 
 public static class ImageServiceExtensions
 {
-    // The formats Storyblok's image service can resize. It can't resize SVG, so those addresses stay as they are.
+    // Raster formats supported by Storyblok resizing.
     private static readonly string[] ImageExtensions = [".jpg", ".jpeg", ".png", ".webp", ".gif", ".bmp"];
 
-    public static string? ResizeByWidth(this IImageService image, int newWidth)
-    {
-        return image.IsSupported()
-            ? image.Url + $"/m/{newWidth}x0"
-            : image.Url;
-    }
+    public static string? ResizeByWidth(this IImageService image, int newWidth) =>
+        image.Resize(newWidth, 0, smart: false);
 
-    public static string? Resize(this IImageService image, int newWidth, int newHeight, bool smart = true)
-    {
-        return image.IsSupported()
+    public static string? Resize(this IImageService image, int newWidth, int newHeight, bool smart = true) =>
+        image.IsSupported()
             ? image.Url + $"/m/{newWidth}x{newHeight}{(smart ? "/smart" : "")}"
             : image.Url;
-    }
 
     /// <summary>
-    /// A <paramref name="side"/> px square of the image, cut where CSS's <c>object-fit: cover</c> with
-    /// <c>object-position: bottom</c> would show it: the bottom of a portrait, the middle of a landscape. Downloading just
-    /// that part saves what the page would cut away. Without the original size in the address it is scaled to the
-    /// width only, and the page's CSS cuts it as before.
+    /// Crops a <paramref name="side"/> px square from the bottom center. Falls back to width-only resizing when dimensions are unknown.
     /// </summary>
     public static string? SquareFromBottom(this IImageService image, int side)
     {
@@ -52,12 +43,8 @@ public static class ImageServiceExtensions
 
     public static bool IsSupported(this IImageService image)
     {
-        if (string.IsNullOrWhiteSpace(image.Url))
-        {
-            return false;
-        }
-
-        return ImageExtensions.Any(x => image.Url.EndsWith(x, StringComparison.OrdinalIgnoreCase));
+        string? url = image.Url;
+        return !string.IsNullOrWhiteSpace(url) && ImageExtensions.Any(extension => url.EndsWith(extension, StringComparison.OrdinalIgnoreCase));
     }
 
     /// <summary>
@@ -66,15 +53,14 @@ public static class ImageServiceExtensions
     /// </summary>
     public static (int Width, int Height)? Dimensions(this IImageService image)
     {
-        if (string.IsNullOrWhiteSpace(image.Url))
+        string? url = image.Url;
+        if (string.IsNullOrWhiteSpace(url))
         {
             return null;
         }
 
-        // Read by hand rather than with a regular expression: System.Text.RegularExpressions would be one more assembly for
-        // every visitor to download, for this one address.
-        int files = image.Url.IndexOf("/f/", StringComparison.Ordinal);
-        string[] parts = files < 0 ? [] : image.Url[(files + "/f/".Length)..].Split('/');
+        int files = url.IndexOf("/f/", StringComparison.Ordinal);
+        string[] parts = files < 0 ? [] : url[(files + "/f/".Length)..].Split('/');
         if (parts.Length < 3 || !IsNumber(parts[0]) || parts[1].Split('x') is not [string width, string height] || !IsNumber(width) || !IsNumber(height))
         {
             return null;

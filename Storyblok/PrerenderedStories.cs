@@ -4,15 +4,9 @@ using System.Text.Json.Nodes;
 
 namespace Storyblok;
 
-/// <summary>
-/// Storyblok's responses for stories that were loaded when the site was built, so a page can show them before the app
-/// has asked Storyblok anything. The deploy records them while it prerenders a page (<see cref="IsRecording"/>, then
-/// <see cref="ToJson"/>) and embeds them in that page; the app reads them back with <see cref="AddAll"/> on start.
-/// </summary>
+/// <summary>Records Storyblok responses during prerendering and loads them back at startup.</summary>
 /// <remarks>
-/// Each response is used for the first load of its story only. Later loads ask Storyblok (or the cache) as usual, and
-/// <see cref="StoryblokStoryQuery.TryRefresh{T}"/> tells whether the story has changed since it was recorded.
-/// Keys are story paths as the client sends them (<c>home</c>, <c>certificates/aws</c>).
+/// Each embedded response serves the first load. Refreshes can still compare against it later.
 /// </remarks>
 public sealed class PrerenderedStories
 {
@@ -28,21 +22,18 @@ public sealed class PrerenderedStories
 
     public IReadOnlyDictionary<string, string> Recorded => _recorded;
 
-    /// <summary>
-    /// Reads responses embedded by the deploy: <c>{ "home": { "story": … }, … }</c>. Anything else is ignored, so a
-    /// damaged page loads its content from Storyblok like any other.
-    /// </summary>
+    /// <summary>Loads embedded response objects by story path, ignoring malformed data.</summary>
     public void AddAll(string json)
     {
         try
         {
             using JsonDocument document = JsonDocument.Parse(json);
-            if (document.RootElement.ValueKind != JsonValueKind.Object)
+            if (document.RootElement is not { ValueKind: JsonValueKind.Object } responses)
             {
                 return;
             }
 
-            foreach (JsonProperty response in document.RootElement.EnumerateObject())
+            foreach (JsonProperty response in responses.EnumerateObject())
             {
                 if (response.Value.ValueKind == JsonValueKind.Object)
                 {
@@ -55,32 +46,20 @@ public sealed class PrerenderedStories
         }
     }
 
-    /// <summary>
-    /// The recorded responses in the shape <see cref="AddAll"/> reads. Safe inside a <c>&lt;script&gt;</c> element: the
-    /// default encoder writes &lt;, &gt; and &amp; as \u escapes, so no text from Storyblok can close the element or open
-    /// an HTML comment.
-    /// </summary>
+    /// <summary>Serializes recorded responses for embedding in a script element using the default JSON encoder.</summary>
     public string ToJson()
     {
-        JsonObject responses = [];
-        foreach ((string path, string response) in _recorded)
-        {
-            responses[path] = JsonNode.Parse(response);
-        }
-
+        JsonObject responses = new(_recorded.Select(entry => KeyValuePair.Create(entry.Key, JsonNode.Parse(entry.Value))));
         return responses.ToJsonString();
     }
 
-    /// <summary>
-    /// True when the page came with this story's response (<c>"/home"</c>, as callers pass slugs) and its first load is
-    /// still to come. Later in the visit the story is in the client's cache like any other.
-    /// </summary>
+    /// <summary>Checks whether the slug has an unused embedded response.</summary>
     public bool Contains(string slug) =>
         StoryblokStoryClient.ToStoryPath(slug) is { } path && _responses.ContainsKey(path) && !_used.Contains(path);
 
     /// <summary>The response for the first load of the story; false for every later one.</summary>
     internal bool TryTake(string path, out string response) =>
-        _responses.TryGetValue(path, out response!) && _used.Add(path);
+        TryGetResponse(path, out response) && _used.Add(path);
 
     internal bool TryGetResponse(string path, out string response) => _responses.TryGetValue(path, out response!);
 

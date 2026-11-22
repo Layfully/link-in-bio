@@ -1,9 +1,8 @@
-@* A centered message on a card in the site's style: icon, headline, explanation and optional actions. *@
 <div class="card z-20 mx-6 flex max-w-md flex-col items-center gap-y-4 px-8 py-10 text-center text-white">
     <span class="flex size-14 items-center justify-center rounded-2xl bg-purple-500/15 text-2xl text-purple-300 ring-1 ring-purple-400/25" aria-hidden="true">
         <i class="fa-solid @Icon"></i>
     </span>
-    @* Only the message is a live region, so screen readers announce it without reading out the buttons as well. *@
+    @* Keep action buttons outside the live region. *@
     <div class="flex flex-col items-center gap-y-3" role="@(Kind == NoticeKind.Problem ? "alert" : "status")">
         @if (IsPageHeading)
         {
@@ -24,7 +23,7 @@
 </div>
 
 @code {
-    /// <summary>The Font Awesome icon class, such as <c>fa-cloud-bolt</c>.</summary>
+    /// <summary>The Font Awesome icon class.</summary>
     [Parameter, EditorRequired]
     public string Icon { get; set; } = string.Empty;
 
@@ -34,15 +33,14 @@
     [Parameter, EditorRequired]
     public string Text { get; set; } = string.Empty;
 
-    /// <summary>Buttons or links shown under the text, side by side and wrapping on narrow screens.</summary>
     [Parameter]
     public RenderFragment? Actions { get; set; }
 
-    /// <summary>True when the notice is the whole page, so its title is the page's h1 and receives focus after navigation.</summary>
+    /// <summary>Uses a focusable <c>h1</c> for a page-level notice.</summary>
     [Parameter]
     public bool IsPageHeading { get; set; }
 
-    /// <summary>A problem is announced immediately; information when the screen reader is idle.</summary>
+    /// <inheritdoc cref="NoticeKind" />
     [Parameter]
     public NoticeKind Kind { get; set; } = NoticeKind.Problem;
 }

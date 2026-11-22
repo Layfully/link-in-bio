@@ -49,8 +49,8 @@ public sealed class StoryblokStoryClientTests : IDisposable
         _storyblok.Answer(HttpStatusCode.OK, Story("Home", Page()));
         StoryblokStoryClient client = CreateClient();
 
-        await Load<TestPage>(client, "/home", TestContext.Current.CancellationToken);
-        await Load<TestPage>(client, "home/", TestContext.Current.CancellationToken);
+        await Load<TestPage>(client, "/home");
+        await Load<TestPage>(client, "home/");
 
         Assert.Single(_storyblok.Requests);
     }
@@ -126,8 +126,8 @@ public sealed class StoryblokStoryClientTests : IDisposable
         _storyblok.Answer(HttpStatusCode.OK, Story("Home", Page()));
         StoryblokStoryClient client = CreateClient(new StoryblokOptions { ApiKeyPublic = "public-token", CacheDurationSeconds = 0 });
 
-        StoryLoadResult<TestPage> first = await Load<TestPage>(client, "/home", TestContext.Current.CancellationToken);
-        StoryLoadResult<TestPage> second = await Load<TestPage>(client, "/home", TestContext.Current.CancellationToken);
+        StoryLoadResult<TestPage> first = await Load<TestPage>(client, "/home");
+        StoryLoadResult<TestPage> second = await Load<TestPage>(client, "/home");
 
         Assert.IsType<StoryblokStory<TestPage>>(first.Value);
         Assert.IsType<StoryblokStory<TestPage>>(second.Value);
@@ -159,10 +159,10 @@ public sealed class StoryblokStoryClientTests : IDisposable
         _storyblok.Answer(HttpStatusCode.NotFound, "{}");
         StoryblokStoryClient client = CreateClient();
 
-        await Load<TestPage>(client, "/home", TestContext.Current.CancellationToken);
-        await Load<TestPage>(client, "/home", TestContext.Current.CancellationToken);
-        await Load<TestPage>(client, "/nothing", TestContext.Current.CancellationToken);
-        await Load<TestPage>(client, "/nothing", TestContext.Current.CancellationToken);
+        await Load<TestPage>(client, "/home");
+        await Load<TestPage>(client, "/home");
+        await Load<TestPage>(client, "/nothing");
+        await Load<TestPage>(client, "/nothing");
 
         Assert.Equal(2, _storyblok.Requests.Count);
     }
@@ -174,11 +174,11 @@ public sealed class StoryblokStoryClientTests : IDisposable
         _storyblok.Answer(HttpStatusCode.OK, Story("After", Page()));
         StoryblokStoryClient client = CreateClient(new StoryblokOptions { ApiKeyPublic = "public-token", CacheDurationSeconds = 60 });
 
-        await Load<TestPage>(client, "/home", TestContext.Current.CancellationToken);
+        await Load<TestPage>(client, "/home");
         _time.Advance(TimeSpan.FromSeconds(59));
-        await Load<TestPage>(client, "/home", TestContext.Current.CancellationToken);
+        await Load<TestPage>(client, "/home");
         _time.Advance(TimeSpan.FromSeconds(1));
-        StoryLoadResult<TestPage> later = await Load<TestPage>(client, "/home", TestContext.Current.CancellationToken);
+        StoryLoadResult<TestPage> later = await Load<TestPage>(client, "/home");
 
         Assert.Equal("After", Assert.IsType<StoryblokStory<TestPage>>(later.Value).Name);
         Assert.Equal(2, _storyblok.Requests.Count);
@@ -191,8 +191,8 @@ public sealed class StoryblokStoryClientTests : IDisposable
         _storyblok.Answer(HttpStatusCode.OK, Story("Other", Page()));
         StoryblokStoryClient client = CreateClient();
 
-        await Load<TestPage>(client, "/home", TestContext.Current.CancellationToken);
-        await Load<TestPage>(client, "/other", TestContext.Current.CancellationToken);
+        await Load<TestPage>(client, "/home");
+        await Load<TestPage>(client, "/other");
 
         Uri first = _storyblok.Requests[0], second = _storyblok.Requests[1];
         Assert.Equal("/v2/cdn/stories/home", first.AbsolutePath);
@@ -212,10 +212,10 @@ public sealed class StoryblokStoryClientTests : IDisposable
         _storyblok.Answer(HttpStatusCode.OK, Story("Other", Page()));
         StoryblokStoryClient client = CreateClient(new StoryblokOptions { ApiKeyPublic = "public-token", CacheDurationSeconds = 60 });
 
-        await Load<TestPage>(client, "/home", TestContext.Current.CancellationToken);
+        await Load<TestPage>(client, "/home");
         _time.Advance(TimeSpan.FromSeconds(60));
-        await Load<TestPage>(client, "/home", TestContext.Current.CancellationToken);
-        await Load<TestPage>(client, "/other", TestContext.Current.CancellationToken);
+        await Load<TestPage>(client, "/home");
+        await Load<TestPage>(client, "/other");
 
         Assert.DoesNotContain("cv=", _storyblok.Requests[1].Query);
         Assert.Contains("cv=1700000500", _storyblok.Requests[2].Query);
@@ -231,11 +231,11 @@ public sealed class StoryblokStoryClientTests : IDisposable
         _storyblok.Answer(HttpStatusCode.OK, Story("A again", Page(), cacheVersion: 1700000500));
         StoryblokStoryClient client = CreateClient(new StoryblokOptions { ApiKeyPublic = "public-token", CacheDurationSeconds = 60 });
 
-        await Load<TestPage>(client, "/a", TestContext.Current.CancellationToken);
+        await Load<TestPage>(client, "/a");
         _time.Advance(TimeSpan.FromSeconds(50));
-        await Load<TestPage>(client, "/b", TestContext.Current.CancellationToken);
+        await Load<TestPage>(client, "/b");
         _time.Advance(TimeSpan.FromSeconds(20));
-        StoryLoadResult<TestPage> again = await Load<TestPage>(client, "/a", TestContext.Current.CancellationToken);
+        StoryLoadResult<TestPage> again = await Load<TestPage>(client, "/a");
 
         Assert.Contains("cv=1700000000", _storyblok.Requests[1].Query);
         Assert.DoesNotContain("cv=", _storyblok.Requests[2].Query);
@@ -249,8 +249,8 @@ public sealed class StoryblokStoryClientTests : IDisposable
         _storyblok.Answer(HttpStatusCode.OK, Story("Home", Page()));
         StoryblokStoryClient client = CreateClient(new StoryblokOptions { ApiKeyPublic = "public-token", ApiKeyPreview = "preview-token", IsInEditor = true });
 
-        await Load<TestPage>(client, "/home", TestContext.Current.CancellationToken);
-        await Load<TestPage>(client, "/home", TestContext.Current.CancellationToken);
+        await Load<TestPage>(client, "/home");
+        await Load<TestPage>(client, "/home");
 
         Assert.Equal(2, _storyblok.Requests.Count);
         Assert.Contains("version=draft", _storyblok.Requests[0].Query);
@@ -304,7 +304,7 @@ public sealed class StoryblokStoryClientTests : IDisposable
         _prerendered = embedded;
         _storyblok.Answer(HttpStatusCode.OK, response);
         StoryblokStoryClient client = CreateClient();
-        await Load<TestPage>(client, "/home", TestContext.Current.CancellationToken);
+        await Load<TestPage>(client, "/home");
 
         Assert.Null(await Refresh<TestPage>(client, "/home"));
         Assert.Equal(2, _storyblok.Requests.Count);
@@ -316,7 +316,7 @@ public sealed class StoryblokStoryClientTests : IDisposable
         _prerendered.AddAll($$"""{ "home": {{Story("Before", Page())}} }""");
         _storyblok.Answer(HttpStatusCode.OK, Story("After", Page()));
         StoryblokStoryClient client = CreateClient();
-        await Load<TestPage>(client, "/home", TestContext.Current.CancellationToken);
+        await Load<TestPage>(client, "/home");
 
         StoryLoadResult<TestPage>? refreshed = await Refresh<TestPage>(client, "/home");
 
@@ -440,7 +440,7 @@ public sealed class StoryblokStoryClientTests : IDisposable
         StoryblokStoryClient client = CreateEditorClient(cacheDurationSeconds: 60);
 
         client.ReadEditedStory(EditedStory("home", Page()));
-        await Load<TestPage>(client, "/home", TestContext.Current.CancellationToken);
+        await Load<TestPage>(client, "/home");
 
         Assert.Single(_storyblok.Requests);
     }
@@ -470,11 +470,11 @@ public sealed class StoryblokStoryClientTests : IDisposable
         client.Story().WithSlug(slug).TryRefresh<T>(TestContext.Current.CancellationToken);
 
     private Task<StoryLoadResult<T>> Load<T>(string slug) where T : StoryblokComponent =>
-        Load<T>(CreateClient(), slug, TestContext.Current.CancellationToken);
+        Load<T>(CreateClient(), slug);
 
-    private static Task<StoryLoadResult<T>> Load<T>(StoryblokStoryClient client, string slug, CancellationToken cancellationToken)
+    private static Task<StoryLoadResult<T>> Load<T>(StoryblokStoryClient client, string slug, CancellationToken? cancellationToken = null)
         where T : StoryblokComponent =>
-        client.Story().WithSlug(slug).TryLoad<T>(cancellationToken);
+        client.Story().WithSlug(slug).TryLoad<T>(cancellationToken ?? TestContext.Current.CancellationToken);
 
     private StoryblokStoryClient CreateClient(StoryblokOptions? options = null) => new(
         Options.Create(options ?? new StoryblokOptions { ApiKeyPublic = "public-token" }),

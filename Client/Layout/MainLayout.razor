@@ -1,10 +1,8 @@
 @inherits LayoutComponentBase
 @inject NavigationManager Navigation
 
-@* The page shell for every page and the error message: content centred on the screen. The glow behind the profile
-   photo is much wider than the page, so main clips it sideways and it never makes a narrow screen scroll. *@
+@* Clip the profile glow to prevent horizontal scrolling. *@
 <main class="flex min-h-screen flex-col items-center justify-center bg-gray-900 py-16 overflow-x-clip">
-    @* Unexpected errors in a page show this styled message instead of Blazor's default error bar. ErrorBoundary logs the exception. *@
     <ErrorBoundary @ref="_errorBoundary">
         <ChildContent>
             @Body
@@ -12,8 +10,7 @@
         <ErrorContent>
             <Notice Icon="fa-triangle-exclamation" Title="Something went wrong" Text="An unexpected error stopped this page. Reloading usually fixes it." IsPageHeading="true">
                 <Actions>
-                    <button type="button" class="action-button" @onclick="Reload">Reload the page</button>
-                    @* A page that fails every time can't be fixed by reloading, so offer a way to a page that works. *@
+                    <button type="button" class="action-button" @onclick="() => Navigation.Refresh(forceReload: true)">Reload the page</button>
                     @if (!IsHomePage)
                     {
                         <a href="" class="action-button">Back to the links</a>
@@ -24,8 +21,6 @@
     </ErrorBoundary>
 </main>
 
-@* One glow for the whole visit, behind the error message too. It sits under the particles (index.html, outside the
-   app, so they run before .NET starts and never restart), the pages' content above both. *@
 <div class="backdrop-glow" aria-hidden="true"></div>
 <StoryblokBridge />
 
@@ -35,8 +30,6 @@
     // On the home page the link would only lead back to the failing page.
     private bool IsHomePage => Navigation.ToBaseRelativePath(Navigation.Uri).Split('?', '#')[0].Length == 0;
 
-    // The layout receives new parameters on every navigation, so moving to another page clears a previous error.
+    // Clear the previous page's error when the layout receives new content.
     protected override void OnParametersSet() => _errorBoundary?.Recover();
-
-    private void Reload() => Navigation.NavigateTo(Navigation.Uri, forceLoad: true);
 }

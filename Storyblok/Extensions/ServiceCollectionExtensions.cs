@@ -10,16 +10,15 @@ namespace Storyblok.Extensions;
 
 public static class ServiceCollectionExtensions
 {
-    /// <summary>The key of the <see cref="HttpMessageHandler"/> that sends Storyblok's requests; tests register a fake under it.</summary>
+    /// <summary>The service key for Storyblok's HTTP handler.</summary>
     public const string HttpHandlerKey = "Storyblok";
 
     /// <summary>
-    /// Registers <see cref="StoryblokStoryClient"/>, configured from <paramref name="configuration"/>. Storyblok components
-    /// are read into the classes marked with <see cref="StoryblokComponentAttribute"/> in <paramref name="componentAssemblies"/>.
+    /// Registers the Storyblok client and discovers classes marked with <see cref="StoryblokComponentAttribute"/>.
     /// </summary>
     public static IServiceCollection AddStoryblok(this IServiceCollection services, IConfiguration configuration, params Assembly[] componentAssemblies)
     {
-        // Checked when the options are first read, after every Configure call (the app decides IsInEditor in its own).
+        // Validate after the app has configured editor mode.
         services.AddOptions<StoryblokOptions>()
             .Configure(options => Read(configuration, options))
             .Validate(options => !string.IsNullOrWhiteSpace(options.BaseUrl), "Storyblok:BaseUrl is missing.")
@@ -31,20 +30,18 @@ public static class ServiceCollectionExtensions
 
         services.AddSingleton(_ => new StoryblokComponentTypes(componentAssemblies));
 
-        // Retries transient failures (network errors, 408, 429, 5xx) and caps how long a page waits when Storyblok hangs.
-        // A handler of its own rather than IHttpClientFactory: the site sends one kind of request, and the factory is
-        // three more assemblies for every visitor to download and load.
         services.TryAddKeyedSingleton<HttpMessageHandler>(HttpHandlerKey, (provider, _) =>
-            new StoryblokRetryHandler(RetryPolicy.Default, provider.GetRequiredService<TimeProvider>()) { InnerHandler = new HttpClientHandler() });
+            new StoryblokRetryHandler(RetryPolicy.Default, provider.GetRequiredService<TimeProvider>())
+            {
+                InnerHandler = new HttpClientHandler(),
+            });
         services.TryAddSingleton(TimeProvider.System);
         services.AddScoped<StoryblokStoryClient>();
         services.TryAddSingleton<PrerenderedStories>();
         return services;
     }
 
-    // Read by hand rather than with Microsoft.Extensions.Configuration.Binder, which together with
-    // System.ComponentModel.TypeConverter is two more assemblies every visitor downloads and loads, for four settings.
-    // A setting that is left out keeps its default; IsInEditor is the app's to decide, not configuration's.
+    // Read settings directly to avoid adding configuration binder assemblies to the client.
     private static void Read(IConfiguration configuration, StoryblokOptions options)
     {
         options.ApiKeyPublic = configuration[nameof(StoryblokOptions.ApiKeyPublic)] ?? options.ApiKeyPublic;

@@ -413,14 +413,7 @@ public sealed class PageTests : IDisposable
         ] }
         """;
 
-    private static string HomeWithLink(string label) => Story("Home", $$"""
-        { "_uid": "11111111-1111-1111-1111-111111111111", "component": "page", "body": [
-            { "_uid": "22222222-2222-2222-2222-222222222222", "component": "list", "entries": [
-                { "_uid": "33333333-3333-3333-3333-333333333333", "component": "link", "label": "{{label}}",
-                  "url": { "linktype": "url", "url": "https://example.com" } }
-            ] }
-        ] }
-        """);
+    private static string HomeWithLink(string label) => Story("Home", HomeContentWithLink(label));
 
     private IRenderedComponent<Certificate> RenderCertificate(string name) =>
         _context.Render<Certificate>(parameters => parameters.Add(page => page.Name, name));

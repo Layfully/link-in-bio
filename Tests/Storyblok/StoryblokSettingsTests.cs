@@ -6,7 +6,7 @@ using Storyblok.Extensions;
 
 namespace LinkInBio.Tests.Storyblok;
 
-/// <summary>How AddStoryblok reads its settings from configuration (the "Storyblok" section of appsettings.json).</summary>
+/// <summary>Tests Storyblok configuration, defaults, and validation.</summary>
 public sealed class StoryblokSettingsTests
 {
     [Fact]
@@ -37,10 +37,8 @@ public sealed class StoryblokSettingsTests
     }
 
     [Fact]
-    public void A_cache_duration_that_isnt_a_number_is_refused()
-    {
+    public void A_non_numeric_cache_duration_is_rejected() =>
         Assert.ThrowsAny<InvalidOperationException>(() => Read(new() { ["ApiKeyPublic"] = "public-token", ["CacheDurationSeconds"] = "soon" }));
-    }
 
     private static StoryblokOptions Read(Dictionary<string, string?> settings)
     {

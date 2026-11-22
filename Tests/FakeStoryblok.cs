@@ -13,7 +13,7 @@ internal sealed class FakeStoryblok : HttpMessageHandler
     public List<Uri> Requests { get; } = [];
 
     public void Answer(HttpStatusCode status, string body = "{}") =>
-        _answers.Enqueue(_ => Task.FromResult(new HttpResponseMessage(status) { Content = new StringContent(body, Encoding.UTF8, "application/json") }));
+        _answers.Enqueue(_ => Task.FromResult(JsonResponse(status, body)));
 
     /// <summary>An error answer that says when to ask again, as Storyblok does when it limits requests.</summary>
     public void Answer(HttpStatusCode status, RetryConditionHeaderValue retryAfter) =>
@@ -26,7 +26,7 @@ internal sealed class FakeStoryblok : HttpMessageHandler
         _answers.Enqueue(async _ =>
         {
             await release.Task;
-            return new HttpResponseMessage(status) { Content = new StringContent(body, Encoding.UTF8, "application/json") };
+            return JsonResponse(status, body);
         });
         return release;
     }
@@ -46,4 +46,9 @@ internal sealed class FakeStoryblok : HttpMessageHandler
         Requests.Add(request.RequestUri!);
         return _answers.Dequeue()(cancellationToken);
     }
+
+    private static HttpResponseMessage JsonResponse(HttpStatusCode status, string body) => new(status)
+    {
+        Content = new StringContent(body, Encoding.UTF8, "application/json"),
+    };
 }

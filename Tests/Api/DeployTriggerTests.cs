@@ -40,13 +40,12 @@ public sealed class DeployTriggerTests : IDisposable
         Assert.Equal(HttpStatusCode.Accepted, result.Status);
         HttpRequestMessage request = Assert.Single(_github.Requests);
         Assert.Equal(HttpMethod.Post, request.Method);
-        Assert.Equal("https://api.github.com/repos/Layfully/link-in-bio/actions/workflows/azure-static-web-apps-gray-tree-0c2e88d03.yml/dispatches",
-            request.RequestUri!.ToString());
+        Assert.Equal(LinkInBioDispatch, request.RequestUri!.ToString());
         Assert.Equal("Bearer github-token", request.Headers.Authorization!.ToString());
         Assert.Equal("link-in-bio-deploy-trigger/1.0", request.Headers.UserAgent.ToString());
         Assert.Equal("application/vnd.github+json", request.Headers.Accept.ToString());
         Assert.Equal("2022-11-28", Assert.Single(request.Headers.GetValues("X-GitHub-Api-Version")));
-        Assert.Equal("""{"ref":"main"}""", _github.Bodies.Single());
+        Assert.Equal(MainDispatchBody, Assert.Single(_github.Bodies));
     }
 
     [Fact]
@@ -207,7 +206,7 @@ public sealed class DeployTriggerTests : IDisposable
 
         Assert.Equal(HttpStatusCode.Accepted, result.Status);
         Assert.Equal([PortfolioDispatch], _github.Addresses);
-        Assert.Equal("""{"ref":"main"}""", _github.Bodies.Single());
+        Assert.Equal(MainDispatchBody, Assert.Single(_github.Bodies));
     }
 
     // Storyblok may change what it sends; missing a deploy is worse than an extra one.
@@ -254,6 +253,7 @@ public sealed class DeployTriggerTests : IDisposable
     }
 
     private const string HomePublished = """{"action":"published","space_id":268473,"story_id":1,"full_slug":"home"}""";
+    private const string MainDispatchBody = """{"ref":"main"}""";
 
     private async Task<DeployTriggerResult> Trigger(string? secret, DeployTriggerOptions? settings = null, CancellationToken? cancellationToken = null,
         string? body = HomePublished)

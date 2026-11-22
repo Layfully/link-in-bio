@@ -3,10 +3,7 @@ using Microsoft.JSInterop;
 
 namespace Client.Interop;
 
-/// <summary>
-/// Owns the JavaScript module behind <c>TypedText</c>. Starting again replaces the running animation instead of stacking a second one.
-/// A failing animation, for example because typed.js didn't load, is logged and never breaks the page.
-/// </summary>
+/// <summary>Runs one typing animation at a time and logs JavaScript failures.</summary>
 public sealed class TypedTextInterop(IJSRuntime js, ILogger logger) : IAsyncDisposable
 {
     internal const string ModulePath = "./Components/TypedText.razor.js";
@@ -36,25 +33,21 @@ public sealed class TypedTextInterop(IJSRuntime js, ILogger logger) : IAsyncDisp
             // Null when the element was already gone by the time the module ran.
             IJSObjectReference? animation = await module.InvokeAsync<IJSObjectReference?>(StartMethod, element, texts);
 
-            if (IsSuperseded(start))
+            if (!IsSuperseded(start))
             {
-                if (animation is not null)
-                {
-                    await JsModule.StopAndReleaseAsync(animation, StopMethod, logger, "typing animation");
-                }
-
-                return;
+                _animation = animation;
             }
-
-            _animation = animation;
+            else if (animation is not null)
+            {
+                await JsModule.StopAndReleaseAsync(animation, StopMethod, logger, "typing animation");
+            }
         }
-        catch (JSException exception) when (!IsSuperseded(start))
+        catch (JSException exception)
         {
-            logger.LogWarning(exception, "The typing animation could not start.");
-        }
-        catch (JSException)
-        {
-            // Failed only because the page was left, or a newer start took over, mid-start: not worth a warning.
+            if (!IsSuperseded(start))
+            {
+                logger.LogWarning(exception, "The typing animation could not start.");
+            }
         }
     }
 
@@ -74,12 +67,12 @@ public sealed class TypedTextInterop(IJSRuntime js, ILogger logger) : IAsyncDisp
 
     private bool IsSuperseded(int start) => _disposed || start != _latestStart;
 
-    private async ValueTask StopRunningAsync()
+    private ValueTask StopRunningAsync()
     {
-        if (_animation is { } animation)
-        {
-            _animation = null;
-            await JsModule.StopAndReleaseAsync(animation, StopMethod, logger, "typing animation");
-        }
+        IJSObjectReference? animation = _animation;
+        _animation = null;
+        return animation is null
+            ? ValueTask.CompletedTask
+            : JsModule.StopAndReleaseAsync(animation, StopMethod, logger, "typing animation");
     }
 }

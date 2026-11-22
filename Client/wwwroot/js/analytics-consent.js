@@ -1,15 +1,10 @@
-// Google Analytics runs only after the visitor allows it. Until then no Google script loads, no cookies are set and nothing is sent.
-// The answer is remembered in this browser for 13 months, then asked again; "Analytics settings" withdraws it at any time.
+// Load Google Analytics only after consent on the public site.
 (() => {
     const MEASUREMENT_ID = 'G-BCKR10P1MJ';
     const STORAGE_KEY = 'analytics-consent';
 
-    // European regulators (the French CNIL most explicitly) expect consent and analytics cookies to last at most 13 months.
-    const CONSENT_LIFETIME_MS = 395 * 24 * 60 * 60 * 1000;
-    const COOKIE_LIFETIME_SECONDS = 395 * 24 * 60 * 60;
+    const LIFETIME_SECONDS = 395 * 24 * 60 * 60;
 
-    // Only visits to the public site are counted. Pull request previews, the editor environment, the default
-    // azurestaticapps.net address and localhost neither load Analytics nor ask for consent.
     const PRODUCTION_HOSTS = ['adriangaborek.dev', 'www.adriangaborek.dev'];
 
     const banner = document.getElementById('analytics-consent');
@@ -21,12 +16,11 @@
         return;
     }
 
-    // Stored as { choice, at }. Anything else, including an answer older than 13 months, counts as not asked yet.
     function parseChoice(stored) {
         try {
             const { choice, at } = JSON.parse(stored);
             const known = choice === 'granted' || choice === 'denied';
-            return known && Date.now() - at < CONSENT_LIFETIME_MS ? choice : null;
+            return known && Date.now() - at < LIFETIME_SECONDS * 1000 ? choice : null;
         } catch {
             return null;
         }
@@ -41,7 +35,6 @@
     };
 
     function loadAnalytics() {
-        // An earlier "No thanks" in this tab set Google's opt-out flag; a new "Allow" lifts it.
         window[`ga-disable-${MEASUREMENT_ID}`] = false;
 
         if (analyticsLoaded) return;
@@ -51,7 +44,7 @@
         // gtag expects the arguments object itself, not an array.
         window.gtag = function () { window.dataLayer.push(arguments); };
         window.gtag('js', new Date());
-        window.gtag('config', MEASUREMENT_ID, { cookie_expires: COOKIE_LIFETIME_SECONDS });
+        window.gtag('config', MEASUREMENT_ID, { cookie_expires: LIFETIME_SECONDS });
 
         const script = document.createElement('script');
         script.async = true;
@@ -75,17 +68,13 @@
         }
     }
 
-    // Without consent nothing may run: stop a running Google script first (Google's own opt-out flag), so it can't write
-    // its cookies back, then remove them. A running script can't be unloaded, so only a tab where Analytics already ran
-    // reloads, to start clean.
+    // Disable Analytics before clearing cookies and reloading a tab that already loaded it.
     function withdraw() {
         window[`ga-disable-${MEASUREMENT_ID}`] = true;
         removeAnalyticsCookies();
         if (analyticsLoaded) window.location.reload();
     }
 
-    // Applies a choice to this tab: "granted" loads Analytics, "denied" or no answer withdraws it.
-    // The banner is shown only while there is no answer.
     function apply(choice) {
         if (choice === 'granted') loadAnalytics();
         else withdraw();
@@ -100,14 +89,11 @@
         apply(answer);
     });
 
-    // Asks again without changing anything: the stored answer stays until the visitor picks one of the buttons.
-    // Only switching from "Allow" to "No thanks" reloads the page.
     settings.addEventListener('click', () => {
         banner.hidden = false;
         banner.querySelector('[data-consent]')?.focus();
     });
 
-    // An answer in another tab of this site, or its expiry, takes effect here too.
     window.addEventListener('storage', event => {
         if (event.key !== STORAGE_KEY) return;
 

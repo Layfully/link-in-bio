@@ -144,7 +144,7 @@ public sealed class StoryblokRetryHandlerTests : IDisposable
         using HttpClient client = CreateClient(Policy with { TotalTimeout = TimeSpan.FromMilliseconds(150), FirstDelay = TimeSpan.FromSeconds(30) });
         _storyblok.Answer(HttpStatusCode.ServiceUnavailable);
 
-        await Assert.ThrowsAsync<TimeoutException>(() => client.GetAsync("https://api.storyblok.com/v2/cdn/stories/home", TestContext.Current.CancellationToken));
+        await Assert.ThrowsAsync<TimeoutException>(() => Get(client));
         Assert.Single(_storyblok.Requests);
     }
 
@@ -156,7 +156,7 @@ public sealed class StoryblokRetryHandlerTests : IDisposable
         cancellation.CancelAfter(TimeSpan.FromMilliseconds(30));
 
         Exception exception = await Assert.ThrowsAnyAsync<OperationCanceledException>(
-            () => _client.GetAsync("https://api.storyblok.com/v2/cdn/stories/home", cancellation.Token));
+            () => Get(cancellationToken: cancellation.Token));
 
         Assert.IsNotType<TimeoutException>(exception.InnerException);
         Assert.Single(_storyblok.Requests);
@@ -168,11 +168,11 @@ public sealed class StoryblokRetryHandlerTests : IDisposable
         // On the site's clock the time Storyblok named has passed; on the machine's it is years away, which would
         // return the answer instead of asking again.
         FakeTimeProvider time = new(new DateTimeOffset(2030, 1, 1, 12, 0, 0, TimeSpan.Zero));
-        using HttpClient client = new(new StoryblokRetryHandler(Policy, time) { InnerHandler = _storyblok }, disposeHandler: false);
+        using HttpClient client = CreateClient(Policy, time);
         _storyblok.Answer(HttpStatusCode.TooManyRequests, new RetryConditionHeaderValue(time.GetUtcNow().AddSeconds(-1)));
         _storyblok.Answer(HttpStatusCode.OK);
 
-        using HttpResponseMessage response = await client.GetAsync("https://api.storyblok.com/v2/cdn/stories/home", TestContext.Current.CancellationToken);
+        using HttpResponseMessage response = await Get(client);
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.Equal(2, _storyblok.Requests.Count);
@@ -182,12 +182,12 @@ public sealed class StoryblokRetryHandlerTests : IDisposable
     public async Task A_pause_Storyblok_asked_for_is_waited_once_not_again_after_a_broken_connection()
     {
         FakeTimeProvider time = new();
-        using HttpClient client = new(new StoryblokRetryHandler(Policy, time) { InnerHandler = _storyblok }, disposeHandler: false);
+        using HttpClient client = CreateClient(Policy, time);
         _storyblok.Answer(HttpStatusCode.TooManyRequests, new RetryConditionHeaderValue(TimeSpan.FromSeconds(5)));
         _storyblok.Fail(new HttpRequestException("Connection reset."));
         _storyblok.Answer(HttpStatusCode.OK);
 
-        Task<HttpResponseMessage> get = client.GetAsync("https://api.storyblok.com/v2/cdn/stories/home", TestContext.Current.CancellationToken);
+        Task<HttpResponseMessage> get = Get(client);
         await Until(() => _storyblok.Requests.Count == 1);
         time.Advance(TimeSpan.FromSeconds(5));
 
@@ -209,9 +209,11 @@ public sealed class StoryblokRetryHandlerTests : IDisposable
         Assert.True(condition());
     }
 
-    private Task<HttpResponseMessage> Get() =>
-        _client.GetAsync("https://api.storyblok.com/v2/cdn/stories/home", TestContext.Current.CancellationToken);
+    private Task<HttpResponseMessage> Get() => Get(_client);
 
-    private HttpClient CreateClient(RetryPolicy policy) =>
-        new(new StoryblokRetryHandler(policy) { InnerHandler = _storyblok }, disposeHandler: false);
+    private Task<HttpResponseMessage> Get(HttpClient? client = null, CancellationToken? cancellationToken = null) =>
+        (client ?? _client).GetAsync("https://api.storyblok.com/v2/cdn/stories/home", cancellationToken ?? TestContext.Current.CancellationToken);
+
+    private HttpClient CreateClient(RetryPolicy policy, TimeProvider? time = null) =>
+        new(new StoryblokRetryHandler(policy, time ?? TimeProvider.System) { InnerHandler = _storyblok }, disposeHandler: false);
 }

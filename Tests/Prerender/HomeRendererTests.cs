@@ -25,7 +25,7 @@ public sealed class HomeRendererTests : IDisposable
             ] } }, "cv": 0 }
             """);
 
-        string html = (await HomeRenderer.RenderAsync(Services())).Html;
+        string html = (await RenderHomeAsync()).Html;
 
         Assert.Contains("GitHub", html, StringComparison.Ordinal);
         Assert.Contains("https://github.com/Layfully", html, StringComparison.Ordinal);
@@ -56,7 +56,7 @@ public sealed class HomeRendererTests : IDisposable
             ] } }, "cv": 0 }
             """);
 
-        SiteProfile profile = (await HomeRenderer.RenderAsync(Services())).Profile;
+        SiteProfile profile = (await RenderHomeAsync()).Profile;
 
         Assert.Equal("https://a.storyblok.com/f/1/608x912/abc/profile.jpg/m/600x600/smart", profile.Image);
         Assert.Equal(["https://portfolio.example.com", "https://github.com/Layfully"], profile.SameAs);
@@ -80,7 +80,7 @@ public sealed class HomeRendererTests : IDisposable
             ] } }, "cv": 0 }
             """);
 
-        RenderedHome home = await HomeRenderer.RenderAsync(Services());
+        RenderedHome home = await RenderHomeAsync();
 
         Assert.Equal(["Typo", "Coming soon"], home.LinksWithoutAddress);
     }
@@ -90,7 +90,7 @@ public sealed class HomeRendererTests : IDisposable
     {
         _storyblok.Answer(HttpStatusCode.NotFound, "{}");
 
-        InvalidOperationException exception = await Assert.ThrowsAsync<InvalidOperationException>(() => HomeRenderer.RenderAsync(Services()));
+        InvalidOperationException exception = await Assert.ThrowsAsync<InvalidOperationException>(RenderHomeAsync);
 
         Assert.Equal("The home story isn't published.", exception.Message);
     }
@@ -100,22 +100,23 @@ public sealed class HomeRendererTests : IDisposable
     {
         _storyblok.Answer(HttpStatusCode.Unauthorized, "{}");
 
-        InvalidOperationException exception = await Assert.ThrowsAsync<InvalidOperationException>(() => HomeRenderer.RenderAsync(Services()));
+        InvalidOperationException exception = await Assert.ThrowsAsync<InvalidOperationException>(RenderHomeAsync);
 
         Assert.Equal("Storyblok is unavailable.", exception.Message);
         Assert.Contains("401", ExceptionText.Describe(exception), StringComparison.Ordinal);
     }
 
-    private ServiceProvider Services()
+    private async Task<RenderedHome> RenderHomeAsync()
     {
         IConfiguration storyblok = new ConfigurationBuilder()
             .AddInMemoryCollection([new("ApiKeyPublic", "public-token")])
             .Build();
 
         // Requests go straight to the fake Storyblok, without the retry handler.
-        return new ServiceCollection()
+        await using ServiceProvider services = new ServiceCollection()
             .AddPrerendering(storyblok)
             .AddKeyedSingleton<HttpMessageHandler>(ServiceCollectionExtensions.HttpHandlerKey, _storyblok)
             .BuildServiceProvider();
+        return await HomeRenderer.RenderAsync(services);
     }
 }

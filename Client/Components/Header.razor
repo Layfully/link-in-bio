@@ -1,21 +1,17 @@
 @using Storyblok.Extensions
 
-@* Full width, so the typed line growing letter by letter never changes the header's size and re-centres the photo. *@
+@* Keep the header width stable while the tagline animates. *@
 <header class="flex w-full flex-col items-center z-20 @(Reveal ? "reveal" : null)" @attributes="@Model.EditorAttributes()">
-    @* Each part renders only when Storyblok has its data, so a header without a photo or link has no empty shapes. *@
     @if (Model?.Profile is { Url.Length: > 0 } profile)
     {
-        @* The gradient ring is the wrapper's padding, so photo and ring together stay 128 px, like the placeholder. *@
+        string? imageUrl = profile.SquareFromBottom(128);
+        @* Match the placeholder's 128 px size, including the ring. *@
         <div class="avatar-ring halo size-32 p-[3px]">
-            @* Shown at 128 px: Storyblok's image service delivers just the square the circle shows, 128 px or 256 px for
-               sharp screens, instead of the original (WebP where the browser takes it). object-cover and
-               object-bottom still cut a photo whose address doesn't carry its size. *@
-            <img class="size-full rounded-full border-[3px] border-gray-900 bg-gray-900 object-cover object-bottom" src="@profile.SquareFromBottom(128)" srcset="@($"{profile.SquareFromBottom(128)} 1x, {profile.SquareFromBottom(256)} 2x")" width="128" height="128"
+            <img class="size-full rounded-full border-[3px] border-gray-900 bg-gray-900 object-cover object-bottom" src="@imageUrl" srcset="@($"{imageUrl} 1x, {profile.SquareFromBottom(256)} 2x")" width="128" height="128"
                  alt="@(string.IsNullOrWhiteSpace(profile.Alt) ? "Profile picture" : profile.Alt)" fetchpriority="high">
         </div>
     }
-    @* The page's heading, visible: search engines weigh the name more as text a visitor sees than as text only screen
-       readers get. tabindex lets the app move focus here after a navigation (App.razor); it is never a tab stop. *@
+    @* Allow focus after navigation without adding a tab stop. *@
     <h1 class="mt-5 px-6 text-center text-3xl leading-tight font-extrabold tracking-tight text-white outline-none [text-shadow:0_0_24px_rgb(147_51_234/0.45)] sm:text-4xl" tabindex="-1">@Site.Name</h1>
     @if (Model?.ProfileLink is { Url.Length: > 0, Label.Length: > 0 } profileLink)
     {
@@ -28,7 +24,7 @@
     [Parameter]
     public StoryblokHeader? Model { get; set; }
 
-    /// <summary>Fades the header in. Off when it replaces identical prerendered content, which would otherwise fade in twice.</summary>
+    /// <summary>Enables the reveal animation when the header appears.</summary>
     [Parameter]
     public bool Reveal { get; set; } = true;
 }

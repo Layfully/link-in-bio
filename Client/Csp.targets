@@ -1,12 +1,5 @@
 <Project>
-  <!--
-    The build writes an import map into index.html as an inline script. Its content lists fingerprinted file names, so it
-    changes with every build. The Content Security Policy in staticwebapp.config.json allows exactly that script by its
-    SHA-256 hash; this step computes the hash after each publish and writes the published config with it.
-    It also puts css/app.css into index.html as a <style> element, allowed by its hash too, so the first paint needs no
-    request after the page itself. It removes app.storyblok.com from the policy unless the build has the preview token
-    (the editor build), and tells search engines not to index the editor build.
-  -->
+  <!-- Inline app.css and generate CSP hashes for the stylesheet and fingerprinted import map after publish. -->
   <UsingTask TaskName="SetImportMapCspHash" TaskFactory="RoslynCodeTaskFactory" AssemblyFile="$(MSBuildToolsPath)\Microsoft.Build.Tasks.Core.dll">
     <ParameterGroup>
       <IndexHtml ParameterType="System.String" Required="true" />
@@ -27,10 +20,7 @@
 
         string html = File.ReadAllText(IndexHtml);
 
-        // The stylesheet is part of the page: the first paint then waits for the page alone, not for a second request
-        // (app.css is no-cache, so even a returning visitor's browser asked the server again before painting).
-        // Line endings normalized for the hash below, as the HTML parser does. A publish into a folder that still holds
-        // an earlier publish's page may find the style inlined already.
+        // Match the HTML parser's line endings when hashing inline content.
         string css = File.ReadAllText(AppCss).Replace("\r\n", "\n").Replace("\r", "\n");
         string inlineStyle = "<style>" + css + "</style>";
         if (html.Contains(StylesheetLink))
@@ -50,8 +40,6 @@
             return false;
         }
 
-        // Browsers hash the script text after the HTML parser has turned every CR LF and lone CR into LF,
-        // so the file's Windows line endings must be normalized the same way first.
         string scriptText = importMap.Groups[1].Value.Replace("\r\n", "\n").Replace("\r", "\n");
 
         // Inline tasks compile against .NET Standard, which has no SHA256.HashData.
@@ -63,8 +51,7 @@
             styleHash = Convert.ToBase64String(sha.ComputeHash(Encoding.UTF8.GetBytes(css)));
         }
 
-        // Always start from the project's config, which holds the placeholder, so republishing never depends on what an
-        // earlier publish left behind. Only the placeholder is replaced; any other hash in the policy stays as it is.
+        // Start from the source template on every publish.
         string config = File.ReadAllText(SourceConfig);
         if (!config.Contains(Placeholder))
         {
@@ -82,8 +69,7 @@
 
         config = config.Replace(StylePlaceholder, "'sha256-" + styleHash + "'");
 
-        // Only the editor build, the one published with the preview token, runs inside Storyblok's Visual Editor: it is
-        // framed by app.storyblok.com and loads the editor's bridge from there. Every other build drops that origin.
+        // The preview token identifies builds that allow the Visual Editor.
         string appSettings = File.Exists(AppSettings) ? File.ReadAllText(AppSettings) : string.Empty;
         bool isEditorBuild = Regex.IsMatch(appSettings, "\"ApiKeyPreview\"\\s*:\\s*\"[^\"\\s]+\"");
         if (!isEditorBuild)
@@ -92,8 +78,6 @@
         }
         else
         {
-            // The editor environment is public, but only the Visual Editor should look at it. Its pages point their
-            // canonical link at the real site already; this keeps search engines from indexing it at all.
             const string GlobalHeaders = "\"globalHeaders\": {";
             if (!config.Contains(GlobalHeaders))
             {
@@ -106,19 +90,15 @@
 
         File.WriteAllText(OutputConfig, config);
 
-        // Publish compresses every static file, this config and the page included, before this step runs. Those copies
-        // still hold the placeholders or the stylesheet link, so they are removed rather than served out of date.
-        foreach (string compressed in new[] { OutputConfig + ".br", OutputConfig + ".gz", IndexHtml + ".br", IndexHtml + ".gz" })
+        // Remove compressed copies generated before these files were rewritten.
+        foreach (string path in new[] { OutputConfig, IndexHtml })
         {
-            if (File.Exists(compressed))
-            {
-                File.Delete(compressed);
-            }
+            File.Delete(path + ".br");
+            File.Delete(path + ".gz");
         }
 
-        Log.LogMessage(MessageImportance.High, "Content Security Policy: allowed the import map with sha256-{0} and the inlined app.css with sha256-{2}{1}", hash,
-            isEditorBuild ? ", kept app.storyblok.com for the Visual Editor, added X-Robots-Tag: noindex" : ", removed app.storyblok.com (no preview token)",
-            styleHash);
+        Log.LogMessage(MessageImportance.High, "Updated CSP hashes for the import map and app.css ({0} build).",
+            isEditorBuild ? "editor" : "public");
       ]]></Code>
     </Task>
   </UsingTask>

@@ -43,8 +43,7 @@
                 }
             }
         </script>
-        <!-- The name Google shows for the site above its search results, instead of guessing one from the address. A block
-             of its own, after the profile: the deploy fills in the first block's photo and profiles (Prerender). -->
+        <!-- Keep website structured data separate from the profile that Prerender updates. -->
         <script type="application/ld+json">
             {
                 "@context": "https://schema.org",
@@ -55,8 +54,7 @@
         </script>
 
         <base href="/" />
-        <!-- Only .NET talks to the API. On the prerendered home page it starts seconds after load, so the deploy takes this
-             link's rel away there and js/blazor-start.js opens the connection when .NET starts (data-preconnect-on-start). -->
+        <!-- Prerender delays this API preconnect until Blazor starts. -->
         <link rel="preconnect" href="https://api.storyblok.com" crossorigin data-preconnect-on-start />
         <link rel="preconnect" href="https://a.storyblok.com" />
         <link rel="preload" id="webassembly" />
@@ -65,9 +63,7 @@
         <link rel="icon" type="image/svg+xml" href="favicon.svg" />
         <link rel="apple-touch-icon" href="icons/icon-180.png" />
         <link rel="manifest" href="site.webmanifest" />
-        <!-- The libraries are served from this site (wwwroot/lib, versions in the README), so no visitor's address reaches a
-             CDN before they've agreed to anything. -->
-        <!-- Icons are only needed once the app has rendered: the stylesheet downloads early without blocking the first paint, and js/deferred-styles.js applies it. -->
+        <!-- Preload icons without blocking the first paint. -->
         <link rel="preload" as="style" data-deferred-style href="lib/fontawesome-7.3.1/css/all.min.css" />
         <script defer src="js/deferred-styles.js"></script>
         <script defer src="lib/typed.js-2.1.0/typed.umd.js"></script>
@@ -82,17 +78,17 @@
             </div>
         </noscript>
 
-        <!-- The particle background, drawn by js/particle-background.js from the first paint; outside #app, so Blazor never
-             replaces it and it doesn't wait for .NET. -->
+        <!-- Keep the particle background outside Blazor's render root. -->
         <div id="particles" aria-hidden="true" class="fixed inset-0 z-10"></div>
 
         <div id="app">
             <!--prerender-->
-            <svg class="relative mx-auto mt-[35vh] mb-4 block h-32 w-32">
+            <p class="sr-only" role="status">Loading</p>
+            <svg aria-hidden="true" class="relative mx-auto mt-[35vh] mb-4 block h-32 w-32">
                 <circle r="40%" cx="50%" cy="50%" class="origin-center -rotate-90 fill-none stroke-gray-800 [stroke-width:0.5rem]" />
                 <circle r="40%" cx="50%" cy="50%" class="origin-center -rotate-90 fill-none stroke-purple-600 [stroke-width:0.5rem] [stroke-linecap:round] [stroke-dasharray:calc(3.141*var(--blazor-load-percentage,0%)*0.8),500%] transition-[stroke-dasharray] duration-50 ease-in-out drop-shadow-[0_0_6px_rgb(147_51_234/0.6)]" />
             </svg>
-            <div class="absolute inset-x-0 top-[calc(35vh+3.25rem)] text-center font-bold text-white after:content-[var(--blazor-load-percentage-text,'Loading')]"></div>
+            <div aria-hidden="true" class="absolute inset-x-0 top-[calc(35vh+3.25rem)] text-center font-bold text-white after:content-[var(--blazor-load-percentage-text,'Loading')]"></div>
             <!--/prerender-->
         </div>
 
@@ -121,7 +117,7 @@
         </div>
         <script defer src="js/analytics-consent.js"></script>
         <script type="module" src="js/particle-background.js"></script>
-        <!-- Started by js/blazor-start.js: at once, or on the prerendered home page 5 seconds after it has loaded. -->
+        <!-- blazor-start.js controls startup timing. -->
         <script src="_framework/blazor.webassembly#[.{fingerprint}].js" autostart="false"></script>
         <script src="js/blazor-start.js"></script>
     </body>

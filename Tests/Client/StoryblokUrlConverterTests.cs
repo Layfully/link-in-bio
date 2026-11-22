@@ -3,10 +3,7 @@ using System.Text.Json;
 
 namespace LinkInBio.Tests.Client;
 
-/// <summary>
-/// How a Storyblok link field becomes the address a link on the site points to. Read through <see cref="StoryblokLink"/>,
-/// which is where the app uses the converter.
-/// </summary>
+/// <summary>Tests URL conversion through the app's <see cref="StoryblokLink"/> model.</summary>
 public sealed class StoryblokUrlConverterTests
 {
     [Theory]
@@ -26,10 +23,7 @@ public sealed class StoryblokUrlConverterTests
     [InlineData("\"/Certificate/x\"", "/Certificate/x")]
     [InlineData("\"#section\"", "#section")]
     [InlineData("""{ "linktype": "url", "url": "https://example.com/a\n/b" }""", "https://example.com/a/b")]
-    public void Links_become_the_address_to_link_to(string field, string expected)
-    {
-        Assert.Equal(expected, Read(field));
-    }
+    public void Links_become_the_expected_address(string field, string expected) => Assert.Equal(expected, Read(field));
 
     [Theory]
     [InlineData("""{ "linktype": "url", "url": "javascript:alert(1)" }""")]
@@ -38,10 +32,7 @@ public sealed class StoryblokUrlConverterTests
     [InlineData("""{ "linktype": "url", "url": "vbscript:x" }""")]
     [InlineData("""{ "linktype": "url", "url": "file:///etc/passwd" }""")]
     [InlineData("\"javascript:alert(1)\"")]
-    public void Addresses_that_could_run_code_are_dropped(string field)
-    {
-        Assert.Null(Read(field));
-    }
+    public void Unsupported_URL_schemes_are_rejected(string field) => Assert.Null(Read(field));
 
     [Theory]
     [InlineData("""{ "linktype": "url", "url": "//evil.example" }""")]
@@ -51,10 +42,7 @@ public sealed class StoryblokUrlConverterTests
     [InlineData("""{ "linktype": "url", "url": "/\n/evil.example" }""")]
     [InlineData("""{ "linktype": "url", "url": "/\r\n\\evil.example" }""")]
     [InlineData("\"/\\t/evil.example\"")]
-    public void Addresses_that_only_look_site_relative_are_dropped(string field)
-    {
-        Assert.Null(Read(field));
-    }
+    public void Addresses_that_only_look_site_relative_are_dropped(string field) => Assert.Null(Read(field));
 
     [Theory]
     [InlineData("""{ "linktype": "url", "url": "" }""")]
@@ -65,10 +53,7 @@ public sealed class StoryblokUrlConverterTests
     [InlineData("\"\"")]
     [InlineData("42")]
     [InlineData("[]")]
-    public void Empty_or_unexpected_fields_have_no_address(string field)
-    {
-        Assert.Null(Read(field));
-    }
+    public void Empty_or_unexpected_fields_have_no_address(string field) => Assert.Null(Read(field));
 
     [Fact]
     public void An_unexpected_link_field_doesnt_fail_the_rest_of_the_entry()

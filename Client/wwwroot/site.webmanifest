@@ -5,13 +5,12 @@
   "description": "Software engineer working with .NET, C# and Blazor. Find me on GitHub, LinkedIn, Facebook and Instagram, or see my work in my portfolio.",
   "lang": "en",
   "start_url": "/",
-  "scope": "/",
   "display": "standalone",
   "background_color": "#111827",
   "theme_color": "#111827",
   "icons": [
-    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
-    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png" },
     { "src": "icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
   ]
 }

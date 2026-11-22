@@ -3,11 +3,7 @@ using System.Text.Json.Serialization;
 
 namespace Storyblok.Converters;
 
-/// <summary>
-/// Reads a Storyblok block into the class registered for its <c>component</c> name.
-/// System.Text.Json's own polymorphism can't do this: it needs the type name as the object's first property and the
-/// derived classes declared on the base class, while Storyblok puts <c>component</c> anywhere and the classes live in the app.
-/// </summary>
+/// <summary>Reads Storyblok blocks using the app's component registry.</summary>
 internal sealed class StoryblokComponentConverter(StoryblokComponentTypes componentTypes) : JsonConverter<StoryblokComponent>
 {
     public override StoryblokComponent Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
@@ -24,14 +20,12 @@ internal sealed class StoryblokComponentConverter(StoryblokComponentTypes compon
 
         if (name is not null && componentTypes.TryGetType(name, out Type? type))
         {
-            // This converter only handles StoryblokComponent itself, never a class derived from it, so the registered
-            // class is read with the normal property mapping instead of coming back here.
+            // Registered subclasses use normal property mapping.
             return block.Deserialize(type, options) as StoryblokComponent
                 ?? throw new JsonException($"The Storyblok component \"{name}\" could not be read into {type}.");
         }
 
-        // A block the app has no class for, such as one added in Storyblok before the site knows it. Pages pick their
-        // blocks by type, so it is skipped rather than failing the whole story.
+        // Keep unknown blocks as base components so pages can skip them by type.
         return new StoryblokComponent
         {
             Uuid = Guid.TryParse(StringProperty(block, "_uid"), out Guid uuid) ? uuid : Guid.Empty,

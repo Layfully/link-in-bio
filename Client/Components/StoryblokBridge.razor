@@ -1,14 +1,12 @@
 @using Microsoft.Extensions.Options
+@using Microsoft.JSInterop
 @implements IDisposable
 @inject IOptions<StoryblokOptions> StoryblokOptions
 @inject StoryblokStoryClient StoryblokClient
 @inject IJSRuntime Js
 @inject ILogger<StoryblokBridge> Logger
 
-@* Renders nothing. Inside the Visual Editor it loads Storyblok's bridge, which hands every edit to the pages as it is
-   typed (live preview) and reloads the preview whenever the editor saves or publishes. Only the editor build can be in
-   the editor (it alone has the preview token), so production never loads the bridge, and its Content Security Policy
-   doesn't allow it either (see Csp.targets). *@
+@* Enable live updates inside the Storyblok Visual Editor. *@
 
 @code {
     private DotNetObjectReference<StoryblokBridge>? _self;
@@ -32,7 +30,7 @@
         }
     }
 
-    /// <summary>Called by the bridge with the story as it is being edited, unsaved; the pages showing it re-render.</summary>
+    /// <summary>Passes unsaved edits from the bridge to the Storyblok client.</summary>
     [JSInvokable]
     public void ReadEditedStory(string storyJson) => StoryblokClient.ReadEditedStory(storyJson);
 

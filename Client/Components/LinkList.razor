@@ -1,21 +1,14 @@
 @using Storyblok.Extensions
 
-@* A navigation landmark, so screen-reader users can jump straight to the profile links. Its heading names the landmark
-   and gives the page a heading below the name, which screen readers list and search engines read as the page's outline;
-   the cards say what they are, so it isn't shown. *@
 <nav aria-labelledby="profiles-heading" class="mt-2 flex w-full justify-center z-20 @(Reveal ? "reveal" : null)" @attributes="@EditorAttributes">
     <h2 id="profiles-heading" class="sr-only">Profiles</h2>
-    @* role="list": Safari stops announcing a list as a list once CSS removes its bullets, as Tailwind does.
-       One width for every card, with a margin on narrow screens. *@
+    @* Preserve list semantics in Safari after Tailwind removes the bullets. *@
     <ul role="list" class="flex w-full max-w-md flex-col gap-y-3.5 px-6">
-        @* Entries without a label would render as empty buttons, so they're skipped. *@
         @foreach (StoryblokLink link in Model?.Where(link => !string.IsNullOrWhiteSpace(link.Label)) ?? [])
         {
             <li @key="link" @attributes="@link.EditorAttributes()">
                 @if (string.IsNullOrEmpty(link.Url))
                 {
-                    @* An entry without a URL is plain text, not a link to the current page: a dashed card in muted text,
-                       still readable (neutral-400 on the dark card is above 6:1). *@
                     <span class="card flex min-h-16 w-full items-center gap-x-4 border-dashed px-3.5 py-3 text-neutral-400">
                         <LinkIcon CssClass="@link.CssClass" Muted="true" />
                         <span class="min-w-0 flex-1 text-center font-semibold break-words">@link.Label<span class="sr-only"> (not available)</span></span>
@@ -24,8 +17,6 @@
                 }
                 else
                 {
-                    @* rel="me": these profiles belong to the person this page is about (used by Mastodon, IndieWeb and search engines).
-                       Hover and keyboard focus look the same; the arrow slides in only when the visitor allows motion. *@
                     <a href="@link.Url" rel="me" class="group card card-interactive flex min-h-16 w-full items-center gap-x-4 px-3.5 py-3 text-white">
                         <LinkIcon CssClass="@link.CssClass" />
                         <span class="min-w-0 flex-1 text-center font-semibold tracking-tight break-words">@link.Label</span>
@@ -43,11 +34,11 @@
     [Parameter]
     public IReadOnlyList<StoryblokLink>? Model { get; set; }
 
-    /// <summary>The list block's markers for the Visual Editor (<see cref="VisualEditorExtensions.EditorAttributes"/>); none outside it.</summary>
+    /// <summary>Storyblok Visual Editor attributes for the list block.</summary>
     [Parameter]
     public IReadOnlyDictionary<string, object>? EditorAttributes { get; set; }
 
-    /// <summary>Fades the list in. Off when it replaces identical prerendered content, which would otherwise fade in twice.</summary>
+    /// <summary>Enables the reveal animation when the list appears.</summary>
     [Parameter]
     public bool Reveal { get; set; } = true;
 }

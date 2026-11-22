@@ -3,11 +3,7 @@ using System.Text.Json.Serialization;
 
 namespace Client.Data.Converters;
 
-/// <summary>
-/// Turns a Storyblok link field into the address the site links to. The field is an object whose shape depends on its
-/// <c>linktype</c>: a web address, another story in the space, an email address or an uploaded asset.
-/// Anything unexpected becomes <c>null</c> (rendered as an entry without a link) instead of failing the whole story.
-/// </summary>
+/// <summary>Reads a Storyblok link as a safe address or returns <c>null</c>.</summary>
 public sealed class StoryblokUrlConverter : JsonConverter<string>
 {
     public override string? Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
@@ -15,22 +11,11 @@ public sealed class StoryblokUrlConverter : JsonConverter<string>
         using JsonDocument document = JsonDocument.ParseValue(ref reader);
         JsonElement link = document.RootElement;
 
-        if (link.ValueKind == JsonValueKind.String)
+        string? address = link.ValueKind switch
         {
-            string? text = NonEmpty(link.GetString()) is { } value ? WithoutTabsAndNewlines(value.Trim()) : null;
-            return text is not null && IsSafe(text) ? text : null;
-        }
-
-        if (link.ValueKind != JsonValueKind.Object)
-        {
-            return null;
-        }
-
-        string? address = TextOf(link, "linktype") switch
-        {
-            "email" => ToMailto(TextOf(link, "email") ?? TextOf(link, "url")),
-            "story" => ToSitePath(TextOf(link, "cached_url") ?? TextOf(link, "url")),
-            _ => TextOf(link, "url") ?? TextOf(link, "cached_url"), // "url", "asset" and unknown kinds
+            JsonValueKind.String => NonEmpty(link.GetString()),
+            JsonValueKind.Object => ReadObjectAddress(link),
+            _ => null,
         };
 
         if (address is null)
@@ -40,9 +25,9 @@ public sealed class StoryblokUrlConverter : JsonConverter<string>
 
         address = WithoutTabsAndNewlines(address.Trim());
 
-        // A link may point at a section of the target page. Editors may type the anchor with or without "#";
-        // an email address has no sections.
-        if (TextOf(link, "anchor")?.TrimStart('#') is { Length: > 0 } anchor && !address.StartsWith("mailto:", StringComparison.OrdinalIgnoreCase))
+        if (link.ValueKind == JsonValueKind.Object
+            && TextOf(link, "anchor")?.TrimStart('#') is { Length: > 0 } anchor
+            && !address.StartsWith("mailto:", StringComparison.OrdinalIgnoreCase))
         {
             address = $"{address}#{anchor}";
         }
@@ -50,19 +35,23 @@ public sealed class StoryblokUrlConverter : JsonConverter<string>
         return IsSafe(address) ? address : null;
     }
 
-    // Only site-relative, web and email addresses. Anything else (javascript:, data:, ...) could run code when clicked;
-    // the Content Security Policy blocks that too, but this converter shouldn't depend on it.
-    // Relative addresses are checked first: in the browser, "/x" would otherwise parse as an absolute file: address.
-    // "//host" and "/\host" are not site-relative: browsers read both as an address on another site.
+    private static string? ReadObjectAddress(JsonElement link) => TextOf(link, "linktype") switch
+    {
+        "email" => ToMailto(TextOf(link, "email") ?? TextOf(link, "url")),
+        "story" => ToSitePath(TextOf(link, "cached_url") ?? TextOf(link, "url")),
+        _ => TextOf(link, "url") ?? TextOf(link, "cached_url"),
+    };
+
+    // Check root-relative paths first because Uri can parse them as absolute file addresses.
     private static bool IsSafe(string address) =>
         IsSitePath(address) || address.StartsWith('#')
         || (Uri.TryCreate(address, UriKind.Absolute, out Uri? uri) && uri.Scheme is "https" or "http" or "mailto");
 
+    // Browsers treat both //host and /\host as links to another host.
     private static bool IsSitePath(string address) =>
         address.StartsWith('/') && !address.StartsWith("//", StringComparison.Ordinal) && !address.StartsWith("/\\", StringComparison.Ordinal);
 
-    // Browsers drop tabs and line breaks anywhere in an address before reading it, so "/\t/host" would open "//host" on
-    // another site. They are dropped here first, so the checks above see the address the browser will.
+    // Match browser parsing so a tab or newline cannot disguise a hostname or scheme.
     private static string WithoutTabsAndNewlines(string address) =>
         address.Replace("\t", string.Empty, StringComparison.Ordinal)
             .Replace("\n", string.Empty, StringComparison.Ordinal)
