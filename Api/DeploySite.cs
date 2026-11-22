@@ -1,24 +1,27 @@
 namespace Api;
 
 /// <summary>Maps Storyblok story slugs to a GitHub deployment workflow.</summary>
-/// <param name="Repository">The GitHub repository in owner/name format.</param>
-/// <param name="Workflow">The workflow file that accepts <c>workflow_dispatch</c>.</param>
-/// <param name="Ref">The branch the workflow runs on.</param>
-/// <param name="Builds">Tests whether the build includes a story's full slug.</param>
-public sealed record DeploySite(string Repository, string Workflow, string Ref, Func<string, bool> Builds)
+public sealed class DeploySite
 {
-    /// <summary>Only the home story is prerendered at deploy time.</summary>
-    public static DeploySite LinkInBio { get; } = new(
-        "Layfully/link-in-bio", "azure-static-web-apps-gray-tree-0c2e88d03.yml", "main", slug => slug == "home");
+    public string Repository { get; init; } = string.Empty;
+    public string Workflow { get; init; } = string.Empty;
+    public string Ref { get; init; } = string.Empty;
+    public string[] Slugs { get; init; } = [];
+    public string[] SlugPrefixes { get; init; } = [];
 
-    /// <summary>Matches the portfolio build's <c>starts_with</c> filter, including English and Polish slugs.</summary>
-    public static DeploySite Portfolio { get; } = new(
-        "Layfully/portfolio", "azure-static-web-apps-purple-tree-0510d5403.yml", "main", IsPortfolioStory);
+    internal bool IsValid =>
+        Repository?.Split('/') is [string owner, string name]
+        && IsPathSegment(owner) && IsPathSegment(name) && IsPathSegment(Workflow)
+        && !string.IsNullOrWhiteSpace(Ref)
+        && HasValidSlugs(Slugs) && HasValidSlugs(SlugPrefixes);
 
-    public static IReadOnlyList<DeploySite> All { get; } = [LinkInBio, Portfolio];
+    internal bool Builds(string slug) =>
+        Slugs.Contains(slug, StringComparer.Ordinal)
+        || SlugPrefixes.Any(prefix => slug.StartsWith(prefix, StringComparison.Ordinal));
 
-    private static bool IsPortfolioStory(string slug) =>
-        slug.StartsWith("portfolio", StringComparison.Ordinal) ||
-        slug.StartsWith("en/portfolio", StringComparison.Ordinal) ||
-        slug.StartsWith("pl/portfolio", StringComparison.Ordinal);
+    private static bool HasValidSlugs(string[]? slugs) => slugs is not null && !Array.Exists(slugs, string.IsNullOrWhiteSpace);
+
+    private static bool IsPathSegment(string? value) =>
+        value is { Length: > 0 } and not ("." or "..")
+        && value.All(character => char.IsAsciiLetterOrDigit(character) || character is '-' or '_' or '.');
 }

@@ -1,6 +1,6 @@
 namespace Api;
 
-/// <summary>Credentials for the Storyblok deploy webhook.</summary>
+/// <summary>Server-side credentials and targets for the Storyblok deploy webhook.</summary>
 public sealed class DeployTriggerOptions
 {
     public const string Section = "DeployTrigger";
@@ -10,4 +10,6 @@ public sealed class DeployTriggerOptions
 
     /// <summary>GitHub token with Actions write access to the target repositories. Set <c>DeployTrigger__GitHubToken</c> in Azure.</summary>
     public string? GitHubToken { get; init; }
+
+    public DeploySite[] Sites { get; init; } = [];
 }

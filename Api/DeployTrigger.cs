@@ -14,6 +14,8 @@ public sealed record DeployTriggerResult(HttpStatusCode Status, string Message);
 /// <summary>Dispatches GitHub deployment workflows for sites affected by a Storyblok publish.</summary>
 public sealed class DeployTrigger(HttpClient http, IOptions<DeployTriggerOptions> options, ILogger<DeployTrigger> logger)
 {
+    private static readonly DeployTriggerResult NotConfigured = new(HttpStatusCode.InternalServerError, "The webhook isn't set up.");
+
     /// <param name="secret">The secret from the webhook's address.</param>
     /// <param name="body">What Storyblok sent: <c>{ "action": "published", "full_slug": "home", … }</c>.</param>
     /// <param name="cancellationToken">Ends the call when the host shuts down.</param>
@@ -28,7 +30,7 @@ public sealed class DeployTrigger(HttpClient http, IOptions<DeployTriggerOptions
         if (string.IsNullOrEmpty(settings.WebhookSecret))
         {
             logger.LogError("{Section}:WebhookSecret isn't set in the application settings.", DeployTriggerOptions.Section);
-            return new(HttpStatusCode.InternalServerError, "The webhook isn't set up.");
+            return NotConfigured;
         }
 
         // Authenticate before reading the body or revealing GitHub configuration errors.
@@ -38,15 +40,26 @@ public sealed class DeployTrigger(HttpClient http, IOptions<DeployTriggerOptions
             return new(HttpStatusCode.Unauthorized, "Wrong or missing secret.");
         }
 
+        if (settings.Sites is not { Length: > 0 } configuredSites)
+        {
+            return new(HttpStatusCode.OK, "No deployment targets are configured.");
+        }
+
+        if (configuredSites.Any(site => site is not { IsValid: true }))
+        {
+            logger.LogError("{Section}:Sites contains an invalid deployment target.", DeployTriggerOptions.Section);
+            return NotConfigured;
+        }
+
         if (string.IsNullOrEmpty(settings.GitHubToken))
         {
             logger.LogError("{Section}:GitHubToken isn't set in the application settings.", DeployTriggerOptions.Section);
-            return new(HttpStatusCode.InternalServerError, "The webhook isn't set up.");
+            return NotConfigured;
         }
 
         // A missing slug deliberately triggers all sites.
         string? slug = ReadStorySlug(await readBodyAsync(cancellationToken));
-        DeploySite[] sites = [.. DeploySite.All.Where(site => slug is null || site.Builds(slug))];
+        DeploySite[] sites = slug is null ? configuredSites : Array.FindAll(configuredSites, site => site.Builds(slug));
         if (sites.Length == 0)
         {
             logger.LogInformation("Story {Slug} isn't part of any site's deploy; nothing started.", slug);
@@ -103,20 +116,18 @@ public sealed class DeployTrigger(HttpClient http, IOptions<DeployTriggerOptions
         {
             using JsonDocument document = JsonDocument.Parse(body);
             JsonElement root = document.RootElement;
-            if (root.ValueKind == JsonValueKind.Object &&
-                root.TryGetProperty("full_slug", out JsonElement slug) &&
-                slug.ValueKind == JsonValueKind.String &&
-                slug.GetString()?.Trim('/') is { Length: > 0 } name)
-            {
-                return name;
-            }
+            return root.ValueKind == JsonValueKind.Object
+                && root.TryGetProperty("full_slug", out JsonElement slug)
+                && slug.ValueKind == JsonValueKind.String
+                && slug.GetString()?.Trim('/') is { Length: > 0 } name
+                ? name
+                : null;
         }
         catch (JsonException)
         {
             // A malformed payload follows the same fallback as a missing slug.
+            return null;
         }
-
-        return null;
     }
 
     // Caller cancellation must propagate even when an HTTP attempt is eligible for retry.

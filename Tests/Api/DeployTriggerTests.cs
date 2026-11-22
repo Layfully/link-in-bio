@@ -51,7 +51,8 @@ public sealed class DeployTriggerTests : IDisposable
     [Fact]
     public void This_sites_workflow_exists_and_can_be_started_this_way()
     {
-        string workflow = Path.Combine(RepositoryRoot(), ".github", "workflows", DeploySite.LinkInBio.Workflow);
+        DeploySite site = Assert.Single(ConfiguredSites(), site => site.Repository == "Layfully/link-in-bio");
+        string workflow = Path.Combine(RepositoryRoot(), ".github", "workflows", site.Workflow);
 
         Assert.True(File.Exists(workflow), $"{workflow} doesn't exist.");
         Assert.Contains("workflow_dispatch:", File.ReadAllText(workflow), StringComparison.Ordinal);
@@ -255,17 +256,59 @@ public sealed class DeployTriggerTests : IDisposable
     private const string HomePublished = """{"action":"published","space_id":268473,"story_id":1,"full_slug":"home"}""";
     private const string MainDispatchBody = """{"ref":"main"}""";
 
+    [Fact]
+    public async Task A_fork_can_route_stories_to_a_different_workflow_and_branch()
+    {
+        DeploySite site = new() { Repository = "example/links", Workflow = "publish.yml", Ref = "production", Slugs = ["profile"] };
+        DeployTriggerResult result = await Trigger("s3cret", body: """{"full_slug":"profile"}""", sites: [site]);
+
+        Assert.Equal(HttpStatusCode.Accepted, result.Status);
+        Assert.Equal("https://api.github.com/repos/example/links/actions/workflows/publish.yml/dispatches", Assert.Single(_github.Addresses));
+        Assert.Equal("""{"ref":"production"}""", Assert.Single(_github.Bodies));
+    }
+
+    [Fact]
+    public async Task An_empty_target_list_starts_no_workflow()
+    {
+        DeployTriggerResult result = await Trigger("s3cret", sites: []);
+
+        Assert.Equal(HttpStatusCode.OK, result.Status);
+        Assert.Empty(_github.Requests);
+    }
+
+    [Fact]
+    public async Task Invalid_target_configuration_sends_no_request()
+    {
+        DeploySite site = new() { Repository = "example", Workflow = "publish.yml", Ref = "main" };
+        DeployTriggerResult result = await Trigger("s3cret", sites: [site]);
+
+        Assert.Equal(HttpStatusCode.InternalServerError, result.Status);
+        Assert.Empty(_github.Requests);
+    }
+
     private async Task<DeployTriggerResult> Trigger(string? secret, DeployTriggerOptions? settings = null, CancellationToken? cancellationToken = null,
-        string? body = HomePublished)
+        string? body = HomePublished, DeploySite[]? sites = null)
     {
         ServiceCollection services = new();
         services.AddSingleton<TimeProvider>(_time);
-        services.AddSingleton(Options.Create(settings ?? new DeployTriggerOptions { WebhookSecret = "s3cret", GitHubToken = "github-token" }));
+        settings ??= new DeployTriggerOptions { WebhookSecret = "s3cret", GitHubToken = "github-token" };
+        services.AddSingleton(Options.Create(new DeployTriggerOptions
+        {
+            WebhookSecret = settings.WebhookSecret,
+            GitHubToken = settings.GitHubToken,
+            Sites = sites ?? ConfiguredSites(),
+        }));
         services.AddDeployTriggerClient().ConfigurePrimaryHttpMessageHandler(() => _github);
         using ServiceProvider provider = services.BuildServiceProvider();
         DeployTrigger trigger = provider.GetRequiredService<DeployTrigger>();
         return await trigger.TriggerAsync(secret, body, cancellationToken ?? TestContext.Current.CancellationToken);
     }
+
+    private static DeploySite[] ConfiguredSites() => new ConfigurationBuilder()
+        .AddJsonFile(Path.Combine(RepositoryRoot(), "Api", "appsettings.json"))
+        .Build()
+        .GetSection(DeployTriggerOptions.Section)
+        .Get<DeployTriggerOptions>()!.Sites;
 
     // Moves the fake clock on until the trigger has answered, so the pauses between attempts take no real time.
     private async Task<DeployTriggerResult> TriggerWhileTimePasses(string? secret)
