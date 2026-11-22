@@ -18,7 +18,7 @@
     case Loaded loaded:
         if (loaded.Header is not null)
         {
-            <Header Model="@loaded.Header" Reveal="@loaded.Reveal" />
+            <Header Model="@loaded.Header" Reveal="@loaded.Reveal" DisplayName="@loaded.Settings?.Name" />
         }
         if (loaded.Links is { Count: > 0 })
         {
@@ -37,12 +37,11 @@
 </StoryblokStatus>
 
 @code {
-    private const string Title = "Adrian Gaborek - Software Engineer (.NET, C#, Blazor)";
-    private const string Slug = "/home";
+    public const string Slug = "/home";
 
     private union PageState(Loading, Loaded, Unavailable, Unreadable, NothingPublished);
     private sealed record Loading;
-    private sealed record Loaded(StoryblokHeader? Header, IReadOnlyList<StoryblokLink>? Links, IReadOnlyDictionary<string, object>? ListAttributes, bool Reveal);
+    private sealed record Loaded(StoryblokHeader? Header, IReadOnlyList<StoryblokLink>? Links, IReadOnlyDictionary<string, object>? ListAttributes, StoryblokSiteSettings? Settings, bool Reveal);
     private sealed record Unavailable;
     private sealed record Unreadable;
     private sealed record NothingPublished;
@@ -53,6 +52,7 @@
     // flight (the saved draft, or an error) no longer replaces what the page shows.
     private bool _edited;
     private PageState _state = new Loading();
+    private string Title => _state is Loaded { Settings.PageTitle: { } title } ? title : Site.Name;
 
     private ContentStatus ContentStatus => _state switch
     {
@@ -114,7 +114,7 @@
         StoryblokHeader? header = Header(body);
         StoryblokList? list = List(body);
         IReadOnlyList<StoryblokLink>? links = list?.EntriesOf<StoryblokLink>();
-        return HasContent(header, links) ? new Loaded(header, links, list.EditorAttributes(), reveal) : new NothingPublished();
+        return HasContent(header, links) ? new Loaded(header, links, list.EditorAttributes(), SiteSettings(body), reveal) : new NothingPublished();
     }
 
     /// <summary>True when the story has a header or at least one link; otherwise the page says nothing is published yet.</summary>
@@ -125,6 +125,8 @@
 
     /// <summary>The header the page shows: the story's first header block.</summary>
     public static StoryblokHeader? Header(StoryblokComponent[]? body) => body?.OfType<StoryblokHeader>().FirstOrDefault();
+
+    public static StoryblokSiteSettings? SiteSettings(StoryblokComponent[]? body) => body?.OfType<StoryblokSiteSettings>().FirstOrDefault();
 
     private static StoryblokList? List(StoryblokComponent[]? body) => body?.OfType<StoryblokList>().FirstOrDefault();
 

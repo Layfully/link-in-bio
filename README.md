@@ -38,6 +38,22 @@ You need the .NET SDK that `global.json` names (11.0.100, or a later patch of it
 CI also installs the WebAssembly build tools (`dotnet workload install wasm-tools`), which make `dotnet publish` relink
 the .NET runtime into a smaller file. A local publish works without them, only with a larger download.
 
+## Profile identity in Storyblok
+
+Create a nestable block with the technical name `site_settings` and allow it in the `page` component's `body` field.
+Add one instance to the `home` story alongside the existing `header` and `list` blocks.
+
+| Field | Type | Use |
+| --- | --- | --- |
+| `display_name` | Text | Profile heading, home page title, and structured data name |
+| `professional_title` | Text | Home page title and structured data job title |
+| `seo_description` | Text | Search and social descriptions in the prerendered HTML |
+| `social_image` | Asset | Optional preview image. Falls back to the header photo. |
+
+Publish the `home` story and run the prerender step to update the static metadata. Without this block, the site uses
+the generic title `Links` and can still use the header photo for social previews. The deployment domain and analytics
+settings are configured separately.
+
 ## Tests
 
 Run the .NET tests with:

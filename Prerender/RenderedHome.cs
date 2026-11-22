@@ -8,5 +8,13 @@ public sealed record RenderedHome(string Html, SiteProfile Profile, IReadOnlyLis
 /// <param name="SameAs">Absolute profile URLs for the person's structured data.</param>
 public sealed record SiteProfile(string? Image, IReadOnlyList<string> SameAs)
 {
+    internal const int ImageSize = 600;
+
+    public string? Name { get; init; }
+    public string? JobTitle { get; init; }
+    public string? Title { get; init; }
+    public string? Description { get; init; }
+    public string? ImageAlt { get; init; }
+
     public static SiteProfile None { get; } = new(null, []);
 }

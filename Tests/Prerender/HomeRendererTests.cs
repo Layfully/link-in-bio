@@ -39,6 +39,8 @@ public sealed class HomeRendererTests : IDisposable
     {
         _storyblok.Answer(HttpStatusCode.OK, """
             { "story": { "name": "Home", "content": { "_uid": "11111111-1111-1111-1111-111111111111", "component": "page", "body": [
+                { "_uid": "99999999-9999-9999-9999-999999999999", "component": "site_settings",
+                  "display_name": "Example Person", "professional_title": "Designer", "seo_description": "Example profile" },
                 { "_uid": "22222222-2222-2222-2222-222222222222", "component": "header",
                   "profile": { "filename": "https://a.storyblok.com/f/1/608x912/abc/profile.jpg" },
                   "header_link": [ { "_uid": "66666666-6666-6666-6666-666666666666", "component": "link", "label": "Portfolio",
@@ -56,8 +58,12 @@ public sealed class HomeRendererTests : IDisposable
             ] } }, "cv": 0 }
             """);
 
-        SiteProfile profile = (await RenderHomeAsync()).Profile;
+        RenderedHome home = await RenderHomeAsync();
+        SiteProfile profile = home.Profile;
 
+        Assert.Contains("Example Person</h1>", home.Html, StringComparison.Ordinal);
+        Assert.Equal("Example Person - Designer", profile.Title);
+        Assert.Equal("Example profile", profile.Description);
         Assert.Equal("https://a.storyblok.com/f/1/608x912/abc/profile.jpg/m/600x600/smart", profile.Image);
         Assert.Equal(["https://portfolio.example.com", "https://github.com/Layfully"], profile.SameAs);
     }
