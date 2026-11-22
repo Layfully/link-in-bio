@@ -117,8 +117,20 @@ public static class HomeRenderer
             CanonicalOrigin = settings?.CanonicalOrigin,
             AnalyticsMeasurementId = settings?.AnalyticsMeasurementId?.Trim(),
             AnalyticsHosts = settings?.AnalyticsHosts?.Trim(),
+            AppName = settings?.InstallName,
+            AppIcon = InstallIcon(settings?.AppIcon),
+            AppMaskableIcon = InstallIcon(settings?.AppMaskableIcon),
         };
     }
+
+    private static string? InstallIcon(StoryblokAsset? asset) =>
+        Uri.TryCreate(asset?.Url, UriKind.Absolute, out Uri? uri)
+            && uri.Scheme == Uri.UriSchemeHttps && uri.Host == "a.storyblok.com" && uri.IsDefaultPort
+            && uri.UserInfo.Length == 0 && uri.Query.Length == 0 && uri.Fragment.Length == 0
+            && uri.AbsolutePath.StartsWith("/f/", StringComparison.Ordinal)
+            && uri.AbsolutePath.EndsWith(".png", StringComparison.OrdinalIgnoreCase)
+            ? uri.AbsoluteUri
+            : null;
 
     private sealed class RenderErrors : IErrorBoundaryLogger
     {

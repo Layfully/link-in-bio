@@ -28,6 +28,15 @@ public sealed class StoryblokSiteSettings : StoryblokComponent
     [JsonPropertyName("analytics_hosts")]
     public string? AnalyticsHosts { get; set; }
 
+    [JsonPropertyName("app_name")]
+    public string? AppName { get; set; }
+
+    [JsonPropertyName("app_icon")]
+    public StoryblokAsset? AppIcon { get; set; }
+
+    [JsonPropertyName("app_maskable_icon")]
+    public StoryblokAsset? AppMaskableIcon { get; set; }
+
     public string? CanonicalOrigin => Site.ParseOrigin(CanonicalUrl);
 
     public string? PageTitle => (Name, JobTitle) switch
@@ -41,6 +50,8 @@ public sealed class StoryblokSiteSettings : StoryblokComponent
     public string? JobTitle => Clean(ProfessionalTitle);
 
     public string? Description => Clean(SeoDescription);
+
+    public string? InstallName => Clean(AppName);
 
     private static string? Clean(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 }

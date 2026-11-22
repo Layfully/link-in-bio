@@ -229,6 +229,39 @@ public sealed class PublishedSiteTests : IDisposable
 
     private static readonly string[] Pages = ["index.html", "app-shell.html"];
 
+    [Theory]
+    [InlineData(null, "icons/icon-maskable-512.png")]
+    [InlineData("https://a.storyblok.com/f/1/mask.png", "https://a.storyblok.com/f/1/mask.png/m/512x512/filters:format(png)")]
+    public void Install_branding_updates_the_manifest_and_touch_icon(string? maskable, string expectedMaskable)
+    {
+        const string Icon = "https://a.storyblok.com/f/1/icon.png";
+        string path = Path.Combine(_wwwroot, "site.webmanifest");
+        File.WriteAllText(path, """
+            { "id": "/", "name": "Links", "icons": [
+              { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
+              { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png" },
+              { "src": "icons/icon-maskable-512.png", "purpose": "maskable" }
+            ] }
+            """);
+        File.WriteAllText(path + ".br", "old");
+        File.WriteAllText(Path.Combine(_wwwroot, "index.html"), IndexWithMetadata.Replace("<head>",
+            """<head><link rel="apple-touch-icon" href="icons/icon-180.png" />""", StringComparison.Ordinal));
+
+        WriteHome(profile: SiteProfile.None with { AppName = "Example & Co", AppIcon = Icon, AppMaskableIcon = maskable });
+
+        JsonNode manifest = JsonNode.Parse(File.ReadAllText(path))!;
+        Assert.Equal("Example & Co", (string?)manifest["name"]);
+        Assert.Equal("/", (string?)manifest["id"]);
+        Assert.Equal($"{Icon}/m/192x192/filters:format(png)", (string?)manifest["icons"]![0]!["src"]);
+        Assert.Equal($"{Icon}/m/512x512/filters:format(png)", (string?)manifest["icons"]![1]!["src"]);
+        Assert.Equal(expectedMaskable, (string?)manifest["icons"]![2]!["src"]);
+        Assert.False(File.Exists(path + ".br"));
+        foreach (string page in Pages)
+        {
+            Assert.Contains($"href=\"{Icon}/m/180x180/filters:format(png)\"", File.ReadAllText(Path.Combine(_wwwroot, page)), StringComparison.Ordinal);
+        }
+    }
+
     private const string IndexWithMetadata = """
         <html>
             <head>

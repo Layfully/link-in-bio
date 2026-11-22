@@ -52,6 +52,11 @@ Add one instance to the `home` story alongside the existing `header` and `list` 
 | `canonical_url` | Text | Optional public site origin, such as `https://links.example.com`. |
 | `analytics_measurement_id` | Text | Optional GA4 measurement ID, such as `G-EXAMPLE123`. |
 | `analytics_hosts` | Text | Comma-separated hostnames where analytics may run. |
+| `app_name` | Text | Optional name shown when the site is installed. Defaults to Links. |
+| `app_icon` | Asset | Optional square PNG, at least 512 × 512 pixels, for the install and Apple touch icons. |
+| `app_maskable_icon` | Asset | Optional square PNG, at least 512 × 512 pixels, with important artwork in the center so it survives cropping. |
+
+Upload install icons to Storyblok and publish the Home story. The production build updates the manifest and keeps the bundled icon for each field left blank.
 
 Publish the `home` story and run the prerender step to update the static metadata. Without this block, the site uses
 the generic title `Links` and can still use the header photo for social previews.
