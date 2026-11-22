@@ -50,14 +50,22 @@ Add one instance to the `home` story alongside the existing `header` and `list` 
 | `seo_description` | Text | Search and social descriptions in the prerendered HTML |
 | `social_image` | Asset | Optional preview image. Falls back to the header photo. |
 | `canonical_url` | Text | Optional public site origin, such as `https://links.example.com`. |
+| `analytics_measurement_id` | Text | Optional GA4 measurement ID, such as `G-EXAMPLE123`. |
+| `analytics_hosts` | Text | Comma-separated hostnames where analytics may run. |
 
 Publish the `home` story and run the prerender step to update the static metadata. Without this block, the site uses
-the generic title `Links` and can still use the header photo for social previews. The deployment domain and analytics
-settings are configured separately.
+the generic title `Links` and can still use the header photo for social previews.
 
 Set `canonical_url` on the published `home` story to use it for canonical links, social metadata, `sitemap.xml`, and
-the sitemap link in `robots.txt`. Use an HTTP or HTTPS origin without a path, query, or fragment. The value in
-`Client/wwwroot/appsettings.json` under `Site:Url` is used when the field is missing or invalid, or prerendering is skipped.
+the sitemap link in `robots.txt`. Use an HTTP or HTTPS origin without a path, query, or fragment. If the field is
+missing or invalid, or prerendering is skipped, the published site omits canonical metadata and the sitemap.
+
+## Analytics
+
+To enable Google Analytics, fill in both analytics fields on the published `home` story and deploy. Use hostnames
+without a scheme or path, such as `links.example.com,www.links.example.com`. Leave either field empty to disable it.
+Only listed hosts show the consent controls, and Analytics loads only after the visitor opts in. The editor build and
+builds that skip prerendering omit the analytics settings.
 
 ## Tests
 

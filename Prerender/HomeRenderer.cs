@@ -19,14 +19,14 @@ namespace Prerender;
 public static class HomeRenderer
 {
     /// <summary>Registers rendering services and records Storyblok responses for the browser.</summary>
-    public static IServiceCollection AddPrerendering(this IServiceCollection services, IConfiguration storyblok, Site site)
+    public static IServiceCollection AddPrerendering(this IServiceCollection services, IConfiguration storyblok)
     {
         services.AddLogging();
         services.AddSingleton(new PrerenderedStories { IsRecording = true });
         services.AddStoryblok(storyblok, typeof(App).Assembly);
         services.AddSingleton(TimeProvider.System);
-        services.AddSingleton(site);
-        services.AddSingleton<NavigationManager>(new SiteNavigationManager(site.Url));
+        services.AddSingleton<Site>();
+        services.AddSingleton<NavigationManager, SiteNavigationManager>();
         services.AddSingleton<IJSRuntime, NoJavaScript>();
         services.AddSingleton<RenderErrors>();
         services.AddSingleton<IErrorBoundaryLogger>(provider => provider.GetRequiredService<RenderErrors>());
@@ -115,6 +115,8 @@ public static class HomeRenderer
             Description = settings?.Description,
             ImageAlt = string.IsNullOrWhiteSpace(photo?.Alt) ? settings?.Name : photo.Alt,
             CanonicalOrigin = settings?.CanonicalOrigin,
+            AnalyticsMeasurementId = settings?.AnalyticsMeasurementId?.Trim(),
+            AnalyticsHosts = settings?.AnalyticsHosts?.Trim(),
         };
     }
 
@@ -131,7 +133,7 @@ public static class HomeRenderer
 
     private sealed class SiteNavigationManager : NavigationManager
     {
-        public SiteNavigationManager(string url) => Initialize($"{url}/", $"{url}/");
+        public SiteNavigationManager() => Initialize("https://prerender.invalid/", "https://prerender.invalid/");
 
         protected override void NavigateToCore(string uri, NavigationOptions options) =>
             throw new NotSupportedException("Nothing navigates while the home page is prerendered.");

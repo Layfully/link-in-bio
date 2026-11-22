@@ -22,6 +22,12 @@ public sealed class StoryblokSiteSettings : StoryblokComponent
     [JsonPropertyName("canonical_url")]
     public string? CanonicalUrl { get; set; }
 
+    [JsonPropertyName("analytics_measurement_id")]
+    public string? AnalyticsMeasurementId { get; set; }
+
+    [JsonPropertyName("analytics_hosts")]
+    public string? AnalyticsHosts { get; set; }
+
     public string? CanonicalOrigin => Site.ParseOrigin(CanonicalUrl);
 
     public string? PageTitle => (Name, JobTitle) switch

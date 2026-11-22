@@ -1,20 +1,18 @@
 // Load Google Analytics only after consent on the public site.
 (() => {
-    const MEASUREMENT_ID = 'G-BCKR10P1MJ';
     const STORAGE_KEY = 'analytics-consent';
 
     const LIFETIME_SECONDS = 395 * 24 * 60 * 60;
 
-    const PRODUCTION_HOSTS = ['adriangaborek.dev', 'www.adriangaborek.dev'];
-
     const banner = document.getElementById('analytics-consent');
     const settings = document.getElementById('analytics-settings');
-    let analyticsLoaded = false;
+    const { measurementId = '', analyticsHosts = '' } = banner.dataset;
+    const hosts = analyticsHosts.split(',').map(host => host.trim().toLowerCase());
 
-    if (!PRODUCTION_HOSTS.includes(window.location.hostname)) {
-        settings.hidden = true;
-        return;
-    }
+    if (!/^G-[A-Z0-9]+$/.test(measurementId) || !hosts.includes(window.location.hostname)) return;
+
+    settings.hidden = false;
+    let analyticsLoaded = false;
 
     function parseChoice(stored) {
         try {
@@ -35,7 +33,7 @@
     };
 
     function loadAnalytics() {
-        window[`ga-disable-${MEASUREMENT_ID}`] = false;
+        window[`ga-disable-${measurementId}`] = false;
 
         if (analyticsLoaded) return;
         analyticsLoaded = true;
@@ -44,11 +42,11 @@
         // gtag expects the arguments object itself, not an array.
         window.gtag = function () { window.dataLayer.push(arguments); };
         window.gtag('js', new Date());
-        window.gtag('config', MEASUREMENT_ID, { cookie_expires: LIFETIME_SECONDS });
+        window.gtag('config', measurementId, { cookie_expires: LIFETIME_SECONDS });
 
         const script = document.createElement('script');
         script.async = true;
-        script.src = `https://www.googletagmanager.com/gtag/js?id=${MEASUREMENT_ID}`;
+        script.src = `https://www.googletagmanager.com/gtag/js?id=${measurementId}`;
         document.head.appendChild(script);
     }
 
@@ -70,7 +68,7 @@
 
     // Disable Analytics before clearing cookies and reloading a tab that already loaded it.
     function withdraw() {
-        window[`ga-disable-${MEASUREMENT_ID}`] = true;
+        window[`ga-disable-${measurementId}`] = true;
         removeAnalyticsCookies();
         if (analyticsLoaded) window.location.reload();
     }

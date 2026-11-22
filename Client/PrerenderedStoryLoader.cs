@@ -4,10 +4,11 @@ using Storyblok;
 
 namespace Client;
 
-/// <summary>Seeds the story cache before Blazor renders its root components.</summary>
+/// <summary>Loads the prerendered story and canonical origin before Blazor renders.</summary>
 internal sealed class PrerenderedStoryLoader(
     IJSRuntime jsRuntime,
     PrerenderedStories stories,
+    Site site,
     ILogger<PrerenderedStories> logger) : IHostedService
 {
     public Task StartAsync(CancellationToken cancellationToken)
@@ -21,6 +22,10 @@ internal sealed class PrerenderedStoryLoader(
             {
                 stories.AddAll(prerendered);
             }
+
+            using IJSInProcessObjectReference? metadata = js.Invoke<IJSInProcessObjectReference?>(
+                "document.querySelector", "meta[property='og:url']");
+            site.Url = Site.ParseOrigin(metadata?.GetValue<string?>("content"));
         }
         catch (JSException exception)
         {

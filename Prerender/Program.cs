@@ -1,4 +1,3 @@
-using Client;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Prerender;
@@ -27,12 +26,11 @@ try
         return Skip("this is the editor build, which shows drafts");
     }
 
-    Site site = Site.FromConfiguration(configuration);
-    await using ServiceProvider services = new ServiceCollection().AddPrerendering(storyblok, site).BuildServiceProvider();
+    await using ServiceProvider services = new ServiceCollection().AddPrerendering(storyblok).BuildServiceProvider();
 
     RenderedHome home = await HomeRenderer.RenderAsync(services);
     string stories = services.GetRequiredService<PrerenderedStories>().ToJson();
-    new PublishedSite(wwwroot, site).WriteHome(home.Html, stories, home.Profile);
+    new PublishedSite(wwwroot).WriteHome(home.Html, stories, home.Profile);
     Console.WriteLine($"Prerendered the home page into index.html; every other route now falls back to {PublishedSite.ShellFile}.");
 
     foreach (string label in home.LinksWithoutAddress)

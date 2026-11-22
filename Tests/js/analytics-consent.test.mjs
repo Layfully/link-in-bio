@@ -6,12 +6,13 @@ import vm from 'node:vm';
 
 const script = readFileSync(new URL('../../Client/wwwroot/js/analytics-consent.js', import.meta.url), 'utf8');
 
-const MEASUREMENT_ID = 'G-BCKR10P1MJ';
+const MEASUREMENT_ID = 'G-EXAMPLE123';
 const STORAGE_KEY = 'analytics-consent';
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 // Runs the script on a fake page and returns what it did, plus ways to act as the visitor.
-function load({ host = 'adriangaborek.dev', stored = null, cookies = '' } = {}) {
+function load({ host = 'adriangaborek.dev', stored = null, cookies = '', measurementId = MEASUREMENT_ID,
+    analyticsHosts = 'adriangaborek.dev,www.adriangaborek.dev' } = {}) {
     const storage = new Map(stored === null ? [] : [[STORAGE_KEY, stored]]);
     const listeners = { banner: [], settings: [], storage: [] };
     const page = {
@@ -31,11 +32,12 @@ function load({ host = 'adriangaborek.dev', stored = null, cookies = '' } = {}) 
     };
     const banner = page.banner = {
         hidden: true,
+        dataset: { measurementId, analyticsHosts },
         addEventListener: (type, listener) => { if (type === 'click') listeners.banner.push(listener); },
         querySelector: () => ({ focus() { page.focused = true; } })
     };
     const settings = page.settings = {
-        hidden: false,
+        hidden: true,
         addEventListener: (type, listener) => { if (type === 'click') listeners.settings.push(listener); }
     };
     const document = {
@@ -62,6 +64,16 @@ function load({ host = 'adriangaborek.dev', stored = null, cookies = '' } = {}) 
 const answered = (choice, daysAgo = 1) => JSON.stringify({ choice, at: Date.now() - daysAgo * DAY_MS });
 const googleScripts = page => page.scripts.filter(element => element.src?.startsWith('https://www.googletagmanager.com/'));
 
+test('a missing measurement ID or host list disables analytics even with stored consent', () => {
+    for (const configuration of [{ measurementId: '' }, { analyticsHosts: '' }]) {
+        const page = load({ ...configuration, stored: answered('granted') });
+        assert.equal(page.banner.hidden, true);
+        assert.equal(page.settings.hidden, true);
+        assert.deepEqual(googleScripts(page), []);
+        assert.deepEqual(page.cookieWrites, []);
+    }
+});
+
 test('other addresses (previews, the editor, localhost) neither ask nor load anything', () => {
     for (const host of ['gray-tree-0c2e88d03.4.azurestaticapps.net', 'localhost']) {
         const page = load({ host, stored: answered('granted') });
@@ -77,6 +89,7 @@ test('a first visit asks, and nothing of Google loads before the answer', () => 
     const page = load();
 
     assert.equal(page.banner.hidden, false);
+    assert.equal(page.settings.hidden, false);
     assert.deepEqual(googleScripts(page), []);
     assert.equal(page.window.gtag, undefined);
     assert.equal(page.window.dataLayer, undefined);

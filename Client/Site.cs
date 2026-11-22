@@ -1,13 +1,10 @@
 namespace Client;
 
-public sealed class Site(string url)
+public sealed class Site
 {
-    /// <summary>Canonical site URL without a trailing slash.</summary>
-    public string Url { get; } = ParseOrigin(url) ?? throw new ArgumentException("Expected an HTTP or HTTPS origin.", nameof(url));
+    /// <summary>Canonical origin embedded by the prerenderer.</summary>
+    public string? Url { get; internal set; }
     public const string Name = "Links";
-
-    public static Site FromConfiguration(IConfiguration configuration) =>
-        new(configuration["Site:Url"] ?? throw new InvalidOperationException("Site:Url is missing."));
 
     public static string? ParseOrigin(string? value) =>
         Uri.TryCreate(value, UriKind.Absolute, out Uri? uri)
