@@ -1,5 +1,6 @@
 using Client;
 using Storyblok;
+using System.Globalization;
 using System.Net;
 using System.Text.Json;
 using System.Text.Json.Nodes;
@@ -59,18 +60,10 @@ public sealed partial class PublishedSite(string wwwroot)
 
         // PrerenderedStories.ToJson escapes HTML delimiters for this JSON data block.
         string data = $"""<script type="application/json" id="{PrerenderedStories.ElementId}">{prerenderedJson}</script>""";
-        // Only the home page gets the root canonical URL.
         ReadOnlySpan<char> template = page.AsSpan();
-        ReadOnlySpan<char> headIndent = template[(page.LastIndexOf('\n', headEnd) + 1)..headEnd];
-        if (!headIndent.IsWhiteSpace())
-        {
-            headIndent = [];
-        }
+        string canonical = HeadTags(page, headEnd, [$"""<link rel="canonical" href="{Site.Url}/" />"""]);
 
-        string newline = page.Contains("\r\n", StringComparison.Ordinal) ? "\r\n" : "\n";
-        string canonical = $"""    <link rel="canonical" href="{Site.Url}/" />""";
-
-        string home = $"{template[..headEnd]}{canonical}{newline}{headIndent}" +
+        string home = $"{template[..headEnd]}{canonical}" +
             $"{template[headEnd..start]}{html}{template[(end + EndMarker.Length)..bodyEnd]}" +
             $"{data}\n{template[bodyEnd..]}";
         // The prerendered links work without JavaScript.
@@ -81,36 +74,104 @@ public sealed partial class PublishedSite(string wwwroot)
 
     private static string WithProfile(string page, SiteProfile profile)
     {
-        if (profile.Image is { } image)
+        string newline = page.Contains("\r\n", StringComparison.Ordinal) ? "\r\n" : "\n";
+        if (profile.Title is { } title)
         {
-            page = PreviewImage().Replace(page, match => match.Groups["start"].Value + WebUtility.HtmlEncode(image) + "\"", 1);
+            page = PageTitle().Replace(page, _ => $"<title>{WebUtility.HtmlEncode(title)}</title>", 1);
+        }
+
+        page = ProfileMeta().Replace(page, match =>
+        {
+            string? value = match.Groups["key"].Value switch
+            {
+                "description" or "og:description" => profile.Description,
+                "og:title" => profile.Title,
+                "og:image" => profile.Image,
+                "og:image:alt" => profile.ImageAlt,
+                _ => null,
+            };
+            return value is null ? match.Value : match.Groups["start"].Value + WebUtility.HtmlEncode(value) + "\"";
+        });
+
+        if (profile.Image is { } image
+            && !page.Contains("<meta property=\"og:image\"", StringComparison.Ordinal)
+            && page.IndexOf("</head>", StringComparison.OrdinalIgnoreCase) is >= 0 and var headEnd)
+        {
+            string size = SiteProfile.ImageSize.ToString(CultureInfo.InvariantCulture);
+            List<string> imageMetadata =
+            [
+                OpenGraphTag("og:image", image),
+                OpenGraphTag("og:image:width", size),
+                OpenGraphTag("og:image:height", size),
+            ];
+            if (profile.ImageAlt is { } alt)
+            {
+                imageMetadata.Add(OpenGraphTag("og:image:alt", alt));
+            }
+
+            page = page.Insert(headEnd, HeadTags(page, headEnd, imageMetadata));
         }
 
         return StructuredData().Replace(page, match =>
         {
-            if (JsonNode.Parse(match.Groups["json"].Value) is not JsonObject data || data["mainEntity"] is not JsonObject person)
+            if (JsonNode.Parse(match.Groups["json"].Value) is not JsonObject data)
             {
                 return match.Value;
             }
 
-            if (profile.Image is { } photo)
+            if (data["mainEntity"] is JsonObject person)
             {
-                person["image"] = photo;
-            }
+                if (profile.Name is not null)
+                {
+                    person.Remove("alternateName");
+                }
 
-            if (profile.SameAs.Count > 0)
+                foreach ((string key, string? value) in new (string, string?)[]
+                {
+                    ("name", profile.Name),
+                    ("jobTitle", profile.JobTitle),
+                    ("description", profile.Description),
+                    ("image", profile.Image),
+                })
+                {
+                    if (value is not null)
+                    {
+                        person[key] = value;
+                    }
+                }
+
+                if (profile.SameAs.Count > 0)
+                {
+                    person["sameAs"] = new JsonArray([.. profile.SameAs.Select(address => JsonValue.Create(address))]);
+                }
+            }
+            else if ((string?)data["@type"] == "WebSite" && profile.Name is { } siteName)
             {
-                person["sameAs"] = new JsonArray([.. profile.SameAs.Select(address => JsonValue.Create(address))]);
+                data["name"] = siteName;
+            }
+            else
+            {
+                return match.Value;
             }
 
             // Keep the default JSON encoder so profile URLs cannot close the script element.
             string indent = match.Groups["indent"].Value;
-            string newline = page.Contains("\r\n", StringComparison.Ordinal) ? "\r\n" : "\n";
             string linePrefix = newline + indent + "    ";
             string json = data.ToJsonString(IndentedJson).Replace("\n", linePrefix, StringComparison.Ordinal);
             return match.Groups["start"].Value + linePrefix + json + newline + indent + "</script>";
-        }, 1);
+        });
     }
+
+    private static string HeadTags(string page, int headEnd, IReadOnlyList<string> tags)
+    {
+        ReadOnlySpan<char> line = page.AsSpan((page.LastIndexOf('\n', headEnd) + 1)..headEnd);
+        string indent = line.IsWhiteSpace() ? line.ToString() : string.Empty;
+        string newline = page.Contains("\r\n", StringComparison.Ordinal) ? "\r\n" : "\n";
+        return "    " + string.Join(newline + indent + "    ", tags) + newline + indent;
+    }
+
+    private static string OpenGraphTag(string property, string value) =>
+        $"""<meta property="{property}" content="{WebUtility.HtmlEncode(value)}" />""";
 
     private static readonly JsonSerializerOptions IndentedJson = new() { WriteIndented = true, IndentSize = 4, NewLine = "\n" };
 
@@ -120,8 +181,11 @@ public sealed partial class PublishedSite(string wwwroot)
     [GeneratedRegex(@"<link\s+rel=""preconnect""(?=[^>]*\sdata-preconnect-on-start[\s/>=])")]
     private static partial Regex PreconnectOnStart();
 
-    [GeneratedRegex(@"(?<start><meta property=""og:image"" content="")[^""]*""")]
-    private static partial Regex PreviewImage();
+    [GeneratedRegex("<title>[^<]*</title>")]
+    private static partial Regex PageTitle();
+
+    [GeneratedRegex(@"(?<start><meta (?:name|property)=""(?<key>description|og:title|og:description|og:image|og:image:alt)""\s+content="")[^""]*""")]
+    private static partial Regex ProfileMeta();
 
     [GeneratedRegex("""(?<indent>[ \t]*)(?<start><script type="application/ld\+json">)(?<json>.*?)</script>""", RegexOptions.Singleline)]
     private static partial Regex StructuredData();

@@ -1,8 +1,6 @@
 {
   "id": "/",
-  "name": "Adrian Gaborek - Software Engineer",
-  "short_name": "Adrian Gaborek",
-  "description": "Software engineer working with .NET, C# and Blazor. Find me on GitHub, LinkedIn, Facebook and Instagram, or see my work in my portfolio.",
+  "name": "Links",
   "lang": "en",
   "start_url": "/",
   "display": "standalone",

@@ -153,6 +153,35 @@ public sealed class PublishedSiteTests : IDisposable
         Assert.Equal(["https://old.example.com"], StructuredData(index)["mainEntity"]!["sameAs"]!.AsArray().Select(address => (string?)address));
     }
 
+    [Fact]
+    public void Profile_identity_replaces_the_template_in_both_pages()
+    {
+        string template = IndexWithMetadata
+            .Replace("<head>", "<head><title>Default</title><meta name=\"description\" content=\"Default\" />", StringComparison.Ordinal)
+            .Replace("""<meta property="og:image" content="https://example.com/old.jpg" />""", string.Empty, StringComparison.Ordinal)
+            .Replace("""<meta property="og:image:width" content="600" />""", string.Empty, StringComparison.Ordinal);
+        File.WriteAllText(Path.Combine(_wwwroot, "index.html"), template);
+
+        WriteHome(profile: new SiteProfile("https://example.com/profile.jpg", [])
+        {
+            Name = "Example & Co",
+            JobTitle = "Designer",
+            Title = "Example & Co - Designer",
+            Description = "A \"new\" profile",
+        });
+
+        foreach (string file in Pages)
+        {
+            string page = File.ReadAllText(Path.Combine(_wwwroot, file));
+            Assert.Contains("<title>Example &amp; Co - Designer</title>", page, StringComparison.Ordinal);
+            Assert.Contains("content=\"A &quot;new&quot; profile\"", page, StringComparison.Ordinal);
+            Assert.Contains("""<meta property="og:image" content="https://example.com/profile.jpg" />""", page, StringComparison.Ordinal);
+            JsonNode person = StructuredData(page)["mainEntity"]!;
+            Assert.Equal("Example & Co", (string?)person["name"]);
+            Assert.Equal("Designer", (string?)person["jobTitle"]);
+        }
+    }
+
     private static readonly string[] Pages = ["index.html", "app-shell.html"];
 
     private const string IndexWithMetadata = """

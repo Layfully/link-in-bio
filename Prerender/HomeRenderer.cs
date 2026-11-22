@@ -58,14 +58,14 @@ public static class HomeRenderer
 
         StoryblokHeader? header = Home.Header(body);
         IReadOnlyList<StoryblokLink> links = Home.Links(body) ?? [];
-        return new RenderedHome(html, ProfileOf(header, links), LinksWithoutAddress(links));
+        return new RenderedHome(html, ProfileOf(Home.SiteSettings(body), header, links), LinksWithoutAddress(links));
     }
 
     private static async Task<StoryblokComponent[]?> LoadHomeBodyAsync(IServiceProvider services)
     {
         StoryLoadResult<StoryblokPage> result = await services.GetRequiredService<StoryblokStoryClient>()
             .Story()
-            .WithSlug("/home")
+            .WithSlug(Home.Slug)
             .TryLoad<StoryblokPage>();
 
         return result switch
@@ -93,9 +93,12 @@ public static class HomeRenderer
         return labels;
     }
 
-    private static SiteProfile ProfileOf(StoryblokHeader? header, IReadOnlyList<StoryblokLink> links)
+    private static SiteProfile ProfileOf(StoryblokSiteSettings? settings, StoryblokHeader? header, IReadOnlyList<StoryblokLink> links)
     {
-        string? image = header?.Profile is { } photo && photo.IsSupported() ? photo.Resize(600, 600) : null;
+        StoryblokAsset? photo = settings?.SocialImage is { } socialImage && socialImage.IsSupported() ? socialImage : header?.Profile;
+        string? image = photo is not null && photo.IsSupported()
+            ? photo.Resize(SiteProfile.ImageSize, SiteProfile.ImageSize)
+            : null;
 
         string[] profiles = [.. links.Select(link => link.Url)
             .Prepend(header?.ProfileLink?.Url)
@@ -103,7 +106,14 @@ public static class HomeRenderer
             .Where(address => Uri.TryCreate(address, UriKind.Absolute, out Uri? uri) && uri.Scheme is "https" or "http")
             .Distinct(StringComparer.Ordinal)];
 
-        return new SiteProfile(image, profiles);
+        return new SiteProfile(image, profiles)
+        {
+            Name = settings?.Name,
+            JobTitle = settings?.JobTitle,
+            Title = settings?.PageTitle,
+            Description = settings?.Description,
+            ImageAlt = string.IsNullOrWhiteSpace(photo?.Alt) ? settings?.Name : photo.Alt,
+        };
     }
 
     private sealed class RenderErrors : IErrorBoundaryLogger
