@@ -220,11 +220,11 @@ A 429 or a response with `Retry-After` ends the dispatch immediately.
 
 The Storyblok space also holds the stories of the portfolio site
 ([Layfully/portfolio](https://github.com/Layfully/portfolio)), and the free plan allows only two webhooks, so this one
-webhook starts the deploys of both sites. Storyblok's call names the story (`full_slug`), and `Api/DeploySite.cs` says
-which stories each site builds from: `home` for this one (certificates load in the browser and need no deploy), the
-stories starting with `portfolio` for the portfolio, whose workflow allows `workflow_dispatch` for that. A publish of any
-other story starts nothing; a call that names no story starts both, so a change in what Storyblok sends can't quietly
-stop deploys.
+webhook starts the deploys of both sites. The server-side `DeployTrigger:Sites` array in `Api/appsettings.json`
+configures each target's GitHub `Repository`, `Workflow`, and `Ref`, with exact `Slugs` or `SlugPrefixes`.
+The current configuration routes `home` to this site and the portfolio prefixes to the portfolio workflow.
+A request that names no story starts all configured targets. A fork can replace the targets or set `Sites` to `[]`
+and skip webhook setup. Each configured workflow must support `workflow_dispatch`.
 
 Set it up once:
 
