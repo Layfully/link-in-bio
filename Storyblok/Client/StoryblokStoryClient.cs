@@ -112,11 +112,11 @@ public sealed class StoryblokStoryClient : IDisposable
     {
         if (ToStoryPath(slug) is not { } path)
         {
-            _logger.LogTrace("Slug {Slug} can't name a story.", slug);
+            _logger.LogTrace("The supplied slug can't name a story.");
             return Task.FromResult<StoryLoadResult<T>>(new StoryNotFound());
         }
 
-        return ToResult<T>(slug, () => LoadStory(path, cancellationToken), cancellationToken);
+        return ToResult<T>(() => LoadStory(path, cancellationToken), cancellationToken);
     }
 
     /// <summary>
@@ -131,7 +131,7 @@ public sealed class StoryblokStoryClient : IDisposable
         }
 
         bool unchanged = false;
-        StoryLoadResult<T> result = await ToResult<T>(slug, async () =>
+        StoryLoadResult<T> result = await ToResult<T>(async () =>
         {
             (StoryblokStory? story, string? response) = await LoadStoryFromStoryblok(path, cancellationToken);
             unchanged = IsSameStory(prerendered, response);
@@ -170,7 +170,7 @@ public sealed class StoryblokStoryClient : IDisposable
         }
     }
 
-    private async Task<StoryLoadResult<T>> ToResult<T>(string slug, Func<Task<StoryblokStory?>> load, CancellationToken cancellationToken)
+    private async Task<StoryLoadResult<T>> ToResult<T>(Func<Task<StoryblokStory?>> load, CancellationToken cancellationToken)
         where T : StoryblokComponent
     {
         StoryblokStory? story;
@@ -182,14 +182,14 @@ public sealed class StoryblokStoryClient : IDisposable
         catch (JsonException exception)
         {
             // Storyblok answered, but with something the site can't read. Asking again would get the same answer.
-            _logger.LogError(exception, "Story {Slug} can't be read: Storyblok's response doesn't fit the site's component classes.", slug);
+            _logger.LogError(exception, "The story can't be read: Storyblok's response doesn't fit the site's component classes.");
             return new StoryUnreadable(exception);
         }
         catch (Exception exception) when (!cancellationToken.IsCancellationRequested)
         {
             // Network errors, timeouts and error answers (5xx, also 401 for a wrong token) mean the content can't be loaded
             // right now. A cancellation the caller asked for (the page went away) is not an outage, so it propagates instead.
-            _logger.LogError(exception, "Storyblok is unavailable, story {Slug} could not be loaded.", slug);
+            _logger.LogError(exception, "Storyblok is unavailable, so the story could not be loaded.");
             return new StoryblokUnavailable(exception);
         }
 
@@ -204,7 +204,7 @@ public sealed class StoryblokStoryClient : IDisposable
             InvalidOperationException exception = new(story.Content is null
                 ? $"The story has no content block, not {typeof(T)}."
                 : $"The story's content is a \"{story.Content.Component}\" component ({story.Content.GetType()}), not {typeof(T)}.");
-            _logger.LogError(exception, "Story {Slug} can't be read: its content block is of another kind.", slug);
+            _logger.LogError("The story can't be read: its content block is of another kind.");
             return new StoryUnreadable(exception);
         }
 

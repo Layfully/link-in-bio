@@ -48,6 +48,7 @@ keep the bundled icons. Analytics requires both analytics fields and loads only 
 
 ```sh
 dotnet test --solution link-in-bio.slnx
+npm ci --ignore-scripts
 node --test "Tests/js/*.test.mjs"
 ```
 

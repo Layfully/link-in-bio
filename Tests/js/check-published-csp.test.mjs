@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { attribute, hashSource, pageProblems, siteProblems } from '../../.github/scripts/check-published-csp.mjs';
+import { hashSource, pageProblems, siteProblems } from '../../.github/scripts/check-published-csp.mjs';
 
 const IMPORT_MAP = '{ "imports": { "./a.js": "./a.abc123.js" } }';
 const CSS = 'body{margin:0}';
@@ -48,8 +48,18 @@ test('a script or stylesheet from a host the policy does not name is reported', 
 });
 
 test('only an attribute of that exact name counts, so data-type does not make a script a data block', () => {
-    assert.equal(attribute(' data-type="application/json"', 'type'), null);
     assert.equal(pageProblems(page('<script data-type="application/json">run()</script>'), policy(), 'index.html').length, 1);
+});
+
+test('the checker reads parsed attributes and ignores inert HTML', () => {
+    const html = page('', '<p title="a > b" style="color:red">Text</p>' +
+        '<!-- <script>example</script> --><template><style>example</style></template>' +
+        '<link rel="stylesheet" href="https&#58;//cdn.example.org/style.css">');
+
+    const problems = pageProblems(html, policy(), 'index.html');
+    assert.equal(problems.length, 2);
+    assert.match(problems[0], /style attribute/);
+    assert.match(problems[1], /https:\/\/cdn\.example\.org\/style\.css/);
 });
 
 test('an import map that changed after the hash was taken is reported', () => {
@@ -78,8 +88,8 @@ test('style and event handler attributes are reported, text that only looks like
     const problems = pageProblems(html, policy(), 'index.html');
 
     assert.equal(problems.length, 2);
-    assert.match(problems[0], /style attribute in <div style="color:red">/);
-    assert.match(problems[1], /event handler attribute in <img/);
+    assert.match(problems[0], /style attribute on <div>/);
+    assert.match(problems[1], /event handler attribute on <img>/);
 });
 
 test('a published site is checked page by page, and a placeholder left in the policy is reported', () => {

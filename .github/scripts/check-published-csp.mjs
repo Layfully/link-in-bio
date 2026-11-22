@@ -4,9 +4,11 @@ import { createHash } from 'node:crypto';
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { parse } from 'parse5';
 
 const PAGES = ['index.html', 'app-shell.html'];
 const SCRIPT_DATA_TYPES = new Set(['application/json', 'application/ld+json']);
+const SITE = 'https://site.invalid';
 
 // HTML parsing normalizes line endings before the browser hashes inline content.
 export function hashSource(text) {
@@ -25,21 +27,20 @@ export function parsePolicy(policy) {
     return directives;
 }
 
-export function attribute(attributes, name) {
-    const match = new RegExp(`(?:^|\\s)${name}\\s*=\\s*(?:"([^"]*)"|'([^']*)'|([^\\s>]+))`, 'i').exec(attributes);
-    return match ? (match[1] ?? match[2] ?? match[3]) : null;
+function* elements(node) {
+    if (node.tagName) yield node;
+    for (const child of node.childNodes ?? []) yield* elements(child);
 }
 
 // For HTTP sources, this checker compares schemes and hostnames only.
 export function allowsAddress(sources, address) {
-    if (!/^([a-z][a-z0-9+.-]*:|\/\/)/i.test(address)) return sources.includes("'self'");
-
     let url;
     try {
-        url = new URL(address, 'https://site.invalid/');
+        url = new URL(address, SITE);
     } catch {
         return false;
     }
+    if (url.origin === SITE) return sources.includes("'self'");
     if (url.protocol === 'data:') return sources.includes('data:');
 
     return sources.some(source => {
@@ -57,47 +58,45 @@ export function pageProblems(html, policy, page) {
     const styleSources = directives.get('style-src') ?? defaultSources;
     const problems = [];
 
-    for (const [, attributes, text] of html.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script\s*>/gi)) {
-        const src = attribute(attributes, 'src');
-        if (src !== null) {
-            if (!allowsAddress(scriptSources, src)) problems.push(`${page}: script-src doesn't allow the script ${src}.`);
-            continue;
+    for (const element of elements(parse(html))) {
+        const { tagName, attrs, childNodes } = element;
+        const get = (name, prefix) => attrs.find(attr => attr.name === name && attr.prefix === prefix)?.value;
+        if (get('style') !== undefined) problems.push(`${page}: style-src blocks the style attribute on <${tagName}>.`);
+        if (attrs.some(({ name }) => /^on[a-z]+$/.test(name))) {
+            problems.push(`${page}: script-src blocks the event handler attribute on <${tagName}>.`);
         }
-        const type = attribute(attributes, 'type')?.toLowerCase() ?? '';
-        if (SCRIPT_DATA_TYPES.has(type)) continue;
-        const hash = hashSource(text);
-        if (!scriptSources.includes(hash)) {
-            problems.push(`${page}: an inline script${type ? ` of type ${type}` : ''} has no matching hash in script-src (${hash}).`);
+
+        if (tagName === 'script') {
+            const src = element.namespaceURI === 'http://www.w3.org/2000/svg'
+                ? get('href') ?? get('href', 'xlink')
+                : get('src');
+            if (src !== undefined) {
+                if (!allowsAddress(scriptSources, src)) problems.push(`${page}: script-src doesn't allow the script ${src}.`);
+                continue;
+            }
+            const type = get('type')?.trim().toLowerCase() ?? '';
+            if (SCRIPT_DATA_TYPES.has(type)) continue;
+            const hash = hashSource(childNodes.map(node => node.value ?? '').join(''));
+            if (!scriptSources.includes(hash)) {
+                problems.push(`${page}: an inline script${type ? ` of type ${type}` : ''} has no matching hash in script-src (${hash}).`);
+            }
+        } else if (tagName === 'style') {
+            const hash = hashSource(childNodes.map(node => node.value ?? '').join(''));
+            if (!styleSources.includes(hash)) {
+                problems.push(`${page}: an inline style element has no matching hash in style-src (${hash}).`);
+            }
+        } else if (tagName === 'link') {
+            const rel = get('rel')?.toLowerCase().split(/\s+/) ?? [];
+            const as = get('as')?.toLowerCase();
+            const href = get('href');
+            if (!href) continue;
+            const preload = rel.includes('preload');
+            if (rel.includes('stylesheet') || (preload && as === 'style')) {
+                if (!allowsAddress(styleSources, href)) problems.push(`${page}: style-src doesn't allow the stylesheet ${href}.`);
+            } else if (rel.includes('modulepreload') || (preload && as === 'script')) {
+                if (!allowsAddress(scriptSources, href)) problems.push(`${page}: script-src doesn't allow the script ${href}.`);
+            }
         }
-    }
-
-    for (const [, text] of html.matchAll(/<style\b[^>]*>([\s\S]*?)<\/style\s*>/gi)) {
-        const hash = hashSource(text);
-        if (!styleSources.includes(hash)) {
-            problems.push(`${page}: an inline style element has no matching hash in style-src (${hash}).`);
-        }
-    }
-
-    // Embedded text can contain strings that look like HTML tags.
-    const markup = html
-        .replace(/<(script|style)\b[^>]*>[\s\S]*?<\/\1\s*>/gi, '')
-        .replace(/<!--[\s\S]*?-->/g, '');
-
-    for (const [, attributes] of markup.matchAll(/<link\b([^>]*)>/gi)) {
-        const rel = attribute(attributes, 'rel')?.toLowerCase().split(/\s+/) ?? [];
-        const as = attribute(attributes, 'as')?.toLowerCase();
-        const href = attribute(attributes, 'href');
-        if (!href) continue;
-        if (rel.includes('stylesheet') || (rel.includes('preload') && as === 'style')) {
-            if (!allowsAddress(styleSources, href)) problems.push(`${page}: style-src doesn't allow the stylesheet ${href}.`);
-        } else if (rel.includes('modulepreload') || (rel.includes('preload') && as === 'script')) {
-            if (!allowsAddress(scriptSources, href)) problems.push(`${page}: script-src doesn't allow the script ${href}.`);
-        }
-    }
-
-    for (const [tag] of markup.matchAll(/<[a-z][^>]*>/gi)) {
-        if (/\sstyle\s*=/i.test(tag)) problems.push(`${page}: style-src blocks the style attribute in ${tag}`);
-        if (/\son[a-z]+\s*=/i.test(tag)) problems.push(`${page}: script-src blocks the event handler attribute in ${tag}`);
     }
 
     return problems;
@@ -129,7 +128,9 @@ if (process.argv[1] && pathToFileURL(process.argv[1]).href === import.meta.url) 
     }
 
     const problems = siteProblems(wwwroot);
-    for (const problem of problems) console.log(`::error::${problem}`);
+    for (const problem of problems) {
+        console.log(`::error::${problem.replaceAll('%', '%25').replaceAll('\r', '%0D').replaceAll('\n', '%0A')}`);
+    }
     console.log(problems.length === 0
         ? `The pages in ${wwwroot} keep to their Content Security Policy.`
         : `${problems.length} problem(s) with the Content Security Policy in ${wwwroot}.`);
