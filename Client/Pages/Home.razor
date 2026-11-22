@@ -7,7 +7,10 @@
 
 <PageTitle>@Title</PageTitle>
 <HeadContent>
-    <link rel="canonical" href="@($"{CanonicalUrl}/")" />
+    @if (CanonicalUrl is { } origin)
+    {
+        <link rel="canonical" href="@($"{origin}/")" />
+    }
 </HeadContent>
 @* Provide a heading while the profile header is absent. *@
 @if (_state is not Loaded { Header: not null })
@@ -54,7 +57,7 @@
     private bool _edited;
     private PageState _state = new Loading();
     private string Title => _state is Loaded { Settings.PageTitle: { } title } ? title : Site.Name;
-    private string CanonicalUrl => _state is Loaded { Settings.CanonicalOrigin: { } url } ? url : CanonicalSite.Url;
+    private string? CanonicalUrl => CanonicalSite.Url ?? (_state is Loaded { Settings.CanonicalOrigin: { } url } ? url : null);
 
     private ContentStatus ContentStatus => _state switch
     {

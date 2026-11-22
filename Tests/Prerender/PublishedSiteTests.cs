@@ -1,4 +1,3 @@
-using Client;
 using Prerender;
 using System.Text.Json.Nodes;
 
@@ -14,6 +13,7 @@ public sealed class PublishedSiteTests : IDisposable
             </head>
         <body>
         <div id="app"><!--prerender--><p>Loading</p><!--/prerender--></div>
+        <div id="analytics-consent" hidden></div>
         <script src="_framework/blazor.webassembly.js"></script>
         </body></html>
         """;
@@ -38,12 +38,13 @@ public sealed class PublishedSiteTests : IDisposable
     {
         File.WriteAllText(Path.Combine(_wwwroot, "index.html"), Index);
         File.WriteAllText(Path.Combine(_wwwroot, "staticwebapp.config.json"), Config);
+        File.WriteAllText(Path.Combine(_wwwroot, "robots.txt"), "User-agent: *\nAllow: /\n");
     }
 
     public void Dispose() => Directory.Delete(_wwwroot, recursive: true);
 
     private void WriteHome(string stories = "{}", SiteProfile? profile = null) =>
-        new PublishedSite(_wwwroot, new Site("https://site.example/")).WriteHome("<main>Links</main>", stories, profile ?? SiteProfile.None);
+        new PublishedSite(_wwwroot).WriteHome("<main>Links</main>", stories, profile ?? SiteProfile.None);
 
     [Fact]
     public void The_home_page_is_written_between_the_markers_and_the_shell_is_kept()
@@ -55,16 +56,36 @@ public sealed class PublishedSiteTests : IDisposable
         Assert.Contains("""<script type="application/json" id="storyblok-prerendered">{"home":{}}</script>""", index, StringComparison.Ordinal);
         Assert.DoesNotContain("Loading", index, StringComparison.Ordinal);
         Assert.Equal(Index, File.ReadAllText(Path.Combine(_wwwroot, "app-shell.html")));
+        Assert.DoesNotContain("rel=\"canonical\"", index, StringComparison.Ordinal);
+        Assert.DoesNotContain("data-measurement-id", index, StringComparison.Ordinal);
+        Assert.False(File.Exists(Path.Combine(_wwwroot, "sitemap.xml")));
+        Assert.DoesNotContain("Sitemap:", File.ReadAllText(Path.Combine(_wwwroot, "robots.txt")), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Both_pages_get_analytics_settings_from_the_profile()
+    {
+        WriteHome(profile: SiteProfile.None with
+        {
+            AnalyticsMeasurementId = "G-EXAMPLE123",
+            AnalyticsHosts = "profile.example,www.profile.example",
+        });
+
+        foreach (string file in Pages)
+        {
+            string page = File.ReadAllText(Path.Combine(_wwwroot, file));
+            Assert.Contains("data-measurement-id=\"G-EXAMPLE123\" data-analytics-hosts=\"profile.example,www.profile.example\"", page, StringComparison.Ordinal);
+        }
     }
 
     [Fact]
     public void Only_the_home_page_names_its_canonical_address()
     {
-        WriteHome();
+        WriteHome(profile: SiteProfile.None with { CanonicalOrigin = "https://site.example" });
 
         string index = File.ReadAllText(Path.Combine(_wwwroot, "index.html"));
         Assert.Contains("""
-                    <title>Links</title>
+                    <meta property="og:url" content="https://site.example/" />
                     <link rel="canonical" href="https://site.example/" />
                 </head>
             """, index, StringComparison.Ordinal);
@@ -75,12 +96,8 @@ public sealed class PublishedSiteTests : IDisposable
     public void The_Storyblok_origin_is_used_by_metadata_crawlers_and_the_client()
     {
         const string Origin = "https://profile.example";
-        const string OpenGraph = """<meta property="og:url" content="https://site.example/" />""";
-        File.WriteAllText(Path.Combine(_wwwroot, "index.html"), Index.Replace("</head>", OpenGraph + "</head>", StringComparison.Ordinal));
-        File.WriteAllText(Path.Combine(_wwwroot, "appsettings.json"), """{"Site":{"Url":"https://site.example"},"Storyblok":{"ApiKeyPublic":"test"}}""");
-        File.WriteAllText(Path.Combine(_wwwroot, "robots.txt"), "Sitemap: https://site.example/sitemap.xml");
-        File.WriteAllText(Path.Combine(_wwwroot, "sitemap.xml"), "<loc>https://site.example/</loc>");
-        File.WriteAllText(Path.Combine(_wwwroot, "appsettings.json.br"), "stale");
+        File.WriteAllText(Path.Combine(_wwwroot, "index.html"), IndexWithMetadata);
+        File.WriteAllText(Path.Combine(_wwwroot, "robots.txt.br"), "stale");
 
         WriteHome(profile: SiteProfile.None with { CanonicalOrigin = Origin });
 
@@ -91,12 +108,11 @@ public sealed class PublishedSiteTests : IDisposable
             Assert.Contains($"""<meta property="og:url" content="{Origin}/" />""", File.ReadAllText(Path.Combine(_wwwroot, page)), StringComparison.Ordinal);
         }
 
-        JsonNode settings = JsonNode.Parse(File.ReadAllText(Path.Combine(_wwwroot, "appsettings.json")))!;
-        Assert.Equal(Origin, (string?)settings["Site"]!["Url"]);
-        Assert.Equal("test", (string?)settings["Storyblok"]!["ApiKeyPublic"]);
-        Assert.Equal($"Sitemap: {Origin}/sitemap.xml", File.ReadAllText(Path.Combine(_wwwroot, "robots.txt")));
-        Assert.Equal($"<loc>{Origin}/</loc>", File.ReadAllText(Path.Combine(_wwwroot, "sitemap.xml")));
-        Assert.False(File.Exists(Path.Combine(_wwwroot, "appsettings.json.br")));
+        Assert.Equal($"{Origin}/", (string?)StructuredData(home)["url"]);
+        Assert.Equal($"{Origin}/", (string?)StructuredData(home)["mainEntity"]!["url"]);
+        Assert.Contains($"Sitemap: {Origin}/sitemap.xml", File.ReadAllText(Path.Combine(_wwwroot, "robots.txt")), StringComparison.Ordinal);
+        Assert.Contains($"<loc>{Origin}/</loc>", File.ReadAllText(Path.Combine(_wwwroot, "sitemap.xml")), StringComparison.Ordinal);
+        Assert.False(File.Exists(Path.Combine(_wwwroot, "robots.txt.br")));
     }
 
     [Fact]

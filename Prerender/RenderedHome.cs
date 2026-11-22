@@ -16,6 +16,8 @@ public sealed record SiteProfile(string? Image, IReadOnlyList<string> SameAs)
     public string? Description { get; init; }
     public string? ImageAlt { get; init; }
     public string? CanonicalOrigin { get; init; }
+    public string? AnalyticsMeasurementId { get; init; }
+    public string? AnalyticsHosts { get; init; }
 
     public static SiteProfile None { get; } = new(null, []);
 }

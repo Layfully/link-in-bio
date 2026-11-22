@@ -9,9 +9,12 @@
 <h1 class="sr-only" tabindex="-1">@Title</h1>
 @if (_state is Loaded loaded)
 {
-    <HeadContent>
-        <link rel="canonical" href="@($"{CanonicalSite.Url}/Certificate/{Uri.EscapeDataString(Name ?? string.Empty)}")" />
-    </HeadContent>
+    @if (CanonicalSite.Url is { } origin)
+    {
+        <HeadContent>
+            <link rel="canonical" href="@($"{origin}/Certificate/{Uri.EscapeDataString(Name ?? string.Empty)}")" />
+        </HeadContent>
+    }
     @* Match the skeleton's card size and reserve space for the image. *@
     <figure class="card z-20 relative w-10/12 sm:w-9/12 xl:w-1/2 p-2 sm:p-3 reveal" @attributes="@loaded.EditorAttributes">
         <img class="block w-full h-auto rounded-xl" src="@loaded.ImageUrl" width="@loaded.Width" height="@loaded.Height"

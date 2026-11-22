@@ -11,37 +11,15 @@
     </ParameterGroup>
     <Task>
       <Using Namespace="System.IO" />
-      <Using Namespace="System.Runtime.Serialization.Json" />
       <Using Namespace="System.Security.Cryptography" />
       <Using Namespace="System.Text" />
       <Using Namespace="System.Text.RegularExpressions" />
-      <Using Namespace="System.Xml" />
-      <Using Namespace="System.Xml.Linq" />
       <Code Type="Fragment" Language="cs"><![CDATA[
         const string Placeholder = "'sha256-IMPORTMAP-HASH-SET-AT-PUBLISH'";
         const string StylePlaceholder = "'sha256-APPCSS-HASH-SET-AT-PUBLISH'";
         const string StylesheetLink = "<link rel=\"stylesheet\" href=\"css/app.css\" />";
 
-        const string SiteOrigin = "__SITE_ORIGIN__";
-        string appSettings = File.ReadAllText(AppSettings);
-        string siteUrl;
-        using (XmlDictionaryReader json = JsonReaderWriterFactory.CreateJsonReader(Encoding.UTF8.GetBytes(appSettings), XmlDictionaryReaderQuotas.Max))
-        {
-            siteUrl = (string)XElement.Load(json).Element("Site")?.Element("Url");
-        }
-        Uri origin;
-        if (!Uri.TryCreate(siteUrl, UriKind.Absolute, out origin)
-            || (origin.Scheme != "https" && origin.Scheme != "http")
-            || !string.IsNullOrEmpty(origin.UserInfo)
-            || origin.AbsolutePath != "/" || origin.Query.Length != 0 || origin.Fragment.Length != 0
-            || origin.HostNameType == UriHostNameType.Unknown || origin.HostNameType == UriHostNameType.Basic)
-        {
-            Log.LogError("Site:Url in {0} must be an HTTP or HTTPS origin without a path, query, or fragment.", AppSettings);
-            return false;
-        }
-
-        string siteOrigin = origin.GetComponents(UriComponents.SchemeAndServer, UriFormat.UriEscaped);
-        string html = File.ReadAllText(IndexHtml).Replace(SiteOrigin, siteOrigin);
+        string html = File.ReadAllText(IndexHtml);
 
         // Match the HTML parser's line endings when hashing inline content.
         string css = File.ReadAllText(AppCss).Replace("\r\n", "\n").Replace("\r", "\n");
@@ -92,6 +70,7 @@
         config = config.Replace(StylePlaceholder, "'sha256-" + styleHash + "'");
 
         // The preview token identifies builds that allow the Visual Editor.
+        string appSettings = File.ReadAllText(AppSettings);
         bool isEditorBuild = Regex.IsMatch(appSettings, "\"ApiKeyPreview\"\\s*:\\s*\"[^\"\\s]+\"");
         if (!isEditorBuild)
         {
@@ -113,15 +92,14 @@
         File.WriteAllText(IndexHtml, html);
 
         string webRoot = Path.GetDirectoryName(IndexHtml);
-        string[] siteFiles = { "robots.txt", "sitemap.xml" };
-        foreach (string file in siteFiles)
-        {
-            string contents = File.ReadAllText(Path.Combine(SourceWebRoot, file));
-            File.WriteAllText(Path.Combine(webRoot, file), contents.Replace(SiteOrigin, siteOrigin));
-        }
+        // Start each publish with the crawl defaults before optional prerendering.
+        string robots = Path.Combine(webRoot, "robots.txt");
+        string sitemap = Path.Combine(webRoot, "sitemap.xml");
+        File.Copy(Path.Combine(SourceWebRoot, "robots.txt"), robots, overwrite: true);
+        File.Delete(sitemap);
 
         // Remove compressed copies generated before these files were rewritten.
-        foreach (string path in new[] { OutputConfig, IndexHtml, Path.Combine(webRoot, "robots.txt"), Path.Combine(webRoot, "sitemap.xml") })
+        foreach (string path in new[] { OutputConfig, IndexHtml, robots, sitemap })
         {
             File.Delete(path + ".br");
             File.Delete(path + ".gz");

@@ -1,4 +1,3 @@
-using Client;
 using Storyblok;
 using System.Globalization;
 using System.Net;
@@ -9,7 +8,7 @@ using System.Text.RegularExpressions;
 namespace Prerender;
 
 /// <summary>Writes the prerendered home page into the published <c>wwwroot</c>.</summary>
-public sealed partial class PublishedSite(string wwwroot, Site site)
+public sealed partial class PublishedSite(string wwwroot)
 {
     /// <summary>The app shell served for non-home routes.</summary>
     public const string ShellFile = "app-shell.html";
@@ -27,11 +26,11 @@ public sealed partial class PublishedSite(string wwwroot, Site site)
     {
         string indexPath = Path.Combine(wwwroot, "index.html");
         string configPath = Path.Combine(wwwroot, "staticwebapp.config.json");
-        string origin = profile.CanonicalOrigin ?? site.Url;
-        string page = WithProfile(ReadWithOrigin(indexPath, origin), profile);
+        string? rootUrl = profile.CanonicalOrigin is { } origin ? $"{origin}/" : null;
+        string page = WithProfile(File.ReadAllText(indexPath), profile, rootUrl);
         string config = File.ReadAllText(configPath);
 
-        string home = BuildHomePage(page, html, prerenderedJson, indexPath, origin);
+        string home = BuildHomePage(page, html, prerenderedJson, indexPath, rootUrl);
 
         // Replace the rewrite as text to preserve the config's formatting.
         if (!config.Contains(RewriteToIndex, StringComparison.Ordinal))
@@ -39,9 +38,9 @@ public sealed partial class PublishedSite(string wwwroot, Site site)
             throw new InvalidOperationException($"{configPath} has no {RewriteToIndex} to change.");
         }
 
-        if (origin != site.Url)
+        if (rootUrl is not null)
         {
-            WriteCanonicalFiles(origin);
+            WriteCrawlFiles(rootUrl);
         }
 
         WriteUncompressed(Path.Combine(wwwroot, ShellFile), page);
@@ -49,24 +48,18 @@ public sealed partial class PublishedSite(string wwwroot, Site site)
         WriteUncompressed(configPath, config.Replace(RewriteToIndex, $"\"rewrite\": \"/{ShellFile}\"", StringComparison.Ordinal));
     }
 
-    private void WriteCanonicalFiles(string origin)
+    private void WriteCrawlFiles(string rootUrl)
     {
-        string settingsPath = Path.Combine(wwwroot, "appsettings.json");
         string robotsPath = Path.Combine(wwwroot, "robots.txt");
-        string sitemapPath = Path.Combine(wwwroot, "sitemap.xml");
-
-        JsonNode settings = JsonNode.Parse(File.ReadAllText(settingsPath))!;
-        settings["Site"]!["Url"] = origin;
-        string robots = ReadWithOrigin(robotsPath, origin);
-        string sitemap = ReadWithOrigin(sitemapPath, origin);
-
-        WriteUncompressed(settingsPath, settings.ToJsonString(IndentedJson));
-        WriteUncompressed(robotsPath, robots);
-        WriteUncompressed(sitemapPath, sitemap);
+        string robots = File.ReadAllText(robotsPath).TrimEnd();
+        WriteUncompressed(robotsPath, $"{robots}\n\nSitemap: {rootUrl}sitemap.xml\n");
+        WriteUncompressed(Path.Combine(wwwroot, "sitemap.xml"), $"""
+            <?xml version="1.0" encoding="UTF-8"?>
+            <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+              <url><loc>{WebUtility.HtmlEncode(rootUrl)}</loc></url>
+            </urlset>
+            """);
     }
-
-    private string ReadWithOrigin(string path, string origin) =>
-        File.ReadAllText(path).Replace($"{site.Url}/", $"{origin}/", StringComparison.Ordinal);
 
     private static void WriteUncompressed(string path, string contents)
     {
@@ -75,7 +68,7 @@ public sealed partial class PublishedSite(string wwwroot, Site site)
         File.Delete(path + ".gz");
     }
 
-    private static string BuildHomePage(string page, string html, string prerenderedJson, string indexPath, string origin)
+    private static string BuildHomePage(string page, string html, string prerenderedJson, string indexPath, string? rootUrl)
     {
         int headEnd = page.IndexOf("</head>", StringComparison.OrdinalIgnoreCase);
         int start = page.IndexOf(StartMarker, StringComparison.Ordinal);
@@ -89,7 +82,7 @@ public sealed partial class PublishedSite(string wwwroot, Site site)
         // PrerenderedStories.ToJson escapes HTML delimiters for this JSON data block.
         string data = $"""<script type="application/json" id="{PrerenderedStories.ElementId}">{prerenderedJson}</script>""";
         ReadOnlySpan<char> template = page.AsSpan();
-        string canonical = HeadTags(page, headEnd, [$"""<link rel="canonical" href="{WebUtility.HtmlEncode(origin)}/" />"""]);
+        string canonical = rootUrl is null ? string.Empty : HeadTags(page, headEnd, [$"""<link rel="canonical" href="{WebUtility.HtmlEncode(rootUrl)}" />"""]);
 
         string home = $"{template[..headEnd]}{canonical}" +
             $"{template[headEnd..start]}{html}{template[(end + EndMarker.Length)..bodyEnd]}" +
@@ -100,7 +93,7 @@ public sealed partial class PublishedSite(string wwwroot, Site site)
         return PreconnectOnStart().Replace(home, "<link");
     }
 
-    private static string WithProfile(string page, SiteProfile profile)
+    private static string WithProfile(string page, SiteProfile profile, string? rootUrl)
     {
         string newline = page.Contains("\r\n", StringComparison.Ordinal) ? "\r\n" : "\n";
         if (profile.Title is { } title)
@@ -121,23 +114,34 @@ public sealed partial class PublishedSite(string wwwroot, Site site)
             return value is null ? match.Value : match.Groups["start"].Value + WebUtility.HtmlEncode(value) + "\"";
         });
 
-        if (profile.Image is { } image
-            && !page.Contains("<meta property=\"og:image\"", StringComparison.Ordinal)
-            && page.IndexOf("</head>", StringComparison.OrdinalIgnoreCase) is >= 0 and var headEnd)
+        List<string> headTags = [];
+        if (rootUrl is not null)
+        {
+            headTags.Add(OpenGraphTag("og:url", rootUrl));
+        }
+
+        if (profile.Image is { } image && !page.Contains("<meta property=\"og:image\"", StringComparison.Ordinal))
         {
             string size = SiteProfile.ImageSize.ToString(CultureInfo.InvariantCulture);
-            List<string> imageMetadata =
-            [
-                OpenGraphTag("og:image", image),
-                OpenGraphTag("og:image:width", size),
-                OpenGraphTag("og:image:height", size),
-            ];
+            headTags.Add(OpenGraphTag("og:image", image));
+            headTags.Add(OpenGraphTag("og:image:width", size));
+            headTags.Add(OpenGraphTag("og:image:height", size));
             if (profile.ImageAlt is { } alt)
             {
-                imageMetadata.Add(OpenGraphTag("og:image:alt", alt));
+                headTags.Add(OpenGraphTag("og:image:alt", alt));
             }
+        }
 
-            page = page.Insert(headEnd, HeadTags(page, headEnd, imageMetadata));
+        if (headTags.Count > 0 && page.IndexOf("</head>", StringComparison.OrdinalIgnoreCase) is >= 0 and var headEnd)
+        {
+            page = page.Insert(headEnd, HeadTags(page, headEnd, headTags));
+        }
+
+        if (profile.AnalyticsMeasurementId is { Length: > 0 } measurementId && profile.AnalyticsHosts is { Length: > 0 } hosts)
+        {
+            const string Banner = "id=\"analytics-consent\"";
+            string attributes = $"data-measurement-id=\"{WebUtility.HtmlEncode(measurementId)}\" data-analytics-hosts=\"{WebUtility.HtmlEncode(hosts)}\"";
+            page = page.Replace(Banner, $"{Banner} {attributes}", StringComparison.Ordinal);
         }
 
         return StructuredData().Replace(page, match =>
@@ -149,6 +153,11 @@ public sealed partial class PublishedSite(string wwwroot, Site site)
 
             if (data["mainEntity"] is JsonObject person)
             {
+                if (rootUrl is not null)
+                {
+                    data["url"] = rootUrl;
+                    person["url"] = rootUrl;
+                }
                 if (profile.Name is not null)
                 {
                     person.Remove("alternateName");
@@ -173,9 +182,17 @@ public sealed partial class PublishedSite(string wwwroot, Site site)
                     person["sameAs"] = new JsonArray([.. profile.SameAs.Select(address => JsonValue.Create(address))]);
                 }
             }
-            else if ((string?)data["@type"] == "WebSite" && profile.Name is { } siteName)
+            else if ((string?)data["@type"] == "WebSite")
             {
-                data["name"] = siteName;
+                if (rootUrl is not null)
+                {
+                    data["url"] = rootUrl;
+                }
+
+                if (profile.Name is { } siteName)
+                {
+                    data["name"] = siteName;
+                }
             }
             else
             {
