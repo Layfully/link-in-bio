@@ -42,7 +42,10 @@ public sealed class HomeRendererTests : IDisposable
                 { "_uid": "99999999-9999-9999-9999-999999999999", "component": "site_settings",
                   "display_name": "Example Person", "professional_title": "Designer", "seo_description": "Example profile",
                   "canonical_url": "https://profile.example/", "analytics_measurement_id": "G-EXAMPLE123",
-                  "analytics_hosts": "profile.example,www.profile.example" },
+                  "analytics_hosts": "profile.example,www.profile.example",
+                  "app_name": " Example Links ",
+                  "app_icon": { "filename": "https://a.storyblok.com/f/1/512x512/example/icon.png" },
+                  "app_maskable_icon": { "filename": "https://other.example/icon.png" } },
                 { "_uid": "22222222-2222-2222-2222-222222222222", "component": "header",
                   "profile": { "filename": "https://a.storyblok.com/f/1/608x912/abc/profile.jpg" },
                   "header_link": [ { "_uid": "66666666-6666-6666-6666-666666666666", "component": "link", "label": "Portfolio",
@@ -69,6 +72,9 @@ public sealed class HomeRendererTests : IDisposable
         Assert.Equal("https://profile.example", profile.CanonicalOrigin);
         Assert.Equal("G-EXAMPLE123", profile.AnalyticsMeasurementId);
         Assert.Equal("profile.example,www.profile.example", profile.AnalyticsHosts);
+        Assert.Equal("Example Links", profile.AppName);
+        Assert.Equal("https://a.storyblok.com/f/1/512x512/example/icon.png", profile.AppIcon);
+        Assert.Null(profile.AppMaskableIcon);
         Assert.Equal("https://a.storyblok.com/f/1/608x912/abc/profile.jpg/m/600x600/smart", profile.Image);
         Assert.Equal(["https://portfolio.example.com", "https://github.com/Layfully"], profile.SameAs);
     }

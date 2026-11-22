@@ -43,10 +43,46 @@ public sealed partial class PublishedSite(string wwwroot)
             WriteCrawlFiles(rootUrl);
         }
 
+        WriteManifest(profile);
         WriteUncompressed(Path.Combine(wwwroot, ShellFile), page);
         WriteUncompressed(indexPath, home);
         WriteUncompressed(configPath, config.Replace(RewriteToIndex, $"\"rewrite\": \"/{ShellFile}\"", StringComparison.Ordinal));
     }
+
+    private void WriteManifest(SiteProfile profile)
+    {
+        if (profile is { AppName: null, AppIcon: null, AppMaskableIcon: null })
+        {
+            return;
+        }
+
+        string path = Path.Combine(wwwroot, "site.webmanifest");
+        JsonObject manifest = JsonNode.Parse(File.ReadAllText(path))!.AsObject();
+        if (profile.AppName is { } name)
+        {
+            manifest["name"] = name;
+        }
+
+        foreach (JsonObject entry in manifest["icons"]!.AsArray().OfType<JsonObject>())
+        {
+            (string? source, int size) = (string?)entry["src"] switch
+            {
+                "icons/icon-192.png" => (profile.AppIcon, 192),
+                "icons/icon-512.png" => (profile.AppIcon, 512),
+                "icons/icon-maskable-512.png" => (profile.AppMaskableIcon, 512),
+                _ => (null, 0),
+            };
+            if (source is not null)
+            {
+                entry["src"] = ResizeIcon(source, size);
+            }
+        }
+
+        WriteUncompressed(path, manifest.ToJsonString(IndentedJson) + "\n");
+    }
+
+    private static string ResizeIcon(string source, int size) =>
+        FormattableString.Invariant($"{source}/m/{size}x{size}/filters:format(png)");
 
     private void WriteCrawlFiles(string rootUrl)
     {
@@ -96,6 +132,12 @@ public sealed partial class PublishedSite(string wwwroot)
     private static string WithProfile(string page, SiteProfile profile, string? rootUrl)
     {
         string newline = page.Contains("\r\n", StringComparison.Ordinal) ? "\r\n" : "\n";
+        if (profile.AppIcon is { } icon)
+        {
+            page = page.Replace("rel=\"apple-touch-icon\" href=\"icons/icon-180.png\"",
+                $"rel=\"apple-touch-icon\" href=\"{WebUtility.HtmlEncode(ResizeIcon(icon, 180))}\"", StringComparison.Ordinal);
+        }
+
         if (profile.Title is { } title)
         {
             page = PageTitle().Replace(page, _ => $"<title>{WebUtility.HtmlEncode(title)}</title>", 1);
