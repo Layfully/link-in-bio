@@ -10,35 +10,51 @@ namespace LinkInBio.Tests.Storyblok;
 public sealed class StoryblokSettingsTests
 {
     [Fact]
-    public void Settings_are_read_from_configuration()
+    public void AddStoryblok_ShouldReadTheSettingsFromConfiguration_WhenTheyAreSet()
     {
-        StoryblokOptions options = Read(new()
+        // Arrange
+        Dictionary<string, string?> settings = new()
         {
             ["ApiKeyPublic"] = "public-token",
             ["ApiKeyPreview"] = "preview-token",
             ["BaseUrl"] = "https://api-us.storyblok.com/v2/cdn",
             ["CacheDurationSeconds"] = "5",
-        });
+        };
 
-        Assert.Equal("public-token", options.ApiKeyPublic);
-        Assert.Equal("preview-token", options.ApiKeyPreview);
-        Assert.Equal("https://api-us.storyblok.com/v2/cdn", options.BaseUrl);
-        Assert.Equal(5, options.CacheDurationSeconds);
+        // Act
+        StoryblokOptions sut = Read(settings);
+
+        // Assert
+        sut.ApiKeyPublic.ShouldBe("public-token");
+        sut.ApiKeyPreview.ShouldBe("preview-token");
+        sut.BaseUrl.ShouldBe("https://api-us.storyblok.com/v2/cdn");
+        sut.CacheDurationSeconds.ShouldBe(5);
     }
 
     [Fact]
-    public void Settings_left_out_keep_their_defaults()
+    public void AddStoryblok_ShouldKeepTheDefaults_WhenSettingsAreLeftOut()
     {
-        StoryblokOptions options = Read(new() { ["ApiKeyPublic"] = "public-token" });
+        // Arrange
+        Dictionary<string, string?> settings = new() { ["ApiKeyPublic"] = "public-token" };
 
-        Assert.Null(options.ApiKeyPreview);
-        Assert.Equal("https://api.storyblok.com/v2/cdn", options.BaseUrl);
-        Assert.Equal(900, options.CacheDurationSeconds);
+        // Act
+        StoryblokOptions sut = Read(settings);
+
+        // Assert
+        sut.ApiKeyPreview.ShouldBeNull();
+        sut.BaseUrl.ShouldBe("https://api.storyblok.com/v2/cdn");
+        sut.CacheDurationSeconds.ShouldBe(900);
     }
 
     [Fact]
-    public void A_non_numeric_cache_duration_is_rejected() =>
-        Assert.ThrowsAny<InvalidOperationException>(() => Read(new() { ["ApiKeyPublic"] = "public-token", ["CacheDurationSeconds"] = "soon" }));
+    public void AddStoryblok_ShouldReject_WhenTheCacheDurationIsNotNumeric()
+    {
+        // Arrange
+        Dictionary<string, string?> settings = new() { ["ApiKeyPublic"] = "public-token", ["CacheDurationSeconds"] = "soon" };
+
+        // Act & Assert
+        Should.Throw<InvalidOperationException>(() => Read(settings));
+    }
 
     private static StoryblokOptions Read(Dictionary<string, string?> settings)
     {

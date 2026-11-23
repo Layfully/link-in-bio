@@ -7,36 +7,50 @@ namespace LinkInBio.Tests.Storyblok;
 public sealed class StoryblokComponentTypesTests
 {
     [Fact]
-    public void Classes_are_found_by_their_component_name()
+    public void TryGetType_ShouldFindTheClass_WhenTheComponentNameMatchesExactly()
     {
-        StoryblokComponentTypes types = new([typeof(Teaser), typeof(Unmarked)]);
+        // Arrange
+        StoryblokComponentTypes sut = new([typeof(Teaser), typeof(Unmarked)]);
 
-        Assert.True(types.TryGetType("teaser", out Type? type));
-        Assert.Equal(typeof(Teaser), type);
-        Assert.False(types.TryGetType("Teaser", out _));
-        Assert.False(types.TryGetType("unmarked", out _));
+        // Act
+        bool foundByName = sut.TryGetType("teaser", out Type? type);
+        bool foundByOtherCase = sut.TryGetType("Teaser", out _);
+        bool foundUnmarked = sut.TryGetType("unmarked", out _);
+
+        // Assert
+        foundByName.ShouldBeTrue();
+        type.ShouldBe(typeof(Teaser));
+        foundByOtherCase.ShouldBeFalse();
+        foundUnmarked.ShouldBeFalse();
     }
 
     [Fact]
-    public void Two_classes_for_one_component_are_refused()
+    public void Constructor_ShouldRefuseTheClasses_WhenTwoOfThemShareOneComponent()
     {
-        InvalidOperationException error = Assert.Throws<InvalidOperationException>(() => new StoryblokComponentTypes([typeof(Teaser), typeof(SecondTeaser)]));
+        // Act
+        InvalidOperationException error = Should.Throw<InvalidOperationException>(() => new StoryblokComponentTypes([typeof(Teaser), typeof(SecondTeaser)]));
 
-        Assert.Contains("\"teaser\"", error.Message);
+        // Assert
+        error.Message.ShouldContain("\"teaser\"", Case.Sensitive);
     }
 
     [Theory]
     [InlineData(typeof(NotAComponent))]
     [InlineData(typeof(AbstractComponent))]
-    public void A_marked_class_must_be_a_concrete_component(Type type) =>
-        Assert.Throws<InvalidOperationException>(() => new StoryblokComponentTypes([type]));
+    public void Constructor_ShouldThrow_WhenAMarkedClassIsNotAConcreteComponent(Type type)
+    {
+        // Act & Assert
+        Should.Throw<InvalidOperationException>(() => new StoryblokComponentTypes([type]));
+    }
 
     [Fact]
-    public void The_same_class_named_twice_is_registered_once()
+    public void Constructor_ShouldRegisterTheClassOnce_WhenItIsNamedTwice()
     {
-        StoryblokComponentTypes types = new([typeof(Teaser), typeof(Teaser)]);
+        // Act
+        StoryblokComponentTypes sut = new([typeof(Teaser), typeof(Teaser)]);
 
-        Assert.True(types.TryGetType("teaser", out _));
+        // Assert
+        sut.TryGetType("teaser", out _).ShouldBeTrue();
     }
 
     [StoryblokComponent("teaser")]

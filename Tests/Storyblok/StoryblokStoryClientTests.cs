@@ -22,13 +22,17 @@ public sealed class StoryblokStoryClientTests : IDisposable
     public void Dispose() => _storyblok.Dispose();
 
     [Fact]
-    public async Task Each_part_of_a_slug_is_escaped()
+    public async Task TryLoad_ShouldEscapeEachPartOfTheSlug_WhenTheSlugHasSpecialCharacters()
     {
+        // Arrange
         _storyblok.Answer(HttpStatusCode.NotFound);
+        StoryblokStoryClient sut = CreateClient();
 
-        await Load<TestPage>("/certificates/a b?c#d");
+        // Act
+        await Load<TestPage>(sut, "/certificates/a b?c#d");
 
-        Assert.Equal("/v2/cdn/stories/certificates/a%20b%3Fc%23d", _storyblok.Requests.Single().AbsolutePath);
+        // Assert
+        _storyblok.Requests.Single().AbsolutePath.ShouldBe("/v2/cdn/stories/certificates/a%20b%3Fc%23d");
     }
 
     [Theory]
@@ -37,229 +41,306 @@ public sealed class StoryblokStoryClientTests : IDisposable
     [InlineData("/certificates/..")]
     [InlineData("/certificates/.")]
     [InlineData("/certificates//x")]
-    public async Task A_slug_that_cant_name_a_story_is_not_found_without_asking_Storyblok(string slug)
+    public async Task TryLoad_ShouldReturnNotFoundWithoutAskingStoryblok_WhenTheSlugCannotNameAStory(string slug)
     {
-        Assert.IsType<StoryNotFound>((await Load<TestPage>(slug)).Value);
-        Assert.Empty(_storyblok.Requests);
+        // Arrange
+        StoryblokStoryClient sut = CreateClient();
+
+        // Act
+        StoryLoadResult<TestPage> result = await Load<TestPage>(sut, slug);
+
+        // Assert
+        result.Value.ShouldBeOfType<StoryNotFound>();
+        _storyblok.Requests.ShouldBeEmpty();
     }
 
     [Fact]
-    public async Task A_slug_with_or_without_slashes_around_it_is_one_cache_entry()
+    public async Task TryLoad_ShouldAskStoryblokOnce_WhenTheSlugDiffersOnlyInSlashes()
     {
+        // Arrange
         _storyblok.Answer(HttpStatusCode.OK, Story("Home", Page()));
-        StoryblokStoryClient client = CreateClient();
+        StoryblokStoryClient sut = CreateClient();
 
-        await Load<TestPage>(client, "/home");
-        await Load<TestPage>(client, "home/");
+        // Act
+        await Load<TestPage>(sut, "/home");
+        await Load<TestPage>(sut, "home/");
 
-        Assert.Single(_storyblok.Requests);
+        // Assert
+        _storyblok.Requests.ShouldHaveSingleItem();
     }
 
     [Fact]
-    public async Task A_story_is_read_into_the_registered_component_classes()
+    public async Task TryLoad_ShouldReadTheStoryIntoTheRegisteredComponentClasses_WhenTheStoryIsFound()
     {
+        // Arrange
         _storyblok.Answer(HttpStatusCode.OK, Story("Home", """
             { "_uid": "11111111-1111-1111-1111-111111111111", "component": "test_page", "body": [
                 { "_uid": "22222222-2222-2222-2222-222222222222", "component": "test_fields", "text": "Hello" },
                 { "_uid": "33333333-3333-3333-3333-333333333333", "component": "added_later_in_storyblok" }
             ] }
             """));
+        StoryblokStoryClient sut = CreateClient();
 
-        StoryblokStory<TestPage> story = Assert.IsType<StoryblokStory<TestPage>>((await Load<TestPage>("/home")).Value);
+        // Act
+        StoryLoadResult<TestPage> result = await Load<TestPage>(sut, "/home");
 
-        Assert.Equal("Home", story.Name);
-        Assert.Collection(story.Content.Body!,
-            block => Assert.Equal("Hello", Assert.IsType<TestFields>(block).Text),
-            // A block the app has no class for is kept with its name instead of failing the story.
-            block => Assert.Equal("added_later_in_storyblok", Assert.IsType<StoryblokComponent>(block).Component));
+        // Assert
+        StoryblokStory<TestPage> story = result.Value.ShouldBeOfType<StoryblokStory<TestPage>>();
+        story.Name.ShouldBe("Home");
+        StoryblokComponent[] body = story.Content.Body!;
+        body.Length.ShouldBe(2);
+        body[0].ShouldBeOfType<TestFields>().Text.ShouldBe("Hello");
+        // A block the app has no class for is kept with its name instead of failing the story.
+        body[1].ShouldBeOfType<StoryblokComponent>().Component.ShouldBe("added_later_in_storyblok");
     }
 
     [Fact]
-    public async Task A_missing_story_is_not_found()
+    public async Task TryLoad_ShouldReturnNotFound_WhenTheStoryIsMissing()
     {
+        // Arrange
         _storyblok.Answer(HttpStatusCode.NotFound, "{}");
+        StoryblokStoryClient sut = CreateClient();
 
-        Assert.IsType<StoryNotFound>((await Load<TestPage>("/nothing")).Value);
+        // Act
+        StoryLoadResult<TestPage> result = await Load<TestPage>(sut, "/nothing");
+
+        // Assert
+        result.Value.ShouldBeOfType<StoryNotFound>();
     }
 
     [Theory]
     [InlineData(HttpStatusCode.InternalServerError)]
     [InlineData(HttpStatusCode.Unauthorized)]
-    public async Task An_error_answer_means_Storyblok_is_unavailable(HttpStatusCode status)
+    public async Task TryLoad_ShouldReturnUnavailable_WhenStoryblokAnswersWithAnError(HttpStatusCode status)
     {
+        // Arrange
         _storyblok.Answer(status, "{}");
+        StoryblokStoryClient sut = CreateClient();
 
-        Assert.IsType<StoryblokUnavailable>((await Load<TestPage>("/home")).Value);
+        // Act
+        StoryLoadResult<TestPage> result = await Load<TestPage>(sut, "/home");
+
+        // Assert
+        result.Value.ShouldBeOfType<StoryblokUnavailable>();
     }
 
     [Fact]
-    public async Task An_unreachable_Storyblok_is_unavailable()
+    public async Task TryLoad_ShouldReturnUnavailable_WhenStoryblokIsUnreachable()
     {
+        // Arrange
         _storyblok.Fail(new HttpRequestException("No connection."));
+        StoryblokStoryClient sut = CreateClient();
 
-        Assert.IsType<StoryblokUnavailable>((await Load<TestPage>("/home")).Value);
+        // Act
+        StoryLoadResult<TestPage> result = await Load<TestPage>(sut, "/home");
+
+        // Assert
+        result.Value.ShouldBeOfType<StoryblokUnavailable>();
     }
 
     [Theory]
     [InlineData("not json at all")]
     [InlineData("""{ "cv": 1 }""")] // no story in the answer
     [InlineData("""{ "story": { "content": [] } }""")] // content that isn't a block
-    public async Task An_answer_the_site_cant_read_is_unreadable_not_an_outage(string body)
+    public async Task TryLoad_ShouldReturnUnreadableNotUnavailable_WhenTheSiteCannotReadTheAnswer(string body)
     {
+        // Arrange
         _storyblok.Answer(HttpStatusCode.OK, body);
+        StoryblokStoryClient sut = CreateClient();
 
-        Assert.IsType<StoryUnreadable>((await Load<TestPage>("/home")).Value);
+        // Act
+        StoryLoadResult<TestPage> result = await Load<TestPage>(sut, "/home");
+
+        // Assert
+        result.Value.ShouldBeOfType<StoryUnreadable>();
     }
 
     [Fact]
-    public async Task A_story_without_a_content_block_is_unreadable()
+    public async Task TryLoad_ShouldReturnUnreadable_WhenTheStoryHasNoContentBlock()
     {
+        // Arrange
         _storyblok.Answer(HttpStatusCode.OK, """{ "story": { "name": "Empty", "content": null } }""");
+        StoryblokStoryClient sut = CreateClient();
 
-        Assert.IsType<StoryUnreadable>((await Load<TestPage>("/home")).Value);
+        // Act
+        StoryLoadResult<TestPage> result = await Load<TestPage>(sut, "/home");
+
+        // Assert
+        result.Value.ShouldBeOfType<StoryUnreadable>();
     }
 
     [Fact]
-    public async Task A_cache_duration_of_zero_loads_every_time()
+    public async Task TryLoad_ShouldLoadEveryTime_WhenTheCacheDurationIsZero()
     {
+        // Arrange
         _storyblok.Answer(HttpStatusCode.OK, Story("Home", Page()));
         _storyblok.Answer(HttpStatusCode.OK, Story("Home", Page()));
-        StoryblokStoryClient client = CreateClient(new StoryblokOptions { ApiKeyPublic = "public-token", CacheDurationSeconds = 0 });
+        StoryblokStoryClient sut = CreateClient(new StoryblokOptions { ApiKeyPublic = "public-token", CacheDurationSeconds = 0 });
 
-        StoryLoadResult<TestPage> first = await Load<TestPage>(client, "/home");
-        StoryLoadResult<TestPage> second = await Load<TestPage>(client, "/home");
+        // Act
+        StoryLoadResult<TestPage> first = await Load<TestPage>(sut, "/home");
+        StoryLoadResult<TestPage> second = await Load<TestPage>(sut, "/home");
 
-        Assert.IsType<StoryblokStory<TestPage>>(first.Value);
-        Assert.IsType<StoryblokStory<TestPage>>(second.Value);
-        Assert.Equal(2, _storyblok.Requests.Count);
+        // Assert
+        first.Value.ShouldBeOfType<StoryblokStory<TestPage>>();
+        second.Value.ShouldBeOfType<StoryblokStory<TestPage>>();
+        _storyblok.Requests.Count.ShouldBe(2);
     }
 
     [Fact]
-    public async Task A_story_of_another_kind_is_unreadable()
+    public async Task TryLoad_ShouldReturnUnreadable_WhenTheStoryIsOfAnotherKind()
     {
+        // Arrange
         _storyblok.Answer(HttpStatusCode.OK, Story("Fields", """{ "_uid": "11111111-1111-1111-1111-111111111111", "component": "test_fields" }"""));
+        StoryblokStoryClient sut = CreateClient();
 
-        Assert.IsType<StoryUnreadable>((await Load<TestPage>("/home")).Value);
+        // Act
+        StoryLoadResult<TestPage> result = await Load<TestPage>(sut, "/home");
+
+        // Assert
+        result.Value.ShouldBeOfType<StoryUnreadable>();
     }
 
     [Fact]
-    public async Task Leaving_the_page_cancels_the_load_instead_of_reporting_an_outage()
+    public async Task TryLoad_ShouldCancelInsteadOfReportingAnOutage_WhenTheCallerLeavesThePage()
     {
+        // Arrange
         _storyblok.Answer(HttpStatusCode.OK, Story("Home", Page()));
+        StoryblokStoryClient sut = CreateClient();
         using CancellationTokenSource cancellation = CancellationTokenSource.CreateLinkedTokenSource(TestContext.Current.CancellationToken);
         await cancellation.CancelAsync();
 
-        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => Load<TestPage>(CreateClient(), "/home", cancellation.Token));
+        // Act & Assert
+        await Should.ThrowAsync<OperationCanceledException>(() => Load<TestPage>(sut, "/home", cancellation.Token));
     }
 
     [Fact]
-    public async Task Published_stories_and_missing_stories_are_cached()
+    public async Task TryLoad_ShouldAskStoryblokOncePerSlug_WhenStoriesArePublishedOrMissing()
     {
+        // Arrange
         _storyblok.Answer(HttpStatusCode.OK, Story("Home", Page()));
         _storyblok.Answer(HttpStatusCode.NotFound, "{}");
-        StoryblokStoryClient client = CreateClient();
+        StoryblokStoryClient sut = CreateClient();
 
-        await Load<TestPage>(client, "/home");
-        await Load<TestPage>(client, "/home");
-        await Load<TestPage>(client, "/nothing");
-        await Load<TestPage>(client, "/nothing");
+        // Act
+        await Load<TestPage>(sut, "/home");
+        await Load<TestPage>(sut, "/home");
+        await Load<TestPage>(sut, "/nothing");
+        await Load<TestPage>(sut, "/nothing");
 
-        Assert.Equal(2, _storyblok.Requests.Count);
+        // Assert
+        _storyblok.Requests.Count.ShouldBe(2);
     }
 
     [Fact]
-    public async Task A_cached_story_is_loaded_again_once_its_cache_time_is_up()
+    public async Task TryLoad_ShouldLoadAgain_WhenTheCacheTimeIsUp()
     {
+        // Arrange
         _storyblok.Answer(HttpStatusCode.OK, Story("Before", Page()));
         _storyblok.Answer(HttpStatusCode.OK, Story("After", Page()));
-        StoryblokStoryClient client = CreateClient(new StoryblokOptions { ApiKeyPublic = "public-token", CacheDurationSeconds = 60 });
+        StoryblokStoryClient sut = CreateClient(new StoryblokOptions { ApiKeyPublic = "public-token", CacheDurationSeconds = 60 });
 
-        await Load<TestPage>(client, "/home");
+        // Act
+        await Load<TestPage>(sut, "/home");
         _time.Advance(TimeSpan.FromSeconds(59));
-        await Load<TestPage>(client, "/home");
+        await Load<TestPage>(sut, "/home");
         _time.Advance(TimeSpan.FromSeconds(1));
-        StoryLoadResult<TestPage> later = await Load<TestPage>(client, "/home");
+        StoryLoadResult<TestPage> later = await Load<TestPage>(sut, "/home");
 
-        Assert.Equal("After", Assert.IsType<StoryblokStory<TestPage>>(later.Value).Name);
-        Assert.Equal(2, _storyblok.Requests.Count);
+        // Assert
+        later.Value.ShouldBeOfType<StoryblokStory<TestPage>>().Name.ShouldBe("After");
+        _storyblok.Requests.Count.ShouldBe(2);
     }
 
     [Fact]
-    public async Task Requests_carry_the_public_token_the_published_version_and_the_last_cache_version()
+    public async Task TryLoad_ShouldSendThePublicTokenAndTheLastCacheVersion_WhenLoadingPublishedContent()
     {
+        // Arrange
         _storyblok.Answer(HttpStatusCode.OK, Story("Home", Page(), cacheVersion: 1700000000));
         _storyblok.Answer(HttpStatusCode.OK, Story("Other", Page()));
-        StoryblokStoryClient client = CreateClient();
+        StoryblokStoryClient sut = CreateClient();
 
-        await Load<TestPage>(client, "/home");
-        await Load<TestPage>(client, "/other");
+        // Act
+        await Load<TestPage>(sut, "/home");
+        await Load<TestPage>(sut, "/other");
 
+        // Assert
         Uri first = _storyblok.Requests[0], second = _storyblok.Requests[1];
-        Assert.Equal("/v2/cdn/stories/home", first.AbsolutePath);
-        Assert.Contains("version=published", first.Query);
-        Assert.Contains("token=public-token", first.Query);
-        Assert.DoesNotContain("cv=", first.Query);
-        Assert.Contains("cv=1700000000", second.Query);
+        first.AbsolutePath.ShouldBe("/v2/cdn/stories/home");
+        first.Query.ShouldContain("version=published", Case.Sensitive);
+        first.Query.ShouldContain("token=public-token", Case.Sensitive);
+        first.Query.ShouldNotContain("cv=", Case.Sensitive);
+        second.Query.ShouldContain("cv=1700000000", Case.Sensitive);
     }
 
     // Storyblok's CDN answers a cache version it has seen before with that version's content, so a story loaded again
     // with the old one would never show a publish.
     [Fact]
-    public async Task The_cache_version_is_left_out_once_the_cache_time_is_up()
+    public async Task TryLoad_ShouldLeaveOutTheCacheVersion_WhenTheCacheTimeIsUp()
     {
+        // Arrange
         _storyblok.Answer(HttpStatusCode.OK, Story("Before", Page(), cacheVersion: 1700000000));
         _storyblok.Answer(HttpStatusCode.OK, Story("After", Page(), cacheVersion: 1700000500));
         _storyblok.Answer(HttpStatusCode.OK, Story("Other", Page()));
-        StoryblokStoryClient client = CreateClient(new StoryblokOptions { ApiKeyPublic = "public-token", CacheDurationSeconds = 60 });
+        StoryblokStoryClient sut = CreateClient(new StoryblokOptions { ApiKeyPublic = "public-token", CacheDurationSeconds = 60 });
 
-        await Load<TestPage>(client, "/home");
+        // Act
+        await Load<TestPage>(sut, "/home");
         _time.Advance(TimeSpan.FromSeconds(60));
-        await Load<TestPage>(client, "/home");
-        await Load<TestPage>(client, "/other");
+        await Load<TestPage>(sut, "/home");
+        await Load<TestPage>(sut, "/other");
 
-        Assert.DoesNotContain("cv=", _storyblok.Requests[1].Query);
-        Assert.Contains("cv=1700000500", _storyblok.Requests[2].Query);
+        // Assert
+        _storyblok.Requests[1].Query.ShouldNotContain("cv=", Case.Sensitive);
+        _storyblok.Requests[2].Query.ShouldContain("cv=1700000500", Case.Sensitive);
     }
 
     // The CDN answers a request that sends a cache version with that same version. Its time must still count from when it
     // was first seen, or loading another story now and then would keep it in use forever.
     [Fact]
-    public async Task The_cache_version_expires_even_while_other_stories_are_loaded_with_it()
+    public async Task TryLoad_ShouldExpireTheCacheVersion_WhenOtherStoriesAreLoadedWithIt()
     {
+        // Arrange
         _storyblok.Answer(HttpStatusCode.OK, Story("A", Page(), cacheVersion: 1700000000));
         _storyblok.Answer(HttpStatusCode.OK, Story("B", Page(), cacheVersion: 1700000000));
         _storyblok.Answer(HttpStatusCode.OK, Story("A again", Page(), cacheVersion: 1700000500));
-        StoryblokStoryClient client = CreateClient(new StoryblokOptions { ApiKeyPublic = "public-token", CacheDurationSeconds = 60 });
+        StoryblokStoryClient sut = CreateClient(new StoryblokOptions { ApiKeyPublic = "public-token", CacheDurationSeconds = 60 });
 
-        await Load<TestPage>(client, "/a");
+        // Act
+        await Load<TestPage>(sut, "/a");
         _time.Advance(TimeSpan.FromSeconds(50));
-        await Load<TestPage>(client, "/b");
+        await Load<TestPage>(sut, "/b");
         _time.Advance(TimeSpan.FromSeconds(20));
-        StoryLoadResult<TestPage> again = await Load<TestPage>(client, "/a");
+        StoryLoadResult<TestPage> again = await Load<TestPage>(sut, "/a");
 
-        Assert.Contains("cv=1700000000", _storyblok.Requests[1].Query);
-        Assert.DoesNotContain("cv=", _storyblok.Requests[2].Query);
-        Assert.Equal("A again", Assert.IsType<StoryblokStory<TestPage>>(again.Value).Name);
+        // Assert
+        _storyblok.Requests[1].Query.ShouldContain("cv=1700000000", Case.Sensitive);
+        _storyblok.Requests[2].Query.ShouldNotContain("cv=", Case.Sensitive);
+        again.Value.ShouldBeOfType<StoryblokStory<TestPage>>().Name.ShouldBe("A again");
     }
 
     [Fact]
-    public async Task The_editor_loads_drafts_with_the_preview_token_and_never_caches_them()
+    public async Task TryLoad_ShouldLoadDraftsWithThePreviewTokenAndNeverCacheThem_WhenInTheEditor()
     {
+        // Arrange
         _storyblok.Answer(HttpStatusCode.OK, Story("Home", Page()));
         _storyblok.Answer(HttpStatusCode.OK, Story("Home", Page()));
-        StoryblokStoryClient client = CreateClient(new StoryblokOptions { ApiKeyPublic = "public-token", ApiKeyPreview = "preview-token", IsInEditor = true });
+        StoryblokStoryClient sut = CreateClient(new StoryblokOptions { ApiKeyPublic = "public-token", ApiKeyPreview = "preview-token", IsInEditor = true });
 
-        await Load<TestPage>(client, "/home");
-        await Load<TestPage>(client, "/home");
+        // Act
+        await Load<TestPage>(sut, "/home");
+        await Load<TestPage>(sut, "/home");
 
-        Assert.Equal(2, _storyblok.Requests.Count);
-        Assert.Contains("version=draft", _storyblok.Requests[0].Query);
-        Assert.Contains("token=preview-token", _storyblok.Requests[0].Query);
+        // Assert
+        _storyblok.Requests.Count.ShouldBe(2);
+        _storyblok.Requests[0].Query.ShouldContain("version=draft", Case.Sensitive);
+        _storyblok.Requests[0].Query.ShouldContain("token=preview-token", Case.Sensitive);
     }
 
     [Fact]
-    public async Task Storyblok_values_are_read_into_the_property_types()
+    public async Task TryLoad_ShouldReadStoryblokValuesIntoThePropertyTypes_WhenTheFieldsHaveOtherTypes()
     {
+        // Arrange
         _storyblok.Answer(HttpStatusCode.OK, Story("Fields", """
             {
               "_uid": "11111111-1111-1111-1111-111111111111", "component": "test_fields",
@@ -268,181 +349,253 @@ public sealed class StoryblokStoryClientTests : IDisposable
               "empty_image": "", "image_without_file": { "filename": "" }
             }
             """));
+        StoryblokStoryClient sut = CreateClient();
 
-        TestFields fields = Assert.IsType<StoryblokStory<TestFields>>((await Load<TestFields>("/fields")).Value).Content;
+        // Act
+        StoryLoadResult<TestFields> result = await Load<TestFields>(sut, "/fields");
 
-        Assert.Equal("42", fields.Text);
-        Assert.Equal("true", fields.FlagText);
-        Assert.Equal("first", fields.Option); // a multi-option field: the first entry, the rest skipped cleanly
-        Assert.Null(fields.Nothing);
-        Assert.Equal("A picture", fields.Image?.Alt);
-        Assert.Null(fields.EmptyImage);
-        Assert.Null(fields.ImageWithoutFile);
+        // Assert
+        TestFields fields = result.Value.ShouldBeOfType<StoryblokStory<TestFields>>().Content;
+        fields.Text.ShouldBe("42");
+        fields.FlagText.ShouldBe("true");
+        fields.Option.ShouldBe("first"); // a multi-option field: the first entry, the rest skipped cleanly
+        fields.Nothing.ShouldBeNull();
+        fields.Image.ShouldNotBeNull().Alt.ShouldBe("A picture");
+        fields.EmptyImage.ShouldBeNull();
+        fields.ImageWithoutFile.ShouldBeNull();
     }
 
     [Fact]
-    public async Task A_prerendered_story_is_used_without_asking_Storyblok()
+    public async Task TryLoad_ShouldUseThePrerenderedStoryWithoutAskingStoryblok_WhenOneExists()
     {
+        // Arrange
         _prerendered.AddAll($$"""{ "home": {{Story("Prerendered", Page())}} }""");
+        StoryblokStoryClient sut = CreateClient();
 
-        StoryblokStory<TestPage> story = Assert.IsType<StoryblokStory<TestPage>>((await Load<TestPage>("/home")).Value);
+        // Act
+        StoryLoadResult<TestPage> result = await Load<TestPage>(sut, "/home");
 
-        Assert.Equal("Prerendered", story.Name);
-        Assert.Empty(_storyblok.Requests);
+        // Assert
+        StoryblokStory<TestPage> story = result.Value.ShouldBeOfType<StoryblokStory<TestPage>>();
+        story.Name.ShouldBe("Prerendered");
+        _storyblok.Requests.ShouldBeEmpty();
     }
 
     [Fact]
-    public async Task A_refresh_of_an_unchanged_story_is_null()
+    public async Task TryRefresh_ShouldReturnNull_WhenTheStoryIsUnchanged()
     {
+        // Arrange
         // Recorded and embedded the way the deploy does it, with characters the embedding escapes.
         string response = Story("Me & <you>", Page());
         _storyblok.Answer(HttpStatusCode.OK, response);
         _prerendered.IsRecording = true;
-        await Load<TestPage>("/home");
+        await Load<TestPage>(CreateClient(), "/home");
         PrerenderedStories embedded = new();
         embedded.AddAll(_prerendered.ToJson());
         _prerendered = embedded;
         _storyblok.Answer(HttpStatusCode.OK, response);
-        StoryblokStoryClient client = CreateClient();
-        await Load<TestPage>(client, "/home");
+        StoryblokStoryClient sut = CreateClient();
+        await Load<TestPage>(sut, "/home");
 
-        Assert.Null(await Refresh<TestPage>(client, "/home"));
-        Assert.Equal(2, _storyblok.Requests.Count);
+        // Act
+        StoryLoadResult<TestPage>? refreshed = await Refresh<TestPage>(sut, "/home");
+
+        // Assert
+        refreshed.ShouldBeNull();
+        _storyblok.Requests.Count.ShouldBe(2);
     }
 
     [Fact]
-    public async Task A_refresh_of_a_changed_story_is_the_new_story()
+    public async Task TryRefresh_ShouldReturnTheNewStory_WhenTheStoryChanged()
     {
+        // Arrange
         _prerendered.AddAll($$"""{ "home": {{Story("Before", Page())}} }""");
         _storyblok.Answer(HttpStatusCode.OK, Story("After", Page()));
-        StoryblokStoryClient client = CreateClient();
-        await Load<TestPage>(client, "/home");
+        StoryblokStoryClient sut = CreateClient();
+        await Load<TestPage>(sut, "/home");
 
-        StoryLoadResult<TestPage>? refreshed = await Refresh<TestPage>(client, "/home");
+        // Act
+        StoryLoadResult<TestPage>? refreshed = await Refresh<TestPage>(sut, "/home");
 
-        Assert.Equal("After", Assert.IsType<StoryblokStory<TestPage>>(refreshed?.Value).Name);
+        // Assert
+        object? value = refreshed?.Value;
+        value.ShouldBeOfType<StoryblokStory<TestPage>>().Name.ShouldBe("After");
     }
 
     [Fact]
-    public async Task A_refresh_of_a_story_that_wasnt_prerendered_is_null_without_asking()
+    public async Task TryRefresh_ShouldReturnNullWithoutAsking_WhenTheStoryWasNotPrerendered()
     {
-        Assert.Null(await Refresh<TestPage>(CreateClient(), "/home"));
-        Assert.Empty(_storyblok.Requests);
+        // Arrange
+        StoryblokStoryClient sut = CreateClient();
+
+        // Act
+        StoryLoadResult<TestPage>? refreshed = await Refresh<TestPage>(sut, "/home");
+
+        // Assert
+        refreshed.ShouldBeNull();
+        _storyblok.Requests.ShouldBeEmpty();
     }
 
     [Fact]
-    public async Task Recording_keeps_the_response_of_each_story()
+    public async Task TryLoad_ShouldRecordTheResponseOfEachStory_WhenRecording()
     {
+        // Arrange
         string response = Story("Home", Page());
         _storyblok.Answer(HttpStatusCode.OK, response);
         _prerendered.IsRecording = true;
+        StoryblokStoryClient sut = CreateClient();
 
-        await Load<TestPage>("/home");
+        // Act
+        await Load<TestPage>(sut, "/home");
 
-        Assert.Equal(response, _prerendered.Recorded["home"]);
+        // Assert
+        _prerendered.Recorded["home"].ShouldBe(response);
     }
 
     [Fact]
-    public async Task Prerendered_json_cant_end_a_script_block()
+    public async Task ToJson_ShouldNotEndAScriptBlock_WhenAStoryContainsScriptMarkup()
     {
+        // Arrange
         _storyblok.Answer(HttpStatusCode.OK, Story("</script><!--", Page()));
-        _prerendered.IsRecording = true;
-        await Load<TestPage>("/home");
+        PrerenderedStories sut = _prerendered;
+        sut.IsRecording = true;
+        await Load<TestPage>(CreateClient(), "/home");
 
-        string json = _prerendered.ToJson();
+        // Act
+        string json = sut.ToJson();
 
-        Assert.DoesNotContain("</script", json, StringComparison.OrdinalIgnoreCase);
-        Assert.DoesNotContain("<!--", json, StringComparison.Ordinal);
+        // Assert
+        json.ShouldNotContain("</script", Case.Insensitive);
+        json.ShouldNotContain("<!--", Case.Sensitive);
+        // The embedded copy still reads back as the same story.
         _prerendered = new PrerenderedStories();
         _prerendered.AddAll(json);
-        Assert.Equal("</script><!--", Assert.IsType<StoryblokStory<TestPage>>((await Load<TestPage>("/home")).Value).Name);
+        (await Load<TestPage>(CreateClient(), "/home")).Value.ShouldBeOfType<StoryblokStory<TestPage>>().Name.ShouldBe("</script><!--");
     }
 
     [Fact]
-    public void Unreadable_prerendered_json_is_ignored()
+    public void AddAll_ShouldIgnoreTheJson_WhenItIsUnreadable()
     {
-        _prerendered.AddAll("not json");
+        // Arrange
+        PrerenderedStories sut = new();
 
-        Assert.False(_prerendered.Contains("/home"));
+        // Act
+        sut.AddAll("not json");
+
+        // Assert
+        sut.Contains("/home").ShouldBeFalse();
     }
 
     [Fact]
-    public void An_edited_story_is_raised_with_its_slug_and_component_classes()
+    public void ReadEditedStory_ShouldRaiseTheStoryWithItsSlugAndComponentClasses_WhenInTheEditor()
     {
-        StoryblokStoryClient client = CreateEditorClient();
+        // Arrange
+        StoryblokStoryClient sut = CreateEditorClient();
         List<StoryblokEdit> edits = [];
-        client.StoryEdited += edits.Add;
+        sut.StoryEdited += edits.Add;
 
-        client.ReadEditedStory(EditedStory("home", """
+        // Act
+        sut.ReadEditedStory(EditedStory("home", """
             { "_uid": "11111111-1111-1111-1111-111111111111", "component": "test_page", "body": [
                 { "_uid": "22222222-2222-2222-2222-222222222222", "component": "test_fields", "text": "Hello" }
             ] }
             """));
 
-        StoryblokEdit edit = Assert.Single(edits);
-        Assert.True(edit.TryGet("/home", out StoryblokStory<TestPage>? story));
-        Assert.Equal("Home", story.Name);
-        Assert.Equal("Hello", Assert.IsType<TestFields>(Assert.Single(story.Content.Body!)).Text);
+        // Assert
+        StoryblokEdit edit = edits.ShouldHaveSingleItem();
+        edit.TryGet("/home", out StoryblokStory<TestPage>? story).ShouldBeTrue();
+        story.ShouldNotBeNull();
+        story.Name.ShouldBe("Home");
+        story.Content.Body!.ShouldHaveSingleItem().ShouldBeOfType<TestFields>().Text.ShouldBe("Hello");
     }
 
     [Theory]
     [InlineData("certificates/az-204", "/certificates/AZ-204")]
     [InlineData("home", "home/")]
-    public void A_slug_matches_whatever_its_case_and_slashes(string fullSlug, string asked)
+    public void TryGet_ShouldReturnTrue_WhenTheSlugDiffersInCaseOrSlashes(string fullSlug, string asked)
     {
-        Assert.True(Edit(fullSlug, Page()).TryGet(asked, out StoryblokStory<TestPage>? _));
+        // Arrange
+        StoryblokEdit sut = Edit(fullSlug, Page());
+
+        // Act
+        bool found = sut.TryGet(asked, out StoryblokStory<TestPage>? _);
+
+        // Assert
+        found.ShouldBeTrue();
     }
 
     [Fact]
-    public void An_edited_story_is_not_another_slugs_story()
+    public void TryGet_ShouldReturnFalse_WhenTheSlugBelongsToAnotherStory()
     {
-        Assert.False(Edit("certificates/x", Page()).TryGet("/home", out StoryblokStory<TestPage>? _));
+        // Arrange
+        StoryblokEdit sut = Edit("certificates/x", Page());
+
+        // Act
+        bool found = sut.TryGet("/home", out StoryblokStory<TestPage>? _);
+
+        // Assert
+        found.ShouldBeFalse();
     }
 
     [Fact]
-    public void An_edited_story_of_another_kind_is_not_taken()
+    public void TryGet_ShouldReturnFalse_WhenTheStoryIsOfAnotherKind()
     {
+        // Arrange
         string fields = """{ "_uid": "22222222-2222-2222-2222-222222222222", "component": "test_fields" }""";
+        StoryblokEdit sut = Edit("home", fields);
 
-        Assert.False(Edit("home", fields).TryGet("/home", out StoryblokStory<TestPage>? _));
+        // Act
+        bool found = sut.TryGet("/home", out StoryblokStory<TestPage>? _);
+
+        // Assert
+        found.ShouldBeFalse();
     }
 
     [Fact]
-    public void Outside_the_editor_an_edited_story_is_ignored()
+    public void ReadEditedStory_ShouldRaiseNothing_WhenOutsideTheEditor()
     {
-        StoryblokStoryClient client = CreateClient();
+        // Arrange
+        StoryblokStoryClient sut = CreateClient();
         List<StoryblokEdit> edits = [];
-        client.StoryEdited += edits.Add;
+        sut.StoryEdited += edits.Add;
 
-        client.ReadEditedStory(EditedStory("home", Page()));
+        // Act
+        sut.ReadEditedStory(EditedStory("home", Page()));
 
-        Assert.Empty(edits);
+        // Assert
+        edits.ShouldBeEmpty();
     }
 
     [Theory]
     [InlineData("{ not json")]
     [InlineData("null")]
-    public void An_edited_story_that_cant_be_read_raises_nothing(string json)
+    public void ReadEditedStory_ShouldRaiseNothing_WhenTheStoryCannotBeRead(string json)
     {
-        StoryblokStoryClient client = CreateEditorClient();
+        // Arrange
+        StoryblokStoryClient sut = CreateEditorClient();
         List<StoryblokEdit> edits = [];
-        client.StoryEdited += edits.Add;
+        sut.StoryEdited += edits.Add;
 
-        client.ReadEditedStory(json);
+        // Act
+        sut.ReadEditedStory(json);
 
-        Assert.Empty(edits);
+        // Assert
+        edits.ShouldBeEmpty();
     }
 
     [Fact]
-    public async Task An_edited_story_doesnt_reach_the_cache()
+    public async Task ReadEditedStory_ShouldNotPutTheStoryInTheCache_WhenInTheEditor()
     {
+        // Arrange
         _storyblok.Answer(HttpStatusCode.OK, Story("Home", Page()));
-        StoryblokStoryClient client = CreateEditorClient(cacheDurationSeconds: 60);
+        StoryblokStoryClient sut = CreateEditorClient(cacheDurationSeconds: 60);
 
-        client.ReadEditedStory(EditedStory("home", Page()));
-        await Load<TestPage>(client, "/home");
+        // Act
+        sut.ReadEditedStory(EditedStory("home", Page()));
+        await Load<TestPage>(sut, "/home");
 
-        Assert.Single(_storyblok.Requests);
+        // Assert
+        _storyblok.Requests.ShouldHaveSingleItem();
     }
 
     private StoryblokEdit Edit(string fullSlug, string content)
@@ -451,7 +604,7 @@ public sealed class StoryblokStoryClientTests : IDisposable
         StoryblokEdit? edit = null;
         client.StoryEdited += raised => edit = raised;
         client.ReadEditedStory(EditedStory(fullSlug, content));
-        return Assert.IsType<StoryblokEdit>(edit);
+        return edit.ShouldBeOfType<StoryblokEdit>();
     }
 
     private StoryblokStoryClient CreateEditorClient(int cacheDurationSeconds = 0) => CreateClient(new StoryblokOptions
@@ -468,9 +621,6 @@ public sealed class StoryblokStoryClientTests : IDisposable
 
     private static Task<StoryLoadResult<T>?> Refresh<T>(StoryblokStoryClient client, string slug) where T : StoryblokComponent =>
         client.Story().WithSlug(slug).TryRefresh<T>(TestContext.Current.CancellationToken);
-
-    private Task<StoryLoadResult<T>> Load<T>(string slug) where T : StoryblokComponent =>
-        Load<T>(CreateClient(), slug);
 
     private static Task<StoryLoadResult<T>> Load<T>(StoryblokStoryClient client, string slug, CancellationToken? cancellationToken = null)
         where T : StoryblokComponent =>

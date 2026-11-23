@@ -6,21 +6,31 @@ namespace LinkInBio.Tests.Prerender;
 public sealed class ExceptionTextTests
 {
     [Fact]
-    public void The_warning_says_what_failed_and_why()
+    public void Describe_ShouldSayWhatFailedAndWhy_WhenTheExceptionHasAnInnerException()
     {
+        // Arrange
         InvalidOperationException exception = new("The home page failed while rendering.",
             new FormatException("The input string was not in a correct format."));
 
-        Assert.Equal("The home page failed while rendering: The input string was not in a correct format", ExceptionText.Describe(exception));
+        // Act
+        string text = ExceptionText.Describe(exception);
+
+        // Assert
+        text.ShouldBe("The home page failed while rendering: The input string was not in a correct format");
     }
 
     [Fact]
-    public void A_message_repeated_inside_is_written_once()
+    public void Describe_ShouldWriteARepeatedMessageOnce_WhenTheOuterMessageRepeatsTheInnerOne()
     {
+        // Arrange
         const string message = "Storyblok didn't answer within 15 seconds";
         TimeoutException inner = new(message + ".");
         TimeoutException outer = new(inner.Message, inner);
 
-        Assert.Equal(message, ExceptionText.Describe(outer));
+        // Act
+        string text = ExceptionText.Describe(outer);
+
+        // Assert
+        text.ShouldBe(message);
     }
 }

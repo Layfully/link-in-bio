@@ -41,131 +41,165 @@ public sealed class ComponentTests : IDisposable
     }
 
     [Fact]
-    public void The_photo_is_downloaded_at_the_size_it_is_shown()
+    public void Header_ShouldDownloadPhotoAtDisplayedSize_WhenProfileHasPhoto()
     {
+        // Arrange
         const string photo = "https://a.storyblok.com/f/268473/608x912/b7730a2cf6/profile.jpg";
 
-        IRenderedComponent<Header> header = _context.Render<Header>(parameters => parameters.Add(component => component.Model,
+        // Act
+        IRenderedComponent<Header> sut = _context.Render<Header>(parameters => parameters.Add(component => component.Model,
             new StoryblokHeader { Profile = new StoryblokAsset { Url = photo } }));
 
+        // Assert
         // Shown 128 px square in a circle: the part the circle shows, 2x for sharp screens.
-        AngleSharp.Dom.IElement image = header.Find("img");
-        Assert.Equal($"{photo}/m/0x304:608x912/128x128", image.GetAttribute("src"));
-        Assert.Equal($"{photo}/m/0x304:608x912/128x128 1x, {photo}/m/0x304:608x912/256x256 2x", image.GetAttribute("srcset"));
+        AngleSharp.Dom.IElement image = sut.Find("img");
+        image.GetAttribute("src").ShouldBe($"{photo}/m/0x304:608x912/128x128");
+        image.GetAttribute("srcset").ShouldBe($"{photo}/m/0x304:608x912/128x128 1x, {photo}/m/0x304:608x912/256x256 2x");
     }
 
     [Fact]
-    public void A_header_from_the_editor_carries_its_marker()
+    public void Header_ShouldCarryItsMarker_WhenRenderedFromTheEditor()
     {
-        IRenderedComponent<Header> header = _context.Render<Header>(parameters => parameters.Add(component => component.Model,
+        // Act
+        IRenderedComponent<Header> sut = _context.Render<Header>(parameters => parameters.Add(component => component.Model,
             new StoryblokHeader { Editable = """<!--#storyblok#{"uid":"abc","id":"42"}-->""" }));
 
-        Assert.Equal("42-abc", header.Find("header").GetAttribute("data-blok-uid"));
+        // Assert
+        sut.Find("header").GetAttribute("data-blok-uid").ShouldBe("42-abc");
     }
 
     [Fact]
-    public void Published_blocks_carry_no_editor_markers()
+    public void HeaderAndLinkList_ShouldCarryNoEditorMarkers_WhenPublished()
     {
+        // Act
         IRenderedComponent<Header> header = _context.Render<Header>(parameters => parameters.Add(component => component.Model,
             new StoryblokHeader()));
         IRenderedComponent<LinkList> list = _context.Render<LinkList>(parameters => parameters.Add(component => component.Model,
             [new StoryblokLink { Label = "GitHub" }]));
 
-        Assert.DoesNotContain("data-blok", header.Markup);
-        Assert.DoesNotContain("data-blok", list.Markup);
+        // Assert
+        header.Markup.ShouldNotContain("data-blok", Case.Sensitive);
+        list.Markup.ShouldNotContain("data-blok", Case.Sensitive);
     }
 
     [Fact]
-    public void The_typed_line_shows_the_first_tagline_until_typing_starts()
+    public void TypedText_ShouldShowFirstTagline_WhenTypingHasNotStarted()
     {
-        IRenderedComponent<TypedText> typed = _context.Render<TypedText>(parameters => parameters.Add(text => text.Model,
+        // Act
+        IRenderedComponent<TypedText> sut = _context.Render<TypedText>(parameters => parameters.Add(text => text.Model,
             [new StoryblokText { Text = "  " }, new StoryblokText { Text = " Tea enthusiast " }, new StoryblokText { Text = "Developer" }]));
 
+        // Assert
         // The text comes from CSS (attr(data-first)) rather than the element's content, which typed.js owns.
-        AngleSharp.Dom.IElement line = typed.Find("p[aria-hidden]");
-        Assert.Equal("Tea enthusiast", line.GetAttribute("data-first"));
-        Assert.Equal(string.Empty, line.TextContent);
+        AngleSharp.Dom.IElement line = sut.Find("p[aria-hidden]");
+        line.GetAttribute("data-first").ShouldBe("Tea enthusiast");
+        line.TextContent.ShouldBe(string.Empty);
     }
 
     [Fact]
-    public void A_load_says_nothing_in_its_first_second_then_says_it_is_loading()
+    public void StoryblokStatus_ShouldSayNothingThenSayLoading_WhenTheFirstSecondHasPassed()
     {
-        IRenderedComponent<StoryblokStatus> status = RenderStatus(ContentStatus.Loading);
+        // Arrange
+        IRenderedComponent<StoryblokStatus> sut = RenderStatus(ContentStatus.Loading);
 
-        Assert.Empty(LiveRegion(status));
+        // Act & Assert
+        LiveRegion(sut).ShouldBeEmpty();
 
         _time.Advance(TimeSpan.FromSeconds(1));
-        status.WaitForAssertion(() => Assert.Equal("Loading links…", LiveRegion(status)));
+        sut.WaitForAssertion(() => LiveRegion(sut).ShouldBe("Loading links…"));
     }
 
     [Fact]
-    public void A_slow_load_says_so_and_a_very_slow_one_asks_for_patience()
+    public void StoryblokStatus_ShouldAskForPatience_WhenTheLoadIsSlowAndThenVerySlow()
     {
-        IRenderedComponent<StoryblokStatus> status = RenderStatus(ContentStatus.Loading);
+        // Arrange
+        IRenderedComponent<StoryblokStatus> sut = RenderStatus(ContentStatus.Loading);
 
+        // Act
         _time.Advance(TimeSpan.FromSeconds(3));
 
-        status.WaitForAssertion(() => Assert.StartsWith("Still loading.", LiveRegion(status)));
+        // Assert
+        sut.WaitForAssertion(() => LiveRegion(sut).ShouldStartWith("Still loading."));
 
+        // Act
         _time.Advance(TimeSpan.FromSeconds(5));
-        status.WaitForAssertion(() => Assert.StartsWith("This is taking longer than usual.", LiveRegion(status)));
+
+        // Assert
+        sut.WaitForAssertion(() => LiveRegion(sut).ShouldStartWith("This is taking longer than usual."));
     }
 
     [Fact]
-    public void A_new_load_counts_from_zero_again()
+    public void StoryblokStatus_ShouldCountFromZeroAgain_WhenANewLoadStarts()
     {
-        IRenderedComponent<StoryblokStatus> status = RenderStatus(ContentStatus.Loading);
+        // Arrange
+        IRenderedComponent<StoryblokStatus> sut = RenderStatus(ContentStatus.Loading);
         _time.Advance(TimeSpan.FromSeconds(4));
 
-        status.WaitForAssertion(() => Assert.StartsWith("Still loading.", LiveRegion(status)));
+        sut.WaitForAssertion(() => LiveRegion(sut).ShouldStartWith("Still loading."));
 
-        status.Render(parameters => parameters.Add(component => component.Status, ContentStatus.Done));
-        Assert.Empty(LiveRegion(status));
+        // Act
+        sut.Render(parameters => parameters.Add(component => component.Status, ContentStatus.Done));
 
-        status.Render(parameters => parameters.Add(component => component.Status, ContentStatus.Loading));
-        Assert.Empty(LiveRegion(status));
+        // Assert
+        LiveRegion(sut).ShouldBeEmpty();
+
+        // Act
+        sut.Render(parameters => parameters.Add(component => component.Status, ContentStatus.Loading));
+
+        // Assert
+        LiveRegion(sut).ShouldBeEmpty();
         _time.Advance(TimeSpan.FromSeconds(1));
-        status.WaitForAssertion(() => Assert.Equal("Loading links…", LiveRegion(status)));
+        sut.WaitForAssertion(() => LiveRegion(sut).ShouldBe("Loading links…"));
     }
 
     [Fact]
-    public void Content_the_site_cant_read_offers_no_retry()
+    public void StoryblokStatus_ShouldOfferNoRetry_WhenContentIsUnreadable()
     {
-        IRenderedComponent<StoryblokStatus> status = RenderStatus(ContentStatus.Unreadable);
+        // Act
+        IRenderedComponent<StoryblokStatus> sut = RenderStatus(ContentStatus.Unreadable);
 
-        Assert.Contains("needs a fix first", status.Markup);
-        Assert.Empty(status.FindAll("button"));
+        // Assert
+        sut.Markup.ShouldContain("needs a fix first", Case.Sensitive);
+        sut.FindAll("button").ShouldBeEmpty();
     }
 
     [Fact]
-    public void A_failing_page_shows_the_error_message_and_a_way_back()
+    public void MainLayout_ShouldShowErrorMessageAndWayBack_WhenPageFails()
     {
+        // Arrange
         _context.Services.GetRequiredService<NavigationManager>().NavigateTo("Certificate/broken");
 
-        IRenderedComponent<MainLayout> layout = RenderLayout<FailingPage>();
+        // Act
+        IRenderedComponent<MainLayout> sut = RenderLayout<FailingPage>();
 
-        Assert.Contains("Something went wrong", layout.Markup);
-        Assert.Equal("Back to the links", layout.Find("a.action-button").TextContent);
+        // Assert
+        sut.Markup.ShouldContain("Something went wrong", Case.Sensitive);
+        sut.Find("a.action-button").TextContent.ShouldBe("Back to the links");
     }
 
     [Fact]
-    public void A_failing_home_page_offers_no_link_back_to_itself()
+    public void MainLayout_ShouldOfferNoLinkBackToItself_WhenHomePageFails()
     {
-        IRenderedComponent<MainLayout> layout = RenderLayout<FailingPage>();
+        // Act
+        IRenderedComponent<MainLayout> sut = RenderLayout<FailingPage>();
 
-        Assert.Contains("Something went wrong", layout.Markup);
-        Assert.Empty(layout.FindAll("a.action-button"));
+        // Assert
+        sut.Markup.ShouldContain("Something went wrong", Case.Sensitive);
+        sut.FindAll("a.action-button").ShouldBeEmpty();
     }
 
     [Fact]
-    public void Moving_to_another_page_clears_the_error()
+    public void MainLayout_ShouldClearError_WhenMovingToAnotherPage()
     {
-        IRenderedComponent<MainLayout> layout = RenderLayout<FailingPage>();
+        // Arrange
+        IRenderedComponent<MainLayout> sut = RenderLayout<FailingPage>();
 
-        layout.Render(parameters => parameters.Add(component => component.Body, Page<WorkingPage>()));
+        // Act
+        sut.Render(parameters => parameters.Add(component => component.Body, Page<WorkingPage>()));
 
-        Assert.DoesNotContain("Something went wrong", layout.Markup);
-        Assert.Contains("A working page", layout.Markup);
+        // Assert
+        sut.Markup.ShouldNotContain("Something went wrong", Case.Sensitive);
+        sut.Markup.ShouldContain("A working page", Case.Sensitive);
     }
 
     private IRenderedComponent<StoryblokStatus> RenderStatus(ContentStatus status) =>

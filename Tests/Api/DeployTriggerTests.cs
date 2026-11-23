@@ -17,45 +17,53 @@ public sealed class DeployTriggerTests : IDisposable
     public void Dispose() => _github.Dispose();
 
     [Fact]
-    public void Configuration_binds_both_webhook_credentials()
+    public void Bind_ShouldFillBothWebhookCredentials_WhenConfigurationHasThem()
     {
+        // Arrange
         IConfiguration configuration = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
         {
             ["DeployTrigger:WebhookSecret"] = "test-secret",
             ["DeployTrigger:GitHubToken"] = "test-token",
         }).Build();
 
-        DeployTriggerOptions settings = new();
-        configuration.GetSection(DeployTriggerOptions.Section).Bind(settings);
+        DeployTriggerOptions sut = new();
 
-        Assert.Equal("test-secret", settings.WebhookSecret);
-        Assert.Equal("test-token", settings.GitHubToken);
+        // Act
+        configuration.GetSection(DeployTriggerOptions.Section).Bind(sut);
+
+        // Assert
+        sut.WebhookSecret.ShouldBe("test-secret");
+        sut.GitHubToken.ShouldBe("test-token");
     }
 
     [Fact]
-    public async Task The_right_secret_starts_the_deploy_workflow_on_main()
+    public async Task TriggerAsync_ShouldStartTheDeployWorkflowOnMain_WhenTheSecretIsRight()
     {
+        // Act
         DeployTriggerResult result = await Trigger("s3cret");
 
-        Assert.Equal(HttpStatusCode.Accepted, result.Status);
-        HttpRequestMessage request = Assert.Single(_github.Requests);
-        Assert.Equal(HttpMethod.Post, request.Method);
-        Assert.Equal(LinkInBioDispatch, request.RequestUri!.ToString());
-        Assert.Equal("Bearer github-token", request.Headers.Authorization!.ToString());
-        Assert.Equal("link-in-bio-deploy-trigger/1.0", request.Headers.UserAgent.ToString());
-        Assert.Equal("application/vnd.github+json", request.Headers.Accept.ToString());
-        Assert.Equal("2022-11-28", Assert.Single(request.Headers.GetValues("X-GitHub-Api-Version")));
-        Assert.Equal(MainDispatchBody, Assert.Single(_github.Bodies));
+        // Assert
+        result.Status.ShouldBe(HttpStatusCode.Accepted);
+        HttpRequestMessage request = _github.Requests.ShouldHaveSingleItem();
+        request.Method.ShouldBe(HttpMethod.Post);
+        request.RequestUri!.ToString().ShouldBe(LinkInBioDispatch);
+        request.Headers.Authorization!.ToString().ShouldBe("Bearer github-token");
+        request.Headers.UserAgent.ToString().ShouldBe("link-in-bio-deploy-trigger/1.0");
+        request.Headers.Accept.ToString().ShouldBe("application/vnd.github+json");
+        request.Headers.GetValues("X-GitHub-Api-Version").ShouldHaveSingleItem().ShouldBe("2022-11-28");
+        _github.Bodies.ShouldHaveSingleItem().ShouldBe(MainDispatchBody);
     }
 
     [Fact]
-    public void This_sites_workflow_exists_and_can_be_started_this_way()
+    public void Workflow_ShouldExistAndAcceptDispatches_WhenConfiguredForThisSite()
     {
-        DeploySite site = Assert.Single(ConfiguredSites(), site => site.Repository == "Layfully/link-in-bio");
+        // Arrange
+        DeploySite site = ConfiguredSites().Where(site => site.Repository == "Layfully/link-in-bio").ShouldHaveSingleItem();
         string workflow = Path.Combine(RepositoryRoot(), ".github", "workflows", site.Workflow);
 
-        Assert.True(File.Exists(workflow), $"{workflow} doesn't exist.");
-        Assert.Contains("workflow_dispatch:", File.ReadAllText(workflow), StringComparison.Ordinal);
+        // Act & Assert
+        File.Exists(workflow).ShouldBeTrue($"{workflow} doesn't exist.");
+        File.ReadAllText(workflow).ShouldContain("workflow_dispatch:", Case.Sensitive);
     }
 
     [Theory]
@@ -63,52 +71,66 @@ public sealed class DeployTriggerTests : IDisposable
     [InlineData("s3cre")]
     [InlineData("")]
     [InlineData(null)]
-    public async Task A_wrong_or_missing_secret_is_refused_without_asking_GitHub(string? secret)
+    public async Task TriggerAsync_ShouldRefuseWithoutAskingGitHub_WhenTheSecretIsWrongOrMissing(string? secret)
     {
+        // Act
         DeployTriggerResult result = await Trigger(secret);
 
-        Assert.Equal(HttpStatusCode.Unauthorized, result.Status);
-        Assert.Empty(_github.Requests);
+        // Assert
+        result.Status.ShouldBe(HttpStatusCode.Unauthorized);
+        _github.Requests.ShouldBeEmpty();
     }
 
     [Fact]
-    public async Task Without_a_webhook_secret_every_call_is_refused()
+    public async Task TriggerAsync_ShouldRefuseEveryCall_WhenThereIsNoWebhookSecret()
     {
+        // Act
         DeployTriggerResult result = await Trigger("s3cret", new DeployTriggerOptions { GitHubToken = "github-token" });
 
-        Assert.Equal(HttpStatusCode.InternalServerError, result.Status);
-        Assert.Empty(_github.Requests);
+        // Assert
+        result.Status.ShouldBe(HttpStatusCode.InternalServerError);
+        _github.Requests.ShouldBeEmpty();
     }
 
     [Fact]
-    public async Task Without_a_token_a_stranger_still_learns_only_that_the_secret_is_wrong()
+    public async Task TriggerAsync_ShouldOnlyTellAStrangerTheSecretIsWrong_WhenTheTokenIsMissing()
     {
+        // Arrange
         DeployTriggerOptions settings = new() { WebhookSecret = "s3cret" };
 
-        Assert.Equal(HttpStatusCode.Unauthorized, (await Trigger("wrong", settings)).Status);
-        Assert.Equal(HttpStatusCode.InternalServerError, (await Trigger("s3cret", settings)).Status);
-        Assert.Empty(_github.Requests);
+        // Act
+        DeployTriggerResult stranger = await Trigger("wrong", settings);
+        DeployTriggerResult owner = await Trigger("s3cret", settings);
+
+        // Assert
+        stranger.Status.ShouldBe(HttpStatusCode.Unauthorized);
+        owner.Status.ShouldBe(HttpStatusCode.InternalServerError);
+        _github.Requests.ShouldBeEmpty();
     }
 
     [Fact]
-    public async Task A_refusal_from_GitHub_is_reported_without_its_details_and_not_tried_again()
+    public async Task TriggerAsync_ShouldReportTheRefusalWithoutDetailsAndNotRetry_WhenGitHubRefuses()
     {
+        // Arrange
         _github.Answers.Enqueue(HttpStatusCode.Forbidden);
 
+        // Act
         DeployTriggerResult result = await Trigger("s3cret");
 
-        Assert.Equal(HttpStatusCode.BadGateway, result.Status);
-        Assert.Contains("403", result.Message, StringComparison.Ordinal);
-        Assert.DoesNotContain("Resource not accessible", result.Message, StringComparison.Ordinal);
-        Assert.Single(_github.Requests);
+        // Assert
+        result.Status.ShouldBe(HttpStatusCode.BadGateway);
+        result.Message.ShouldContain("403", Case.Sensitive);
+        result.Message.ShouldNotContain("Resource not accessible", Case.Sensitive);
+        _github.Requests.ShouldHaveSingleItem();
     }
 
     [Theory]
     [InlineData(HttpStatusCode.TooManyRequests, null)]
     [InlineData(HttpStatusCode.TooManyRequests, 5)]
     [InlineData(HttpStatusCode.ServiceUnavailable, 60)]
-    public async Task A_rate_limit_or_retry_after_fails_without_retrying(HttpStatusCode status, int? delaySeconds)
+    public async Task TriggerAsync_ShouldFailWithoutRetrying_WhenGitHubRateLimitsOrAsksToRetryLater(HttpStatusCode status, int? delaySeconds)
     {
+        // Arrange
         using HttpResponseMessage response = new(status);
         if (delaySeconds.HasValue)
         {
@@ -116,60 +138,73 @@ public sealed class DeployTriggerTests : IDisposable
         }
         _github.Answers.Enqueue(response);
 
+        // Act
         DeployTriggerResult result = await TriggerWhileTimePasses("s3cret");
 
-        Assert.Equal(HttpStatusCode.BadGateway, result.Status);
-        Assert.Single(_github.Requests);
+        // Assert
+        result.Status.ShouldBe(HttpStatusCode.BadGateway);
+        _github.Requests.ShouldHaveSingleItem();
     }
 
     [Fact]
-    public async Task A_passing_failure_at_GitHub_is_tried_again()
+    public async Task TriggerAsync_ShouldTryAgain_WhenGitHubFailsForAMoment()
     {
+        // Arrange
         _github.Answers.Enqueue(HttpStatusCode.BadGateway);
         _github.Answers.Enqueue(new HttpRequestException("Connection reset."));
 
+        // Act
         DeployTriggerResult result = await TriggerWhileTimePasses("s3cret");
 
-        Assert.Equal(HttpStatusCode.Accepted, result.Status);
-        Assert.Equal(3, _github.Requests.Count);
+        // Assert
+        result.Status.ShouldBe(HttpStatusCode.Accepted);
+        _github.Requests.Count.ShouldBe(3);
     }
 
     [Fact]
-    public async Task GitHub_out_of_reach_on_every_attempt_is_reported()
+    public async Task TriggerAsync_ShouldReportBadGateway_WhenGitHubIsOutOfReachOnEveryAttempt()
     {
+        // Arrange
         for (int i = 0; i < 3; i++)
         {
             _github.Answers.Enqueue(new HttpRequestException("No such host is known."));
         }
 
+        // Act
         DeployTriggerResult result = await TriggerWhileTimePasses("s3cret");
 
-        Assert.Equal(HttpStatusCode.BadGateway, result.Status);
-        Assert.Equal(3, _github.Requests.Count);
+        // Assert
+        result.Status.ShouldBe(HttpStatusCode.BadGateway);
+        _github.Requests.Count.ShouldBe(3);
     }
 
     [Fact]
-    public async Task Each_timed_out_attempt_is_retried_until_the_limit()
+    public async Task TriggerAsync_ShouldRetryEachAttemptUntilTheLimit_WhenEveryAttemptTimesOut()
     {
+        // Arrange
         for (int i = 0; i < 3; i++)
         {
             _github.Answers.Enqueue(Timeout.InfiniteTimeSpan);
         }
 
+        // Act
         DeployTriggerResult result = await TriggerWhileTimePasses("s3cret");
 
-        Assert.Equal(HttpStatusCode.BadGateway, result.Status);
-        Assert.Equal(3, _github.Requests.Count);
+        // Assert
+        result.Status.ShouldBe(HttpStatusCode.BadGateway);
+        _github.Requests.Count.ShouldBe(3);
     }
 
     [Fact]
-    public async Task The_callers_cancellation_is_not_reported_as_GitHub_out_of_reach()
+    public async Task TriggerAsync_ShouldNotReportGitHubOutOfReach_WhenTheCallerCancels()
     {
+        // Arrange
         using CancellationTokenSource cancelled = new();
         await cancelled.CancelAsync();
         _github.Answers.Enqueue(new TaskCanceledException("The operation was canceled.", null, cancelled.Token));
 
-        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => Trigger("s3cret", cancellationToken: cancelled.Token));
+        // Act & Assert
+        await Should.ThrowAsync<OperationCanceledException>(() => Trigger("s3cret", cancellationToken: cancelled.Token));
     }
 
     [Theory]
@@ -177,23 +212,27 @@ public sealed class DeployTriggerTests : IDisposable
     [InlineData("""{"action":"published","full_slug":"about"}""")]
     [InlineData("""{"action":"published","full_slug":"homepage"}""")]
     [InlineData("""{"action":"published","full_slug":"de/portfolio"}""")]
-    public async Task A_publish_of_a_story_no_site_builds_starts_nothing(string body)
+    public async Task TriggerAsync_ShouldStartNothing_WhenNoSiteBuildsThePublishedStory(string body)
     {
+        // Act
         DeployTriggerResult result = await Trigger("s3cret", body: body);
 
-        Assert.Equal(HttpStatusCode.OK, result.Status);
-        Assert.Empty(_github.Requests);
+        // Assert
+        result.Status.ShouldBe(HttpStatusCode.OK);
+        _github.Requests.ShouldBeEmpty();
     }
 
     [Theory]
     [InlineData("""{"action":"unpublished","full_slug":"home"}""")]
     [InlineData("""{"action":"published","full_slug":"/home/"}""")]
-    public async Task A_change_to_the_home_story_starts_only_this_sites_deploy(string body)
+    public async Task TriggerAsync_ShouldStartOnlyThisSitesDeploy_WhenTheHomeStoryChanges(string body)
     {
+        // Act
         DeployTriggerResult result = await Trigger("s3cret", body: body);
 
-        Assert.Equal(HttpStatusCode.Accepted, result.Status);
-        Assert.Equal([LinkInBioDispatch], _github.Addresses);
+        // Assert
+        result.Status.ShouldBe(HttpStatusCode.Accepted);
+        _github.Addresses.ShouldBe(new[] { LinkInBioDispatch });
     }
 
     [Theory]
@@ -201,13 +240,15 @@ public sealed class DeployTriggerTests : IDisposable
     [InlineData("""{"action":"published","full_slug":"pl/portfolio"}""")]
     [InlineData("""{"action":"published","full_slug":"en/portfolio"}""")]
     [InlineData("""{"action":"published","full_slug":"portfolio/projects/website"}""")]
-    public async Task A_change_to_a_portfolio_story_starts_only_the_portfolios_deploy(string body)
+    public async Task TriggerAsync_ShouldStartOnlyThePortfoliosDeploy_WhenAPortfolioStoryChanges(string body)
     {
+        // Act
         DeployTriggerResult result = await Trigger("s3cret", body: body);
 
-        Assert.Equal(HttpStatusCode.Accepted, result.Status);
-        Assert.Equal([PortfolioDispatch], _github.Addresses);
-        Assert.Equal(MainDispatchBody, Assert.Single(_github.Bodies));
+        // Assert
+        result.Status.ShouldBe(HttpStatusCode.Accepted);
+        _github.Addresses.ShouldBe(new[] { PortfolioDispatch });
+        _github.Bodies.ShouldHaveSingleItem().ShouldBe(MainDispatchBody);
     }
 
     // Storyblok may change what it sends; missing a deploy is worse than an extra one.
@@ -218,25 +259,30 @@ public sealed class DeployTriggerTests : IDisposable
     [InlineData("""{"action":"deleted","story_id":1}""")]
     [InlineData("""{"action":"published","full_slug":42}""")]
     [InlineData("""["home"]""")]
-    public async Task A_call_that_doesnt_name_a_story_starts_every_sites_deploy(string? body)
+    public async Task TriggerAsync_ShouldStartEverySitesDeploy_WhenTheCallDoesntNameAStory(string? body)
     {
+        // Act
         DeployTriggerResult result = await Trigger("s3cret", body: body);
 
-        Assert.Equal(HttpStatusCode.Accepted, result.Status);
-        Assert.Equal([LinkInBioDispatch, PortfolioDispatch], _github.Addresses.Order(StringComparer.Ordinal));
+        // Assert
+        result.Status.ShouldBe(HttpStatusCode.Accepted);
+        _github.Addresses.Order(StringComparer.Ordinal).ShouldBe(new[] { LinkInBioDispatch, PortfolioDispatch });
     }
 
     [Fact]
-    public async Task One_site_refused_is_reported_and_the_other_still_starts()
+    public async Task TriggerAsync_ShouldReportBadGatewayAndStartTheOtherSite_WhenOneSiteIsRefused()
     {
+        // Arrange
         _github.Refused = "Layfully/portfolio";
 
+        // Act
         DeployTriggerResult result = await Trigger("s3cret", body: null);
 
-        Assert.Equal(HttpStatusCode.BadGateway, result.Status);
-        Assert.Contains("Deploy of Layfully/link-in-bio started.", result.Message, StringComparison.Ordinal);
-        Assert.Contains("Layfully/portfolio (403)", result.Message, StringComparison.Ordinal);
-        Assert.Equal(2, _github.Requests.Count);
+        // Assert
+        result.Status.ShouldBe(HttpStatusCode.BadGateway);
+        result.Message.ShouldContain("Deploy of Layfully/link-in-bio started.", Case.Sensitive);
+        result.Message.ShouldContain("Layfully/portfolio (403)", Case.Sensitive);
+        _github.Requests.Count.ShouldBe(2);
     }
 
     private const string LinkInBioDispatch =
@@ -246,44 +292,56 @@ public sealed class DeployTriggerTests : IDisposable
         "https://api.github.com/repos/Layfully/portfolio/actions/workflows/azure-static-web-apps-purple-tree-0510d5403.yml/dispatches";
 
     [Fact]
-    public async Task Another_story_with_a_wrong_secret_is_still_refused()
+    public async Task TriggerAsync_ShouldRefuse_WhenTheSecretIsWrongForAnotherStory()
     {
+        // Act
         DeployTriggerResult result = await Trigger("wrong", body: """{"action":"published","full_slug":"portfolio"}""");
 
-        Assert.Equal(HttpStatusCode.Unauthorized, result.Status);
+        // Assert
+        result.Status.ShouldBe(HttpStatusCode.Unauthorized);
     }
 
     private const string HomePublished = """{"action":"published","space_id":268473,"story_id":1,"full_slug":"home"}""";
     private const string MainDispatchBody = """{"ref":"main"}""";
 
     [Fact]
-    public async Task A_fork_can_route_stories_to_a_different_workflow_and_branch()
+    public async Task TriggerAsync_ShouldRouteToTheConfiguredWorkflowAndBranch_WhenAForkConfiguresItsOwnSite()
     {
+        // Arrange
         DeploySite site = new() { Repository = "example/links", Workflow = "publish.yml", Ref = "production", Slugs = ["profile"] };
+
+        // Act
         DeployTriggerResult result = await Trigger("s3cret", body: """{"full_slug":"profile"}""", sites: [site]);
 
-        Assert.Equal(HttpStatusCode.Accepted, result.Status);
-        Assert.Equal("https://api.github.com/repos/example/links/actions/workflows/publish.yml/dispatches", Assert.Single(_github.Addresses));
-        Assert.Equal("""{"ref":"production"}""", Assert.Single(_github.Bodies));
+        // Assert
+        result.Status.ShouldBe(HttpStatusCode.Accepted);
+        _github.Addresses.ShouldHaveSingleItem().ShouldBe("https://api.github.com/repos/example/links/actions/workflows/publish.yml/dispatches");
+        _github.Bodies.ShouldHaveSingleItem().ShouldBe("""{"ref":"production"}""");
     }
 
     [Fact]
-    public async Task An_empty_target_list_starts_no_workflow()
+    public async Task TriggerAsync_ShouldStartNoWorkflow_WhenTheTargetListIsEmpty()
     {
+        // Act
         DeployTriggerResult result = await Trigger("s3cret", sites: []);
 
-        Assert.Equal(HttpStatusCode.OK, result.Status);
-        Assert.Empty(_github.Requests);
+        // Assert
+        result.Status.ShouldBe(HttpStatusCode.OK);
+        _github.Requests.ShouldBeEmpty();
     }
 
     [Fact]
-    public async Task Invalid_target_configuration_sends_no_request()
+    public async Task TriggerAsync_ShouldSendNoRequest_WhenTheTargetConfigurationIsInvalid()
     {
+        // Arrange
         DeploySite site = new() { Repository = "example", Workflow = "publish.yml", Ref = "main" };
+
+        // Act
         DeployTriggerResult result = await Trigger("s3cret", sites: [site]);
 
-        Assert.Equal(HttpStatusCode.InternalServerError, result.Status);
-        Assert.Empty(_github.Requests);
+        // Assert
+        result.Status.ShouldBe(HttpStatusCode.InternalServerError);
+        _github.Requests.ShouldBeEmpty();
     }
 
     private async Task<DeployTriggerResult> Trigger(string? secret, DeployTriggerOptions? settings = null, CancellationToken? cancellationToken = null,
@@ -300,8 +358,8 @@ public sealed class DeployTriggerTests : IDisposable
         }));
         services.AddDeployTriggerClient().ConfigurePrimaryHttpMessageHandler(() => _github);
         using ServiceProvider provider = services.BuildServiceProvider();
-        DeployTrigger trigger = provider.GetRequiredService<DeployTrigger>();
-        return await trigger.TriggerAsync(secret, body, cancellationToken ?? TestContext.Current.CancellationToken);
+        DeployTrigger sut = provider.GetRequiredService<DeployTrigger>();
+        return await sut.TriggerAsync(secret, body, cancellationToken ?? TestContext.Current.CancellationToken);
     }
 
     private static DeploySite[] ConfiguredSites() => new ConfigurationBuilder()

@@ -23,7 +23,14 @@ public sealed class StoryblokUrlConverterTests
     [InlineData("\"/Certificate/x\"", "/Certificate/x")]
     [InlineData("\"#section\"", "#section")]
     [InlineData("""{ "linktype": "url", "url": "https://example.com/a\n/b" }""", "https://example.com/a/b")]
-    public void Links_become_the_expected_address(string field, string expected) => Assert.Equal(expected, Read(field));
+    public void Url_ShouldBeTheExpectedAddress_WhenTheLinkFieldIsConverted(string field, string expected)
+    {
+        // Act
+        string? result = Read(field);
+
+        // Assert
+        result.ShouldBe(expected);
+    }
 
     [Theory]
     [InlineData("""{ "linktype": "url", "url": "javascript:alert(1)" }""")]
@@ -32,7 +39,14 @@ public sealed class StoryblokUrlConverterTests
     [InlineData("""{ "linktype": "url", "url": "vbscript:x" }""")]
     [InlineData("""{ "linktype": "url", "url": "file:///etc/passwd" }""")]
     [InlineData("\"javascript:alert(1)\"")]
-    public void Unsupported_URL_schemes_are_rejected(string field) => Assert.Null(Read(field));
+    public void Url_ShouldBeNull_WhenTheSchemeIsUnsupported(string field)
+    {
+        // Act
+        string? result = Read(field);
+
+        // Assert
+        result.ShouldBeNull();
+    }
 
     [Theory]
     [InlineData("""{ "linktype": "url", "url": "//evil.example" }""")]
@@ -42,7 +56,14 @@ public sealed class StoryblokUrlConverterTests
     [InlineData("""{ "linktype": "url", "url": "/\n/evil.example" }""")]
     [InlineData("""{ "linktype": "url", "url": "/\r\n\\evil.example" }""")]
     [InlineData("\"/\\t/evil.example\"")]
-    public void Addresses_that_only_look_site_relative_are_dropped(string field) => Assert.Null(Read(field));
+    public void Url_ShouldBeNull_WhenTheAddressOnlyLooksSiteRelative(string field)
+    {
+        // Act
+        string? result = Read(field);
+
+        // Assert
+        result.ShouldBeNull();
+    }
 
     [Theory]
     [InlineData("""{ "linktype": "url", "url": "" }""")]
@@ -53,16 +74,29 @@ public sealed class StoryblokUrlConverterTests
     [InlineData("\"\"")]
     [InlineData("42")]
     [InlineData("[]")]
-    public void Empty_or_unexpected_fields_have_no_address(string field) => Assert.Null(Read(field));
+    public void Url_ShouldBeNull_WhenTheFieldIsEmptyOrUnexpected(string field)
+    {
+        // Act
+        string? result = Read(field);
+
+        // Assert
+        result.ShouldBeNull();
+    }
 
     [Fact]
-    public void An_unexpected_link_field_doesnt_fail_the_rest_of_the_entry()
+    public void Deserialize_ShouldKeepTheRestOfTheEntry_WhenTheLinkFieldIsUnexpected()
     {
-        StoryblokLink? link = JsonSerializer.Deserialize<StoryblokLink>("""{ "label": "GitHub", "url": { "nested": { "deep": [1, 2] } }, "css_class": "fab" }""");
+        // Arrange
+        const string Json = """{ "label": "GitHub", "url": { "nested": { "deep": [1, 2] } }, "css_class": "fab" }""";
 
-        Assert.Equal("GitHub", link?.Label);
-        Assert.Null(link?.Url);
-        Assert.Equal("fab", link?.CssClass);
+        // Act
+        StoryblokLink? sut = JsonSerializer.Deserialize<StoryblokLink>(Json);
+
+        // Assert
+        sut.ShouldNotBeNull();
+        sut.Label.ShouldBe("GitHub");
+        sut.Url.ShouldBeNull();
+        sut.CssClass.ShouldBe("fab");
     }
 
     private static string? Read(string field) =>

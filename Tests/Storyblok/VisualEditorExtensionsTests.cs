@@ -9,13 +9,18 @@ public sealed class VisualEditorExtensionsTests
     [Theory]
     [InlineData("""{"name":"link","space":"1","uid":"abc","id":"42"}""")]
     [InlineData("""{"uid":"abc","id":42}""")]
-    public void String_and_numeric_ids_produce_the_bridges_attributes(string options)
+    public void EditorAttributes_ShouldProduceTheBridgesAttributes_WhenTheIdIsAStringOrANumber(string options)
     {
-        IReadOnlyDictionary<string, object>? attributes = Block($"<!--#storyblok#{options}-->").EditorAttributes();
+        // Arrange
+        StoryblokComponent sut = Block($"<!--#storyblok#{options}-->");
 
-        Assert.NotNull(attributes);
-        Assert.Equal(options, attributes["data-blok-c"]);
-        Assert.Equal("42-abc", attributes["data-blok-uid"]);
+        // Act
+        IReadOnlyDictionary<string, object>? attributes = sut.EditorAttributes();
+
+        // Assert
+        attributes.ShouldNotBeNull();
+        attributes["data-blok-c"].ShouldBe(options);
+        attributes["data-blok-uid"].ShouldBe("42-abc");
     }
 
     [Theory]
@@ -25,10 +30,30 @@ public sealed class VisualEditorExtensionsTests
     [InlineData("""{"uid":"abc","id":"42"}""")]
     [InlineData("""<!--#storyblok#{"uid":"abc"}-->""")]
     [InlineData("""<!--#storyblok#["abc"]-->""")]
-    public void A_missing_or_malformed_value_gives_no_attributes(string? editable) => Assert.Null(Block(editable).EditorAttributes());
+    public void EditorAttributes_ShouldBeNull_WhenTheValueIsMissingOrMalformed(string? editable)
+    {
+        // Arrange
+        StoryblokComponent sut = Block(editable);
+
+        // Act
+        IReadOnlyDictionary<string, object>? attributes = sut.EditorAttributes();
+
+        // Assert
+        attributes.ShouldBeNull();
+    }
 
     [Fact]
-    public void No_block_gives_no_attributes() => Assert.Null(((StoryblokComponent?)null).EditorAttributes());
+    public void EditorAttributes_ShouldBeNull_WhenThereIsNoBlock()
+    {
+        // Arrange
+        StoryblokComponent? sut = null;
+
+        // Act
+        IReadOnlyDictionary<string, object>? attributes = sut.EditorAttributes();
+
+        // Assert
+        attributes.ShouldBeNull();
+    }
 
     private static StoryblokComponent Block(string? editable) => new() { Editable = editable };
 }

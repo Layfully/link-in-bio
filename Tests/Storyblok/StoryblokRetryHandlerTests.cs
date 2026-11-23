@@ -16,13 +16,13 @@ public sealed class StoryblokRetryHandlerTests : IDisposable
         FirstDelay: TimeSpan.Zero);
 
     private readonly FakeStoryblok _storyblok = new();
-    private readonly HttpClient _client;
+    private readonly HttpClient _sut;
 
-    public StoryblokRetryHandlerTests() => _client = CreateClient(Policy);
+    public StoryblokRetryHandlerTests() => _sut = CreateClient(Policy);
 
     public void Dispose()
     {
-        _client.Dispose();
+        _sut.Dispose();
         _storyblok.Dispose();
     }
 
@@ -31,171 +31,207 @@ public sealed class StoryblokRetryHandlerTests : IDisposable
     [InlineData(HttpStatusCode.InternalServerError)]
     [InlineData(HttpStatusCode.TooManyRequests)]
     [InlineData(HttpStatusCode.RequestTimeout)]
-    public async Task A_passing_error_answer_is_tried_again(HttpStatusCode status)
+    public async Task SendAsync_ShouldRetry_WhenTheAnswerIsAPassingError(HttpStatusCode status)
     {
+        // Arrange
         _storyblok.Answer(status);
         _storyblok.Answer(HttpStatusCode.OK);
 
+        // Act
         using HttpResponseMessage response = await Get();
 
-        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        Assert.Equal(2, _storyblok.Requests.Count);
+        // Assert
+        response.StatusCode.ShouldBe(HttpStatusCode.OK);
+        _storyblok.Requests.Count.ShouldBe(2);
     }
 
     [Fact]
-    public async Task A_broken_connection_is_tried_again()
+    public async Task SendAsync_ShouldRetry_WhenTheConnectionIsBroken()
     {
+        // Arrange
         _storyblok.Fail(new HttpRequestException("No connection."));
         _storyblok.Answer(HttpStatusCode.OK);
 
+        // Act
         using HttpResponseMessage response = await Get();
 
-        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        // Assert
+        response.StatusCode.ShouldBe(HttpStatusCode.OK);
     }
 
     [Theory]
     [InlineData(HttpStatusCode.NotFound)]
     [InlineData(HttpStatusCode.Unauthorized)]
     [InlineData(HttpStatusCode.BadRequest)]
-    public async Task An_answer_that_wouldnt_change_is_not_tried_again(HttpStatusCode status)
+    public async Task SendAsync_ShouldNotRetry_WhenTheAnswerWouldNotChange(HttpStatusCode status)
     {
+        // Arrange
         _storyblok.Answer(status);
 
+        // Act
         using HttpResponseMessage response = await Get();
 
-        Assert.Equal(status, response.StatusCode);
-        Assert.Single(_storyblok.Requests);
+        // Assert
+        response.StatusCode.ShouldBe(status);
+        _storyblok.Requests.ShouldHaveSingleItem();
     }
 
     [Fact]
-    public async Task An_answer_asking_to_wait_past_the_time_limit_is_returned_at_once()
+    public async Task SendAsync_ShouldReturnAtOnce_WhenTheAnswerAsksToWaitPastTheTimeLimit()
     {
+        // Arrange
         _storyblok.Answer(HttpStatusCode.TooManyRequests, new RetryConditionHeaderValue(TimeSpan.FromSeconds(60)));
 
+        // Act
         using HttpResponseMessage response = await Get();
 
-        Assert.Equal(HttpStatusCode.TooManyRequests, response.StatusCode);
-        Assert.Single(_storyblok.Requests);
+        // Assert
+        response.StatusCode.ShouldBe(HttpStatusCode.TooManyRequests);
+        _storyblok.Requests.ShouldHaveSingleItem();
     }
 
     [Fact]
-    public async Task An_answer_asking_to_wait_until_a_time_already_past_is_tried_again()
+    public async Task SendAsync_ShouldRetry_WhenTheAnswerAsksToWaitUntilATimeAlreadyPast()
     {
+        // Arrange
         _storyblok.Answer(HttpStatusCode.ServiceUnavailable, new RetryConditionHeaderValue(DateTimeOffset.UtcNow.AddMinutes(-1)));
         _storyblok.Answer(HttpStatusCode.OK);
 
+        // Act
         using HttpResponseMessage response = await Get();
 
-        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        Assert.Equal(2, _storyblok.Requests.Count);
+        // Assert
+        response.StatusCode.ShouldBe(HttpStatusCode.OK);
+        _storyblok.Requests.Count.ShouldBe(2);
     }
 
     [Fact]
-    public async Task After_two_retries_the_last_answer_is_returned()
+    public async Task SendAsync_ShouldReturnTheLastAnswer_WhenTwoRetriesAreUsedUp()
     {
+        // Arrange
         _storyblok.Answer(HttpStatusCode.ServiceUnavailable);
         _storyblok.Answer(HttpStatusCode.ServiceUnavailable);
         _storyblok.Answer(HttpStatusCode.BadGateway);
 
+        // Act
         using HttpResponseMessage response = await Get();
 
-        Assert.Equal(HttpStatusCode.BadGateway, response.StatusCode);
-        Assert.Equal(3, _storyblok.Requests.Count);
+        // Assert
+        response.StatusCode.ShouldBe(HttpStatusCode.BadGateway);
+        _storyblok.Requests.Count.ShouldBe(3);
     }
 
     [Fact]
-    public async Task After_two_retries_a_broken_connection_is_the_error()
+    public async Task SendAsync_ShouldThrowHttpRequestException_WhenTheConnectionStaysBroken()
     {
+        // Arrange
         for (int i = 0; i < 3; i++)
         {
             _storyblok.Fail(new HttpRequestException("No connection."));
         }
 
-        await Assert.ThrowsAsync<HttpRequestException>(Get);
-        Assert.Equal(3, _storyblok.Requests.Count);
+        // Act & Assert
+        await Should.ThrowAsync<HttpRequestException>(Get);
+        _storyblok.Requests.Count.ShouldBe(3);
     }
 
     [Fact]
-    public async Task An_attempt_that_hangs_is_given_up_and_tried_again()
+    public async Task SendAsync_ShouldRetry_WhenAnAttemptHangs()
     {
+        // Arrange
         _storyblok.Hang();
         _storyblok.Answer(HttpStatusCode.OK);
 
+        // Act
         using HttpResponseMessage response = await Get();
 
-        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        // Assert
+        response.StatusCode.ShouldBe(HttpStatusCode.OK);
     }
 
     [Fact]
-    public async Task A_Storyblok_that_keeps_hanging_times_out()
+    public async Task SendAsync_ShouldThrowTimeoutException_WhenStoryblokKeepsHanging()
     {
+        // Arrange
         for (int i = 0; i < 3; i++)
         {
             _storyblok.Hang();
         }
 
-        await Assert.ThrowsAsync<TimeoutException>(Get);
-        Assert.Equal(3, _storyblok.Requests.Count);
+        // Act & Assert
+        await Should.ThrowAsync<TimeoutException>(Get);
+        _storyblok.Requests.Count.ShouldBe(3);
     }
 
     [Fact]
-    public async Task The_whole_request_times_out_even_between_attempts()
+    public async Task SendAsync_ShouldThrowTimeoutException_WhenTheTotalTimeRunsOutBetweenAttempts()
     {
-        using HttpClient client = CreateClient(Policy with { TotalTimeout = TimeSpan.FromMilliseconds(150), FirstDelay = TimeSpan.FromSeconds(30) });
+        // Arrange
+        using HttpClient sut = CreateClient(Policy with { TotalTimeout = TimeSpan.FromMilliseconds(150), FirstDelay = TimeSpan.FromSeconds(30) });
         _storyblok.Answer(HttpStatusCode.ServiceUnavailable);
 
-        await Assert.ThrowsAsync<TimeoutException>(() => Get(client));
-        Assert.Single(_storyblok.Requests);
+        // Act & Assert
+        await Should.ThrowAsync<TimeoutException>(() => Get(sut));
+        _storyblok.Requests.ShouldHaveSingleItem();
     }
 
     [Fact]
-    public async Task The_callers_cancellation_is_not_a_timeout()
+    public async Task SendAsync_ShouldThrowOperationCanceledException_WhenTheCallerCancels()
     {
+        // Arrange
         _storyblok.Hang();
         using CancellationTokenSource cancellation = CancellationTokenSource.CreateLinkedTokenSource(TestContext.Current.CancellationToken);
         cancellation.CancelAfter(TimeSpan.FromMilliseconds(30));
 
-        Exception exception = await Assert.ThrowsAnyAsync<OperationCanceledException>(
+        // Act & Assert
+        Exception exception = await Should.ThrowAsync<OperationCanceledException>(
             () => Get(cancellationToken: cancellation.Token));
 
-        Assert.IsNotType<TimeoutException>(exception.InnerException);
-        Assert.Single(_storyblok.Requests);
+        exception.InnerException.ShouldNotBeOfType<TimeoutException>();
+        _storyblok.Requests.ShouldHaveSingleItem();
     }
 
     [Fact]
-    public async Task A_point_in_time_to_wait_for_is_read_on_the_sites_clock()
+    public async Task SendAsync_ShouldReadThePointInTimeOnTheSitesClock_WhenTheAnswerNamesOne()
     {
+        // Arrange
         // On the site's clock the time Storyblok named has passed; on the machine's it is years away, which would
         // return the answer instead of asking again.
         FakeTimeProvider time = new(new DateTimeOffset(2030, 1, 1, 12, 0, 0, TimeSpan.Zero));
-        using HttpClient client = CreateClient(Policy, time);
+        using HttpClient sut = CreateClient(Policy, time);
         _storyblok.Answer(HttpStatusCode.TooManyRequests, new RetryConditionHeaderValue(time.GetUtcNow().AddSeconds(-1)));
         _storyblok.Answer(HttpStatusCode.OK);
 
-        using HttpResponseMessage response = await Get(client);
+        // Act
+        using HttpResponseMessage response = await Get(sut);
 
-        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        Assert.Equal(2, _storyblok.Requests.Count);
+        // Assert
+        response.StatusCode.ShouldBe(HttpStatusCode.OK);
+        _storyblok.Requests.Count.ShouldBe(2);
     }
 
     [Fact]
-    public async Task A_pause_Storyblok_asked_for_is_waited_once_not_again_after_a_broken_connection()
+    public async Task SendAsync_ShouldWaitOnlyOnce_WhenAConnectionBreaksAfterAPauseStoryblokAskedFor()
     {
+        // Arrange
         FakeTimeProvider time = new();
-        using HttpClient client = CreateClient(Policy, time);
+        using HttpClient sut = CreateClient(Policy, time);
         _storyblok.Answer(HttpStatusCode.TooManyRequests, new RetryConditionHeaderValue(TimeSpan.FromSeconds(5)));
         _storyblok.Fail(new HttpRequestException("Connection reset."));
         _storyblok.Answer(HttpStatusCode.OK);
 
-        Task<HttpResponseMessage> get = Get(client);
+        // Act
+        Task<HttpResponseMessage> get = Get(sut);
         await Until(() => _storyblok.Requests.Count == 1);
         time.Advance(TimeSpan.FromSeconds(5));
 
         // The clock stands still from here: a second five-second pause would never end.
         await Until(() => get.IsCompleted);
         using HttpResponseMessage response = await get;
-        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        Assert.Equal(3, _storyblok.Requests.Count);
+
+        // Assert
+        response.StatusCode.ShouldBe(HttpStatusCode.OK);
+        _storyblok.Requests.Count.ShouldBe(3);
     }
 
     // Waits in real time for something the handler does on its own, failing after a second.
@@ -206,13 +242,13 @@ public sealed class StoryblokRetryHandlerTests : IDisposable
             await Task.Delay(10, TestContext.Current.CancellationToken);
         }
 
-        Assert.True(condition());
+        condition().ShouldBeTrue();
     }
 
-    private Task<HttpResponseMessage> Get() => Get(_client);
+    private Task<HttpResponseMessage> Get() => Get(_sut);
 
-    private Task<HttpResponseMessage> Get(HttpClient? client = null, CancellationToken? cancellationToken = null) =>
-        (client ?? _client).GetAsync("https://api.storyblok.com/v2/cdn/stories/home", cancellationToken ?? TestContext.Current.CancellationToken);
+    private Task<HttpResponseMessage> Get(HttpClient? sut = null, CancellationToken? cancellationToken = null) =>
+        (sut ?? _sut).GetAsync("https://api.storyblok.com/v2/cdn/stories/home", cancellationToken ?? TestContext.Current.CancellationToken);
 
     private HttpClient CreateClient(RetryPolicy policy, TimeProvider? time = null) =>
         new(new StoryblokRetryHandler(policy, time ?? TimeProvider.System) { InnerHandler = _storyblok }, disposeHandler: false);

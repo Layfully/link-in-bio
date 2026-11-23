@@ -33,180 +33,209 @@ public sealed class PublishedSiteTests : IDisposable
         """;
 
     private readonly string _wwwroot = Directory.CreateTempSubdirectory("prerender-").FullName;
+    private readonly PublishedSite _sut;
 
     public PublishedSiteTests()
     {
         File.WriteAllText(Path.Combine(_wwwroot, "index.html"), Index);
         File.WriteAllText(Path.Combine(_wwwroot, "staticwebapp.config.json"), Config);
         File.WriteAllText(Path.Combine(_wwwroot, "robots.txt"), "User-agent: *\nAllow: /\n");
+        _sut = new PublishedSite(_wwwroot);
     }
 
     public void Dispose() => Directory.Delete(_wwwroot, recursive: true);
 
     private void WriteHome(string stories = "{}", SiteProfile? profile = null) =>
-        new PublishedSite(_wwwroot).WriteHome("<main>Links</main>", stories, profile ?? SiteProfile.None);
+        _sut.WriteHome("<main>Links</main>", stories, profile ?? SiteProfile.None);
 
     [Fact]
-    public void The_home_page_is_written_between_the_markers_and_the_shell_is_kept()
+    public void WriteHome_ShouldWriteBetweenTheMarkersAndKeepTheShell_WhenTheProfileIsEmpty()
     {
+        // Act
         WriteHome("""{"home":{}}""");
 
+        // Assert
         string index = File.ReadAllText(Path.Combine(_wwwroot, "index.html"));
-        Assert.Contains("""<div id="app"><main>Links</main></div>""", index, StringComparison.Ordinal);
-        Assert.Contains("""<script type="application/json" id="storyblok-prerendered">{"home":{}}</script>""", index, StringComparison.Ordinal);
-        Assert.DoesNotContain("Loading", index, StringComparison.Ordinal);
-        Assert.Equal(Index, File.ReadAllText(Path.Combine(_wwwroot, "app-shell.html")));
-        Assert.DoesNotContain("rel=\"canonical\"", index, StringComparison.Ordinal);
-        Assert.DoesNotContain("data-measurement-id", index, StringComparison.Ordinal);
-        Assert.False(File.Exists(Path.Combine(_wwwroot, "sitemap.xml")));
-        Assert.DoesNotContain("Sitemap:", File.ReadAllText(Path.Combine(_wwwroot, "robots.txt")), StringComparison.Ordinal);
+        index.ShouldContain("""<div id="app"><main>Links</main></div>""", Case.Sensitive);
+        index.ShouldContain("""<script type="application/json" id="storyblok-prerendered">{"home":{}}</script>""", Case.Sensitive);
+        index.ShouldNotContain("Loading", Case.Sensitive);
+        File.ReadAllText(Path.Combine(_wwwroot, "app-shell.html")).ShouldBe(Index);
+        index.ShouldNotContain("rel=\"canonical\"", Case.Sensitive);
+        index.ShouldNotContain("data-measurement-id", Case.Sensitive);
+        File.Exists(Path.Combine(_wwwroot, "sitemap.xml")).ShouldBeFalse();
+        File.ReadAllText(Path.Combine(_wwwroot, "robots.txt")).ShouldNotContain("Sitemap:", Case.Sensitive);
     }
 
     [Fact]
-    public void Both_pages_get_analytics_settings_from_the_profile()
+    public void WriteHome_ShouldAddAnalyticsSettingsToBothPages_WhenTheProfileHasThem()
     {
+        // Act
         WriteHome(profile: SiteProfile.None with
         {
             AnalyticsMeasurementId = "G-EXAMPLE123",
             AnalyticsHosts = "profile.example,www.profile.example",
         });
 
+        // Assert
         foreach (string file in Pages)
         {
             string page = File.ReadAllText(Path.Combine(_wwwroot, file));
-            Assert.Contains("data-measurement-id=\"G-EXAMPLE123\" data-analytics-hosts=\"profile.example,www.profile.example\"", page, StringComparison.Ordinal);
+            page.ShouldContain("data-measurement-id=\"G-EXAMPLE123\" data-analytics-hosts=\"profile.example,www.profile.example\"", Case.Sensitive);
         }
     }
 
     [Fact]
-    public void Only_the_home_page_names_its_canonical_address()
+    public void WriteHome_ShouldNameTheCanonicalAddressOnlyOnTheHomePage_WhenTheProfileHasAnOrigin()
     {
+        // Act
         WriteHome(profile: SiteProfile.None with { CanonicalOrigin = "https://site.example" });
 
+        // Assert
         string index = File.ReadAllText(Path.Combine(_wwwroot, "index.html"));
-        Assert.Contains("""
+        index.ShouldContain("""
                     <meta property="og:url" content="https://site.example/" />
                     <link rel="canonical" href="https://site.example/" />
                 </head>
-            """, index, StringComparison.Ordinal);
-        Assert.DoesNotContain("canonical", File.ReadAllText(Path.Combine(_wwwroot, "app-shell.html")), StringComparison.Ordinal);
+            """, Case.Sensitive);
+        File.ReadAllText(Path.Combine(_wwwroot, "app-shell.html")).ShouldNotContain("canonical", Case.Sensitive);
     }
 
     [Fact]
-    public void The_Storyblok_origin_is_used_by_metadata_crawlers_and_the_client()
+    public void WriteHome_ShouldUseTheStoryblokOriginForMetadataCrawlersAndTheClient_WhenTheProfileHasAnOrigin()
     {
+        // Arrange
         const string Origin = "https://profile.example";
         File.WriteAllText(Path.Combine(_wwwroot, "index.html"), IndexWithMetadata);
         File.WriteAllText(Path.Combine(_wwwroot, "robots.txt.br"), "stale");
 
+        // Act
         WriteHome(profile: SiteProfile.None with { CanonicalOrigin = Origin });
 
+        // Assert
         string home = File.ReadAllText(Path.Combine(_wwwroot, "index.html"));
-        Assert.Contains($"""<link rel="canonical" href="{Origin}/" />""", home, StringComparison.Ordinal);
+        home.ShouldContain($"""<link rel="canonical" href="{Origin}/" />""", Case.Sensitive);
         foreach (string page in Pages)
         {
-            Assert.Contains($"""<meta property="og:url" content="{Origin}/" />""", File.ReadAllText(Path.Combine(_wwwroot, page)), StringComparison.Ordinal);
+            File.ReadAllText(Path.Combine(_wwwroot, page)).ShouldContain($"""<meta property="og:url" content="{Origin}/" />""", Case.Sensitive);
         }
 
-        Assert.Equal($"{Origin}/", (string?)StructuredData(home)["url"]);
-        Assert.Equal($"{Origin}/", (string?)StructuredData(home)["mainEntity"]!["url"]);
-        Assert.Contains($"Sitemap: {Origin}/sitemap.xml", File.ReadAllText(Path.Combine(_wwwroot, "robots.txt")), StringComparison.Ordinal);
-        Assert.Contains($"<loc>{Origin}/</loc>", File.ReadAllText(Path.Combine(_wwwroot, "sitemap.xml")), StringComparison.Ordinal);
-        Assert.False(File.Exists(Path.Combine(_wwwroot, "robots.txt.br")));
+        ((string?)StructuredData(home)["url"]).ShouldBe($"{Origin}/");
+        ((string?)StructuredData(home)["mainEntity"]!["url"]).ShouldBe($"{Origin}/");
+        File.ReadAllText(Path.Combine(_wwwroot, "robots.txt")).ShouldContain($"Sitemap: {Origin}/sitemap.xml", Case.Sensitive);
+        File.ReadAllText(Path.Combine(_wwwroot, "sitemap.xml")).ShouldContain($"<loc>{Origin}/</loc>", Case.Sensitive);
+        File.Exists(Path.Combine(_wwwroot, "robots.txt.br")).ShouldBeFalse();
     }
 
     [Fact]
-    public void Only_the_shell_asks_for_JavaScript()
+    public void WriteHome_ShouldKeepTheJavaScriptNoticeOnlyInTheShell_WhenTheTemplateHasOne()
     {
+        // Arrange
         string page = Index.Replace("<body>", "<body>\n<noscript>\n<p>This page needs JavaScript</p>\n</noscript>", StringComparison.Ordinal);
         File.WriteAllText(Path.Combine(_wwwroot, "index.html"), page);
 
+        // Act
         WriteHome();
 
-        Assert.DoesNotContain("noscript", File.ReadAllText(Path.Combine(_wwwroot, "index.html")), StringComparison.Ordinal);
-        Assert.Equal(page, File.ReadAllText(Path.Combine(_wwwroot, "app-shell.html")));
+        // Assert
+        File.ReadAllText(Path.Combine(_wwwroot, "index.html")).ShouldNotContain("noscript", Case.Sensitive);
+        File.ReadAllText(Path.Combine(_wwwroot, "app-shell.html")).ShouldBe(page);
     }
 
     [Fact]
-    public void Only_the_shell_connects_to_the_api_at_load()
+    public void WriteHome_ShouldConnectToTheApiAtLoadOnlyInTheShell_WhenTheTemplateDefersThePreconnect()
     {
+        // Arrange
         const string Deferred = """<link rel="preconnect" href="https://api.storyblok.com" crossorigin data-preconnect-on-start />""";
         const string Other = """<link rel="preconnect" href="https://a.storyblok.com" />""";
         string page = Index.Replace("</head>", $"{Deferred}\n{Other}\n</head>", StringComparison.Ordinal);
         File.WriteAllText(Path.Combine(_wwwroot, "index.html"), page);
 
+        // Act
         WriteHome();
 
+        // Assert
         string home = File.ReadAllText(Path.Combine(_wwwroot, "index.html"));
-        Assert.Contains("""<link href="https://api.storyblok.com" crossorigin data-preconnect-on-start />""", home, StringComparison.Ordinal);
-        Assert.Contains(Other, home, StringComparison.Ordinal);
-        Assert.Contains(Deferred, File.ReadAllText(Path.Combine(_wwwroot, "app-shell.html")), StringComparison.Ordinal);
+        home.ShouldContain("""<link href="https://api.storyblok.com" crossorigin data-preconnect-on-start />""", Case.Sensitive);
+        home.ShouldContain(Other, Case.Sensitive);
+        File.ReadAllText(Path.Combine(_wwwroot, "app-shell.html")).ShouldContain(Deferred, Case.Sensitive);
     }
 
     [Fact]
-    public void A_page_without_a_head_is_left_alone()
+    public void WriteHome_ShouldThrowAndLeaveThePageAlone_WhenThePageHasNoHead()
     {
+        // Arrange
         File.WriteAllText(Path.Combine(_wwwroot, "index.html"), "<body><!--prerender--><!--/prerender--></body>");
 
-        Assert.Throws<InvalidOperationException>(() => WriteHome());
-        Assert.False(File.Exists(Path.Combine(_wwwroot, "app-shell.html")));
+        // Act & Assert
+        Should.Throw<InvalidOperationException>(() => WriteHome());
+        File.Exists(Path.Combine(_wwwroot, "app-shell.html")).ShouldBeFalse();
     }
 
     [Fact]
-    public void Every_other_route_falls_back_to_the_shell()
+    public void WriteHome_ShouldFallBackToTheShellForEveryOtherRoute_WhenTheConfigRewritesToTheIndex()
     {
+        // Act
         WriteHome();
 
+        // Assert
         JsonNode config = JsonNode.Parse(File.ReadAllText(Path.Combine(_wwwroot, "staticwebapp.config.json")))!;
-        Assert.Equal("/app-shell.html", (string?)config["routes"]![0]!["rewrite"]);
-        Assert.Equal("/app-shell.html", (string?)config["responseOverrides"]!["404"]!["rewrite"]);
-        Assert.Equal(404, (int?)config["responseOverrides"]!["404"]!["statusCode"]);
-        Assert.Equal("default-src 'self'; script-src 'self' 'sha256-abc+def='", (string?)config["globalHeaders"]!["Content-Security-Policy"]);
+        ((string?)config["routes"]![0]!["rewrite"]).ShouldBe("/app-shell.html");
+        ((string?)config["responseOverrides"]!["404"]!["rewrite"]).ShouldBe("/app-shell.html");
+        ((int?)config["responseOverrides"]!["404"]!["statusCode"]).ShouldBe(404);
+        ((string?)config["globalHeaders"]!["Content-Security-Policy"]).ShouldBe("default-src 'self'; script-src 'self' 'sha256-abc+def='");
     }
 
     [Fact]
-    public void Both_pages_get_the_photo_and_profiles_from_Storyblok()
+    public void WriteHome_ShouldAddThePhotoAndProfilesToBothPages_WhenTheProfileHasThem()
     {
+        // Arrange
         File.WriteAllText(Path.Combine(_wwwroot, "index.html"), IndexWithMetadata);
         SiteProfile profile = new("https://a.storyblok.com/f/1/600x900/new/me.jpg/m/600x600/smart", ["https://github.com/Layfully", "https://example.com/?a=1&b=<2>"]);
 
+        // Act
         WriteHome(profile: profile);
 
+        // Assert
         foreach (string page in Pages.Select(page => File.ReadAllText(Path.Combine(_wwwroot, page))))
         {
-            Assert.Contains("""<meta property="og:image" content="https://a.storyblok.com/f/1/600x900/new/me.jpg/m/600x600/smart" />""", page, StringComparison.Ordinal);
-            Assert.Contains("""<meta property="og:image:width" content="600" />""", page, StringComparison.Ordinal);
+            page.ShouldContain("""<meta property="og:image" content="https://a.storyblok.com/f/1/600x900/new/me.jpg/m/600x600/smart" />""", Case.Sensitive);
+            page.ShouldContain("""<meta property="og:image:width" content="600" />""", Case.Sensitive);
 
             JsonNode person = StructuredData(page)["mainEntity"]!;
-            Assert.Equal("Adrian Gaborek", (string?)person["name"]);
-            Assert.Equal(profile.Image, (string?)person["image"]);
-            Assert.Equal(profile.SameAs, person["sameAs"]!.AsArray().Select(address => (string?)address));
+            ((string?)person["name"]).ShouldBe("Adrian Gaborek");
+            ((string?)person["image"]).ShouldBe(profile.Image);
+            person["sameAs"]!.AsArray().Select(address => (string?)address).ShouldBe(profile.SameAs);
             // Nothing from Storyblok can end the script element early.
-            Assert.DoesNotContain("<2>", page, StringComparison.Ordinal);
+            page.ShouldNotContain("<2>", Case.Sensitive);
         }
     }
 
     [Fact]
-    public void What_Storyblok_doesnt_say_stays_as_written()
+    public void WriteHome_ShouldKeepTheTemplateAsWritten_WhenTheProfileSaysNothing()
     {
+        // Arrange
         File.WriteAllText(Path.Combine(_wwwroot, "index.html"), IndexWithMetadata);
 
+        // Act
         WriteHome();
 
+        // Assert
         string index = File.ReadAllText(Path.Combine(_wwwroot, "index.html"));
-        Assert.Contains("""<meta property="og:image" content="https://example.com/old.jpg" />""", index, StringComparison.Ordinal);
-        Assert.Equal(["https://old.example.com"], StructuredData(index)["mainEntity"]!["sameAs"]!.AsArray().Select(address => (string?)address));
+        index.ShouldContain("""<meta property="og:image" content="https://example.com/old.jpg" />""", Case.Sensitive);
+        StructuredData(index)["mainEntity"]!["sameAs"]!.AsArray().Select(address => (string?)address).ShouldBe(["https://old.example.com"]);
     }
 
     [Fact]
-    public void Profile_identity_replaces_the_template_in_both_pages()
+    public void WriteHome_ShouldReplaceTheTemplateIdentityInBothPages_WhenTheProfileHasAName()
     {
+        // Arrange
         string template = IndexWithMetadata
             .Replace("<head>", "<head><title>Default</title><meta name=\"description\" content=\"Default\" />", StringComparison.Ordinal)
             .Replace("""<meta property="og:image" content="https://example.com/old.jpg" />""", string.Empty, StringComparison.Ordinal)
             .Replace("""<meta property="og:image:width" content="600" />""", string.Empty, StringComparison.Ordinal);
         File.WriteAllText(Path.Combine(_wwwroot, "index.html"), template);
 
+        // Act
         WriteHome(profile: new SiteProfile("https://example.com/profile.jpg", [])
         {
             Name = "Example & Co",
@@ -215,15 +244,16 @@ public sealed class PublishedSiteTests : IDisposable
             Description = "A \"new\" profile",
         });
 
+        // Assert
         foreach (string file in Pages)
         {
             string page = File.ReadAllText(Path.Combine(_wwwroot, file));
-            Assert.Contains("<title>Example &amp; Co - Designer</title>", page, StringComparison.Ordinal);
-            Assert.Contains("content=\"A &quot;new&quot; profile\"", page, StringComparison.Ordinal);
-            Assert.Contains("""<meta property="og:image" content="https://example.com/profile.jpg" />""", page, StringComparison.Ordinal);
+            page.ShouldContain("<title>Example &amp; Co - Designer</title>", Case.Sensitive);
+            page.ShouldContain("content=\"A &quot;new&quot; profile\"", Case.Sensitive);
+            page.ShouldContain("""<meta property="og:image" content="https://example.com/profile.jpg" />""", Case.Sensitive);
             JsonNode person = StructuredData(page)["mainEntity"]!;
-            Assert.Equal("Example & Co", (string?)person["name"]);
-            Assert.Equal("Designer", (string?)person["jobTitle"]);
+            ((string?)person["name"]).ShouldBe("Example & Co");
+            ((string?)person["jobTitle"]).ShouldBe("Designer");
         }
     }
 
@@ -232,8 +262,9 @@ public sealed class PublishedSiteTests : IDisposable
     [Theory]
     [InlineData(null, "icons/icon-maskable-512.png")]
     [InlineData("https://a.storyblok.com/f/1/mask.png", "https://a.storyblok.com/f/1/mask.png/m/512x512/filters:format(png)")]
-    public void Install_branding_updates_the_manifest_and_touch_icon(string? maskable, string expectedMaskable)
+    public void WriteHome_ShouldUpdateTheManifestAndTouchIcon_WhenTheProfileHasInstallBranding(string? maskable, string expectedMaskable)
     {
+        // Arrange
         const string Icon = "https://a.storyblok.com/f/1/icon.png";
         string path = Path.Combine(_wwwroot, "site.webmanifest");
         File.WriteAllText(path, """
@@ -247,18 +278,20 @@ public sealed class PublishedSiteTests : IDisposable
         File.WriteAllText(Path.Combine(_wwwroot, "index.html"), IndexWithMetadata.Replace("<head>",
             """<head><link rel="apple-touch-icon" href="icons/icon-180.png" />""", StringComparison.Ordinal));
 
+        // Act
         WriteHome(profile: SiteProfile.None with { AppName = "Example & Co", AppIcon = Icon, AppMaskableIcon = maskable });
 
+        // Assert
         JsonNode manifest = JsonNode.Parse(File.ReadAllText(path))!;
-        Assert.Equal("Example & Co", (string?)manifest["name"]);
-        Assert.Equal("/", (string?)manifest["id"]);
-        Assert.Equal($"{Icon}/m/192x192/filters:format(png)", (string?)manifest["icons"]![0]!["src"]);
-        Assert.Equal($"{Icon}/m/512x512/filters:format(png)", (string?)manifest["icons"]![1]!["src"]);
-        Assert.Equal(expectedMaskable, (string?)manifest["icons"]![2]!["src"]);
-        Assert.False(File.Exists(path + ".br"));
+        ((string?)manifest["name"]).ShouldBe("Example & Co");
+        ((string?)manifest["id"]).ShouldBe("/");
+        ((string?)manifest["icons"]![0]!["src"]).ShouldBe($"{Icon}/m/192x192/filters:format(png)");
+        ((string?)manifest["icons"]![1]!["src"]).ShouldBe($"{Icon}/m/512x512/filters:format(png)");
+        ((string?)manifest["icons"]![2]!["src"]).ShouldBe(expectedMaskable);
+        File.Exists(path + ".br").ShouldBeFalse();
         foreach (string page in Pages)
         {
-            Assert.Contains($"href=\"{Icon}/m/180x180/filters:format(png)\"", File.ReadAllText(Path.Combine(_wwwroot, page)), StringComparison.Ordinal);
+            File.ReadAllText(Path.Combine(_wwwroot, page)).ShouldContain($"href=\"{Icon}/m/180x180/filters:format(png)\"", Case.Sensitive);
         }
     }
 
@@ -285,14 +318,17 @@ public sealed class PublishedSiteTests : IDisposable
     }
 
     [Fact]
-    public void Compressed_copies_of_the_old_page_are_removed()
+    public void WriteHome_ShouldRemoveCompressedCopiesOfTheOldPage_WhenTheyExist()
     {
+        // Arrange
         File.WriteAllText(Path.Combine(_wwwroot, "index.html.br"), "old");
         File.WriteAllText(Path.Combine(_wwwroot, "index.html.gz"), "old");
 
+        // Act
         WriteHome();
 
-        Assert.False(File.Exists(Path.Combine(_wwwroot, "index.html.br")));
-        Assert.False(File.Exists(Path.Combine(_wwwroot, "index.html.gz")));
+        // Assert
+        File.Exists(Path.Combine(_wwwroot, "index.html.br")).ShouldBeFalse();
+        File.Exists(Path.Combine(_wwwroot, "index.html.gz")).ShouldBeFalse();
     }
 }

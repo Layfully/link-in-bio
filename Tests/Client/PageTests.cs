@@ -41,65 +41,81 @@ public sealed class PageTests : IDisposable
     public void Dispose() => _context.Dispose();
 
     [Fact]
-    public void A_certificate_without_alt_text_is_described_by_its_title()
+    public void Certificate_ShouldDescribeImageByItsTitle_WhenAltTextIsEmpty()
     {
+        // Arrange
         _storyblok.Answer(HttpStatusCode.OK, Certificate("AWS Architect", alt: ""));
 
-        IRenderedComponent<Certificate> page = RenderCertificate("aws-architect");
+        // Act
+        IRenderedComponent<Certificate> sut = RenderCertificate("aws-architect");
 
-        AngleSharp.Dom.IElement image = page.WaitForElement("figure img");
-        Assert.Equal("Certificate: AWS Architect", image.GetAttribute("alt"));
-        Assert.Equal("https://a.storyblok.com/f/1/2000x1414/abc/aws.jpg/m/1280x0", image.GetAttribute("src"));
-        Assert.Equal("2000", image.GetAttribute("width"));
-        Assert.Equal("1414", image.GetAttribute("height"));
+        // Assert
+        AngleSharp.Dom.IElement image = sut.WaitForElement("figure img");
+        image.GetAttribute("alt").ShouldBe("Certificate: AWS Architect");
+        image.GetAttribute("src").ShouldBe("https://a.storyblok.com/f/1/2000x1414/abc/aws.jpg/m/1280x0");
+        image.GetAttribute("width").ShouldBe("2000");
+        image.GetAttribute("height").ShouldBe("1414");
     }
 
     [Fact]
-    public void A_certificates_own_alt_text_is_kept()
+    public void Certificate_ShouldKeepItsOwnAltText_WhenItHasOne()
     {
+        // Arrange
         _storyblok.Answer(HttpStatusCode.OK, Certificate("AWS Architect", alt: "AWS Solutions Architect certificate"));
 
-        IRenderedComponent<Certificate> page = RenderCertificate("aws-architect");
+        // Act
+        IRenderedComponent<Certificate> sut = RenderCertificate("aws-architect");
 
-        Assert.Equal("AWS Solutions Architect certificate", page.WaitForElement("figure img").GetAttribute("alt"));
+        // Assert
+        sut.WaitForElement("figure img").GetAttribute("alt").ShouldBe("AWS Solutions Architect certificate");
     }
 
     [Fact]
-    public void A_missing_certificate_hands_over_to_the_not_found_page()
+    public void Certificate_ShouldHandOverToTheNotFoundPage_WhenTheStoryIsMissing()
     {
+        // Arrange
         _storyblok.Answer(HttpStatusCode.NotFound, "{}");
         bool notFound = false;
         _context.Services.GetRequiredService<NavigationManager>().OnNotFound += (_, _) => notFound = true;
 
+        // Act
         RenderCertificate("nothing");
 
-        Assert.True(notFound);
+        // Assert
+        notFound.ShouldBeTrue();
     }
 
     [Fact]
-    public void An_outage_offers_to_try_again()
+    public void Certificate_ShouldOfferToTryAgain_WhenStoryblokHasAnOutage()
     {
+        // Arrange
         _storyblok.Answer(HttpStatusCode.InternalServerError, "{}");
 
-        IRenderedComponent<Certificate> page = RenderCertificate("aws-architect");
+        // Act
+        IRenderedComponent<Certificate> sut = RenderCertificate("aws-architect");
 
-        page.WaitForAssertion(() => Assert.Contains("Try again", page.Find("button.action-button").TextContent));
-        Assert.Empty(page.FindAll("figure img"));
+        // Assert
+        sut.WaitForAssertion(() => sut.Find("button.action-button").TextContent.ShouldContain("Try again", Case.Sensitive));
+        sut.FindAll("figure img").ShouldBeEmpty();
     }
 
     [Fact]
-    public void The_certificate_name_is_escaped_before_it_reaches_Storyblok()
+    public void Certificate_ShouldEscapeItsName_WhenAskingStoryblokForTheStory()
     {
+        // Arrange
         _storyblok.Answer(HttpStatusCode.NotFound, "{}");
 
+        // Act
         RenderCertificate("a b?c");
 
-        Assert.Equal("/v2/cdn/stories/certificates/a%20b%3Fc", _storyblok.Requests.Single().AbsolutePath);
+        // Assert
+        _storyblok.Requests.Single().AbsolutePath.ShouldBe("/v2/cdn/stories/certificates/a%20b%3Fc");
     }
 
     [Fact]
-    public void The_home_page_lists_the_links_and_leaves_out_entries_without_a_label()
+    public void Home_ShouldListLinksAndLeaveOutEntriesWithoutALabel_WhenTheStoryHasLinks()
     {
+        // Arrange
         _storyblok.Answer(HttpStatusCode.OK, Story("Home", """
             { "_uid": "11111111-1111-1111-1111-111111111111", "component": "page", "body": [
                 { "_uid": "22222222-2222-2222-2222-222222222222", "component": "list", "entries": [
@@ -111,18 +127,21 @@ public sealed class PageTests : IDisposable
             ] }
             """));
 
-        IRenderedComponent<Home> page = _context.Render<Home>();
+        // Act
+        IRenderedComponent<Home> sut = _context.Render<Home>();
 
-        page.WaitForAssertion(() => Assert.Equal(2, page.FindAll("nav li").Count));
-        AngleSharp.Dom.IElement link = page.Find("nav li a");
-        Assert.Equal("https://github.com/Layfully", link.GetAttribute("href"));
-        Assert.Contains("GitHub", link.TextContent);
-        Assert.Contains("(not available)", page.FindAll("nav li")[1].TextContent); // no URL: plain text, not a link
+        // Assert
+        sut.WaitForAssertion(() => sut.FindAll("nav li").Count.ShouldBe(2));
+        AngleSharp.Dom.IElement link = sut.Find("nav li a");
+        link.GetAttribute("href").ShouldBe("https://github.com/Layfully");
+        link.TextContent.ShouldContain("GitHub", Case.Sensitive);
+        sut.FindAll("nav li")[1].TextContent.ShouldContain("(not available)", Case.Sensitive); // no URL: plain text, not a link
     }
 
     [Fact]
-    public void The_home_pages_list_and_each_link_carry_their_markers()
+    public void Home_ShouldCarryMarkersOnItsListAndEachLink_WhenTheBlocksAreEditable()
     {
+        // Arrange
         _storyblok.Answer(HttpStatusCode.OK, Story("Home", """
             { "_uid": "11111111-1111-1111-1111-111111111111", "component": "page", "body": [
                 { "_uid": "22222222-2222-2222-2222-222222222222", "component": "list",
@@ -134,41 +153,50 @@ public sealed class PageTests : IDisposable
             ] }
             """));
 
-        IRenderedComponent<Home> page = _context.Render<Home>();
+        // Act
+        IRenderedComponent<Home> sut = _context.Render<Home>();
 
-        page.WaitForAssertion(() => Assert.Equal("7-list", page.Find("nav").GetAttribute("data-blok-uid")));
-        Assert.Equal("7-github", page.Find("nav li").GetAttribute("data-blok-uid"));
+        // Assert
+        sut.WaitForAssertion(() => sut.Find("nav").GetAttribute("data-blok-uid").ShouldBe("7-list"));
+        sut.Find("nav li").GetAttribute("data-blok-uid").ShouldBe("7-github");
     }
 
     [Fact]
-    public void A_certificate_carries_its_marker()
+    public void Certificate_ShouldCarryItsMarker_WhenTheStoryIsEditable()
     {
+        // Arrange
         _storyblok.Answer(HttpStatusCode.OK, Story("AWS", """
             { "_uid": "11111111-1111-1111-1111-111111111111", "component": "certificate",
               "_editable": "<!--#storyblok#{\"uid\":\"aws\",\"id\":\"9\"}-->",
               "image": { "filename": "https://a.storyblok.com/f/1/2000x1414/abc/aws.jpg" } }
             """));
 
-        IRenderedComponent<Certificate> page = RenderCertificate("aws");
+        // Act
+        IRenderedComponent<Certificate> sut = RenderCertificate("aws");
 
-        page.WaitForAssertion(() => Assert.Equal("9-aws", page.Find("figure").GetAttribute("data-blok-uid")));
+        // Assert
+        sut.WaitForAssertion(() => sut.Find("figure").GetAttribute("data-blok-uid").ShouldBe("9-aws"));
     }
 
     [Fact]
-    public void A_home_page_that_isnt_published_says_so()
+    public void Home_ShouldSayNothingIsPublishedYet_WhenTheHomePageIsntPublished()
     {
+        // Arrange
         _storyblok.Answer(HttpStatusCode.NotFound, "{}");
 
-        IRenderedComponent<Home> page = _context.Render<Home>();
+        // Act
+        IRenderedComponent<Home> sut = _context.Render<Home>();
 
-        page.WaitForAssertion(() => Assert.Contains("Nothing here yet", page.Markup));
+        // Assert
+        sut.WaitForAssertion(() => sut.Markup.ShouldContain("Nothing here yet", Case.Sensitive));
         // Without a header the page still has its one heading, for screen readers and search engines.
-        Assert.Equal("Links", Assert.Single(page.FindAll("h1")).TextContent);
+        sut.FindAll("h1").ShouldHaveSingleItem().TextContent.ShouldBe("Links");
     }
 
     [Fact]
-    public void The_header_shows_the_name_as_the_pages_heading_and_the_links_have_one_of_their_own()
+    public void Home_ShouldShowTheNameAsItsHeadingAndGiveTheLinksOneOfTheirOwn_WhenTheHeaderHasAName()
     {
+        // Arrange
         _storyblok.Answer(HttpStatusCode.OK, Story("Home", """
             { "_uid": "11111111-1111-1111-1111-111111111111", "component": "page", "body": [
                 { "_uid": "55555555-5555-5555-5555-555555555555", "component": "site_settings", "display_name": "Example Person" },
@@ -180,176 +208,211 @@ public sealed class PageTests : IDisposable
             ] }
             """));
 
-        IRenderedComponent<Home> page = _context.Render<Home>();
+        // Act
+        IRenderedComponent<Home> sut = _context.Render<Home>();
 
-        page.WaitForAssertion(() => Assert.Single(page.FindAll("header h1")));
-        AngleSharp.Dom.IElement heading = Assert.Single(page.FindAll("h1"));
-        Assert.Equal("Example Person", heading.TextContent);
-        Assert.DoesNotContain("sr-only", heading.ClassName);
-        Assert.Equal("Profiles", page.Find("nav h2").TextContent);
+        // Assert
+        sut.WaitForAssertion(() => sut.FindAll("header h1").ShouldHaveSingleItem());
+        AngleSharp.Dom.IElement heading = sut.FindAll("h1").ShouldHaveSingleItem();
+        heading.TextContent.ShouldBe("Example Person");
+        (heading.ClassName ?? string.Empty).ShouldNotContain("sr-only", Case.Sensitive);
+        sut.Find("nav h2").TextContent.ShouldBe("Profiles");
     }
 
     [Fact]
-    public void A_prerendered_home_page_shows_its_links_in_the_first_render_without_fading_in()
+    public void Home_ShouldShowItsLinksInTheFirstRenderWithoutFadingIn_WhenItWasPrerendered()
     {
+        // Arrange
         _prerendered.AddAll($$"""{ "home": {{HomeWithLink("GitHub")}} }""");
         _storyblok.Answer(HttpStatusCode.OK, HomeWithLink("GitHub"));
 
-        IRenderedComponent<Home> page = _context.Render<Home>();
+        // Act
+        IRenderedComponent<Home> sut = _context.Render<Home>();
 
-        Assert.Contains("GitHub", page.Find("nav li a").TextContent);
-        Assert.Empty(page.FindAll(".reveal"));
+        // Assert
+        sut.Find("nav li a").TextContent.ShouldContain("GitHub", Case.Sensitive);
+        sut.FindAll(".reveal").ShouldBeEmpty();
     }
 
     [Fact]
-    public void A_changed_home_page_replaces_the_prerendered_one()
+    public void Home_ShouldReplaceThePrerenderedLinks_WhenTheHomePageHasChanged()
     {
+        // Arrange
         _prerendered.AddAll($$"""{ "home": {{HomeWithLink("GitHub")}} }""");
         _storyblok.Answer(HttpStatusCode.OK, HomeWithLink("GitLab"));
 
-        IRenderedComponent<Home> page = _context.Render<Home>();
+        // Act
+        IRenderedComponent<Home> sut = _context.Render<Home>();
 
-        page.WaitForAssertion(() => Assert.Contains("GitLab", page.Find("nav li a").TextContent));
+        // Assert
+        sut.WaitForAssertion(() => sut.Find("nav li a").TextContent.ShouldContain("GitLab", Case.Sensitive));
     }
 
     [Fact]
-    public void A_failed_refresh_keeps_the_prerendered_links()
+    public void Home_ShouldKeepThePrerenderedLinks_WhenTheRefreshFails()
     {
+        // Arrange
         _prerendered.AddAll($$"""{ "home": {{HomeWithLink("GitHub")}} }""");
         _storyblok.Answer(HttpStatusCode.ServiceUnavailable);
 
-        IRenderedComponent<Home> page = _context.Render<Home>();
+        // Act
+        IRenderedComponent<Home> sut = _context.Render<Home>();
 
-        page.WaitForAssertion(() => Assert.Single(_storyblok.Requests));
-        Assert.Contains("GitHub", page.Find("nav li a").TextContent);
-        Assert.DoesNotContain("can't be loaded", page.Markup, StringComparison.Ordinal);
+        // Assert
+        sut.WaitForAssertion(() => _storyblok.Requests.ShouldHaveSingleItem());
+        sut.Find("nav li a").TextContent.ShouldContain("GitHub", Case.Sensitive);
+        sut.Markup.ShouldNotContain("can't be loaded", Case.Sensitive);
     }
 
     [Fact]
-    public void Coming_back_to_the_home_page_shows_the_newest_links_at_once_without_asking_again()
+    public void Home_ShouldShowTheNewestLinksAtOnceWithoutAskingAgain_WhenComingBackToIt()
     {
+        // Arrange
         _prerendered.AddAll($$"""{ "home": {{HomeWithLink("GitHub")}} }""");
         _storyblok.Answer(HttpStatusCode.OK, HomeWithLink("GitLab"));
         IRenderedComponent<Home> first = _context.Render<Home>();
-        first.WaitForAssertion(() => Assert.Contains("GitLab", first.Find("nav li a").TextContent));
+        first.WaitForAssertion(() => first.Find("nav li a").TextContent.ShouldContain("GitLab", Case.Sensitive));
 
+        // Act
         // Back on the page later in the same visit, such as after a certificate.
-        IRenderedComponent<Home> again = _context.Render<Home>();
+        IRenderedComponent<Home> sut = _context.Render<Home>();
 
-        Assert.Contains("GitLab", again.Find("nav li a").TextContent);
-        Assert.Single(_storyblok.Requests);
+        // Assert
+        sut.Find("nav li a").TextContent.ShouldContain("GitLab", Case.Sensitive);
+        _storyblok.Requests.ShouldHaveSingleItem();
     }
 
     [Fact]
-    public void An_edit_to_the_home_story_re_renders_its_links()
+    public void Home_ShouldRerenderItsLinks_WhenTheHomeStoryIsEdited()
     {
+        // Arrange
         StoryblokStoryClient client = UseEditor();
         _storyblok.Answer(HttpStatusCode.OK, HomeWithLink("GitHub"));
-        IRenderedComponent<Home> page = _context.Render<Home>();
-        page.WaitForAssertion(() => Assert.Contains("GitHub", page.Find("nav li a").TextContent));
+        IRenderedComponent<Home> sut = _context.Render<Home>();
+        sut.WaitForAssertion(() => sut.Find("nav li a").TextContent.ShouldContain("GitHub", Case.Sensitive));
 
-        page.InvokeAsync(() => client.ReadEditedStory(EditedHome(HomeContentWithLink("GitLab"))));
+        // Act
+        sut.InvokeAsync(() => client.ReadEditedStory(EditedHome(HomeContentWithLink("GitLab"))));
 
-        page.WaitForAssertion(() => Assert.Contains("GitLab", page.Find("nav li a").TextContent));
-        Assert.Empty(page.FindAll(".reveal")); // an edit doesn't fade the page in again
+        // Assert
+        sut.WaitForAssertion(() => sut.Find("nav li a").TextContent.ShouldContain("GitLab", Case.Sensitive));
+        sut.FindAll(".reveal").ShouldBeEmpty(); // an edit doesn't fade the page in again
     }
 
     [Fact]
-    public void An_edit_that_removes_every_block_says_nothing_is_published()
+    public void Home_ShouldSayNothingIsPublished_WhenAnEditRemovesEveryBlock()
     {
+        // Arrange
         StoryblokStoryClient client = UseEditor();
         _storyblok.Answer(HttpStatusCode.OK, HomeWithLink("GitHub"));
-        IRenderedComponent<Home> page = _context.Render<Home>();
-        page.WaitForAssertion(() => Assert.Contains("GitHub", page.Markup));
+        IRenderedComponent<Home> sut = _context.Render<Home>();
+        sut.WaitForAssertion(() => sut.Markup.ShouldContain("GitHub", Case.Sensitive));
 
-        page.InvokeAsync(() => client.ReadEditedStory(EditedHome(
+        // Act
+        sut.InvokeAsync(() => client.ReadEditedStory(EditedHome(
             """{ "_uid": "11111111-1111-1111-1111-111111111111", "component": "page", "body": [] }""")));
 
-        page.WaitForAssertion(() => Assert.Contains("Nothing here yet", page.Markup));
+        // Assert
+        sut.WaitForAssertion(() => sut.Markup.ShouldContain("Nothing here yet", Case.Sensitive));
     }
 
     [Fact]
-    public void An_edit_to_another_story_leaves_the_page_alone()
+    public void Home_ShouldLeaveThePageAlone_WhenTheEditIsToAnotherStory()
     {
+        // Arrange
         StoryblokStoryClient client = UseEditor();
         _storyblok.Answer(HttpStatusCode.OK, HomeWithLink("GitHub"));
-        IRenderedComponent<Home> page = _context.Render<Home>();
-        page.WaitForAssertion(() => Assert.Contains("GitHub", page.Markup));
+        IRenderedComponent<Home> sut = _context.Render<Home>();
+        sut.WaitForAssertion(() => sut.Markup.ShouldContain("GitHub", Case.Sensitive));
 
-        page.InvokeAsync(() => client.ReadEditedStory(EditedHome(HomeContentWithLink("GitLab"), fullSlug: "certificates/x")));
+        // Act
+        sut.InvokeAsync(() => client.ReadEditedStory(EditedHome(HomeContentWithLink("GitLab"), fullSlug: "certificates/x")));
 
-        Assert.Contains("GitHub", page.Find("nav li a").TextContent);
+        // Assert
+        sut.Find("nav li a").TextContent.ShouldContain("GitHub", Case.Sensitive);
     }
 
     [Fact]
-    public void An_edit_to_the_shown_certificate_re_renders_it()
+    public void Certificate_ShouldRerender_WhenTheShownCertificateIsEdited()
     {
+        // Arrange
         StoryblokStoryClient client = UseEditor();
         _storyblok.Answer(HttpStatusCode.OK, Certificate("AZ-204", "Azure"));
-        IRenderedComponent<Certificate> page = RenderCertificate("AZ-204");
-        page.WaitForElement("figure img");
+        IRenderedComponent<Certificate> sut = RenderCertificate("AZ-204");
+        sut.WaitForElement("figure img");
 
-        page.InvokeAsync(() => client.ReadEditedStory($$"""
+        // Act
+        sut.InvokeAsync(() => client.ReadEditedStory($$"""
             { "name": "AZ-204", "full_slug": "certificates/az-204", "content":
               { "_uid": "11111111-1111-1111-1111-111111111111", "component": "certificate",
                 "image": { "filename": "https://a.storyblok.com/f/1/2000x1414/def/new.jpg", "alt": "New scan" } } }
             """));
 
-        page.WaitForAssertion(() => Assert.Equal("New scan", page.Find("figure img").GetAttribute("alt")));
+        // Assert
+        sut.WaitForAssertion(() => sut.Find("figure img").GetAttribute("alt").ShouldBe("New scan"));
     }
 
     [Fact]
-    public void A_load_that_finishes_after_an_edit_keeps_the_edit()
+    public void Home_ShouldKeepTheEdit_WhenALoadFinishesAfterIt()
     {
+        // Arrange
         StoryblokStoryClient client = UseEditor();
         TaskCompletionSource release = _storyblok.AnswerLater(HttpStatusCode.OK, HomeWithLink("Saved"));
-        IRenderedComponent<Home> page = _context.Render<Home>();
+        IRenderedComponent<Home> sut = _context.Render<Home>();
 
-        page.InvokeAsync(() => client.ReadEditedStory(EditedHome(HomeContentWithLink("Typed"))));
-        page.WaitForAssertion(() => Assert.Contains("Typed", page.Find("nav li a").TextContent));
+        // Act
+        sut.InvokeAsync(() => client.ReadEditedStory(EditedHome(HomeContentWithLink("Typed"))));
+        sut.WaitForAssertion(() => sut.Find("nav li a").TextContent.ShouldContain("Typed", Case.Sensitive));
         release.SetResult();
 
+        // Assert
         // The load ends with the saved draft; the page keeps what is being typed.
-        Assert.Throws<Bunit.Extensions.WaitForHelpers.WaitForFailedException>(() =>
-            page.WaitForAssertion(() => Assert.Contains("Saved", page.Markup), TimeSpan.FromMilliseconds(500)));
-        Assert.Contains("Typed", page.Find("nav li a").TextContent);
+        Should.Throw<Bunit.Extensions.WaitForHelpers.WaitForFailedException>(() =>
+            sut.WaitForAssertion(() => sut.Markup.ShouldContain("Saved", Case.Sensitive), TimeSpan.FromMilliseconds(500)));
+        sut.Find("nav li a").TextContent.ShouldContain("Typed", Case.Sensitive);
     }
 
     [Fact]
-    public void A_certificate_load_that_finishes_after_an_edit_keeps_the_edit()
+    public void Certificate_ShouldKeepTheEdit_WhenALoadFinishesAfterIt()
     {
+        // Arrange
         StoryblokStoryClient client = UseEditor();
         TaskCompletionSource release = _storyblok.AnswerLater(HttpStatusCode.NotFound);
         bool notFound = false;
         _context.Services.GetRequiredService<NavigationManager>().OnNotFound += (_, _) => notFound = true;
-        IRenderedComponent<Certificate> page = RenderCertificate("az-204");
+        IRenderedComponent<Certificate> sut = RenderCertificate("az-204");
 
-        page.InvokeAsync(() => client.ReadEditedStory(EditedCertificate("az-204", "New scan")));
-        page.WaitForAssertion(() => Assert.Equal("New scan", page.Find("figure img").GetAttribute("alt")));
+        // Act
+        sut.InvokeAsync(() => client.ReadEditedStory(EditedCertificate("az-204", "New scan")));
+        sut.WaitForAssertion(() => sut.Find("figure img").GetAttribute("alt").ShouldBe("New scan"));
         release.SetResult();
 
-        Assert.Throws<Bunit.Extensions.WaitForHelpers.WaitForFailedException>(() =>
-            page.WaitForAssertion(() => Assert.True(notFound), TimeSpan.FromMilliseconds(500)));
-        Assert.Equal("New scan", page.Find("figure img").GetAttribute("alt"));
+        // Assert
+        Should.Throw<Bunit.Extensions.WaitForHelpers.WaitForFailedException>(() =>
+            sut.WaitForAssertion(() => notFound.ShouldBeTrue(), TimeSpan.FromMilliseconds(500)));
+        sut.Find("figure img").GetAttribute("alt").ShouldBe("New scan");
     }
 
     [Fact]
-    public void An_edit_that_removes_the_certificates_image_stays_in_the_preview()
+    public void Certificate_ShouldStayInThePreview_WhenAnEditRemovesItsImage()
     {
+        // Arrange
         StoryblokStoryClient client = UseEditor();
         _storyblok.Answer(HttpStatusCode.OK, Certificate("az-204", "Azure"));
         bool notFound = false;
         _context.Services.GetRequiredService<NavigationManager>().OnNotFound += (_, _) => notFound = true;
-        IRenderedComponent<Certificate> page = RenderCertificate("az-204");
-        page.WaitForElement("figure img");
+        IRenderedComponent<Certificate> sut = RenderCertificate("az-204");
+        sut.WaitForElement("figure img");
 
-        page.InvokeAsync(() => client.ReadEditedStory("""
+        // Act
+        sut.InvokeAsync(() => client.ReadEditedStory("""
             { "name": "az-204", "full_slug": "certificates/az-204", "content":
               { "_uid": "11111111-1111-1111-1111-111111111111", "component": "certificate" } }
             """));
 
-        page.WaitForAssertion(() => Assert.Empty(page.FindAll("figure")));
-        Assert.False(notFound);
+        // Assert
+        sut.WaitForAssertion(() => sut.FindAll("figure").ShouldBeEmpty());
+        notFound.ShouldBeFalse();
     }
 
     private static string EditedCertificate(string slugName, string alt) => $$"""
@@ -359,32 +422,38 @@ public sealed class PageTests : IDisposable
         """;
 
     [Fact]
-    public async Task A_page_that_was_left_ignores_edits()
+    public async Task Home_ShouldIgnoreEdits_WhenThePageWasLeft()
     {
+        // Arrange
         StoryblokStoryClient client = UseEditor();
         _storyblok.Answer(HttpStatusCode.OK, HomeWithLink("GitHub"));
-        IRenderedComponent<Home> page = _context.Render<Home>();
-        page.WaitForAssertion(() => Assert.Contains("GitHub", page.Markup));
+        IRenderedComponent<Home> sut = _context.Render<Home>();
+        sut.WaitForAssertion(() => sut.Markup.ShouldContain("GitHub", Case.Sensitive));
 
+        // Act
         await _context.DisposeComponentsAsync();
 
+        // Assert
         // Read through reflection: a page that stayed subscribed would be kept alive and re-rendered after it's gone.
-        Assert.Null(typeof(StoryblokStoryClient)
+        (typeof(StoryblokStoryClient)
             .GetField(nameof(StoryblokStoryClient.StoryEdited), System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!
-            .GetValue(client));
+            .GetValue(client)).ShouldBeNull();
     }
 
     [Fact]
-    public void The_bridge_hands_edits_to_the_client()
+    public void StoryblokBridge_ShouldHandEditsToTheClient_WhenAnEditArrives()
     {
+        // Arrange
         StoryblokStoryClient client = UseEditor();
         List<StoryblokEdit> edits = [];
         client.StoryEdited += edits.Add;
-        IRenderedComponent<StoryblokBridge> bridge = _context.Render<StoryblokBridge>();
+        IRenderedComponent<StoryblokBridge> sut = _context.Render<StoryblokBridge>();
 
-        bridge.Instance.ReadEditedStory(EditedHome(HomeContentWithLink("GitLab")));
+        // Act
+        sut.Instance.ReadEditedStory(EditedHome(HomeContentWithLink("GitLab")));
 
-        Assert.True(Assert.Single(edits).TryGet("/home", out StoryblokStory<StoryblokPage>? _));
+        // Assert
+        edits.ShouldHaveSingleItem().TryGet("/home", out StoryblokStory<StoryblokPage>? _).ShouldBeTrue();
     }
 
     // Replaces the published client with one in the Visual Editor. Call before the first render.

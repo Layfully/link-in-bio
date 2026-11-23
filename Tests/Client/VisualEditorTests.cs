@@ -15,6 +15,15 @@ public sealed class VisualEditorTests
     [InlineData("https://site.example/?_storyblokx=1", false)]
     [InlineData("https://site.example/?q=_storyblok", false)]
     [InlineData("https://site.example/#_storyblok", false)]
-    public void Only_the_exact_editor_query_parameter_counts(string address, bool expected) =>
-        Assert.Equal(expected, VisualEditor.HasOpened(new Uri(address)));
+    public void HasOpened_ShouldOnlyBeTrue_WhenTheExactEditorQueryParameterIsPresent(string address, bool expected)
+    {
+        // Arrange
+        Uri uri = new(address);
+
+        // Act
+        bool result = VisualEditor.HasOpened(uri);
+
+        // Assert
+        result.ShouldBe(expected);
+    }
 }

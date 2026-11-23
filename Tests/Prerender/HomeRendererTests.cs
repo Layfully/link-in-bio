@@ -14,8 +14,9 @@ public sealed class HomeRendererTests : IDisposable
     public void Dispose() => _storyblok.Dispose();
 
     [Fact]
-    public async Task The_rendered_home_page_shows_the_links_without_fading_in()
+    public async Task RenderAsync_ShouldShowTheLinksWithoutFadingIn_WhenTheHomeStoryHasAList()
     {
+        // Arrange
         _storyblok.Answer(HttpStatusCode.OK, """
             { "story": { "name": "Home", "content": { "_uid": "11111111-1111-1111-1111-111111111111", "component": "page", "body": [
                 { "_uid": "22222222-2222-2222-2222-222222222222", "component": "list", "entries": [
@@ -25,18 +26,21 @@ public sealed class HomeRendererTests : IDisposable
             ] } }, "cv": 0 }
             """);
 
+        // Act
         string html = (await RenderHomeAsync()).Html;
 
-        Assert.Contains("GitHub", html, StringComparison.Ordinal);
-        Assert.Contains("https://github.com/Layfully", html, StringComparison.Ordinal);
+        // Assert
+        html.ShouldContain("GitHub", Case.Sensitive);
+        html.ShouldContain("https://github.com/Layfully", Case.Sensitive);
         // Content that is in the HTML from the start doesn't fade in: Chrome doesn't count a photo first painted fully
         // transparent as the largest contentful paint, which then waits for Blazor's copy of it.
-        Assert.DoesNotContain("reveal", html, StringComparison.Ordinal);
+        html.ShouldNotContain("reveal", Case.Sensitive);
     }
 
     [Fact]
-    public async Task The_profile_is_the_photo_cut_square_and_every_web_address_the_page_links_to()
+    public async Task RenderAsync_ShouldCutThePhotoSquareAndCollectEveryWebAddress_WhenTheStoryHasProfileSettings()
     {
+        // Arrange
         _storyblok.Answer(HttpStatusCode.OK, """
             { "story": { "name": "Home", "content": { "_uid": "11111111-1111-1111-1111-111111111111", "component": "page", "body": [
                 { "_uid": "99999999-9999-9999-9999-999999999999", "component": "site_settings",
@@ -63,25 +67,28 @@ public sealed class HomeRendererTests : IDisposable
             ] } }, "cv": 0 }
             """);
 
+        // Act
         RenderedHome home = await RenderHomeAsync();
         SiteProfile profile = home.Profile;
 
-        Assert.Contains("Example Person</h1>", home.Html, StringComparison.Ordinal);
-        Assert.Equal("Example Person - Designer", profile.Title);
-        Assert.Equal("Example profile", profile.Description);
-        Assert.Equal("https://profile.example", profile.CanonicalOrigin);
-        Assert.Equal("G-EXAMPLE123", profile.AnalyticsMeasurementId);
-        Assert.Equal("profile.example,www.profile.example", profile.AnalyticsHosts);
-        Assert.Equal("Example Links", profile.AppName);
-        Assert.Equal("https://a.storyblok.com/f/1/512x512/example/icon.png", profile.AppIcon);
-        Assert.Null(profile.AppMaskableIcon);
-        Assert.Equal("https://a.storyblok.com/f/1/608x912/abc/profile.jpg/m/600x600/smart", profile.Image);
-        Assert.Equal(["https://portfolio.example.com", "https://github.com/Layfully"], profile.SameAs);
+        // Assert
+        home.Html.ShouldContain("Example Person</h1>", Case.Sensitive);
+        profile.Title.ShouldBe("Example Person - Designer");
+        profile.Description.ShouldBe("Example profile");
+        profile.CanonicalOrigin.ShouldBe("https://profile.example");
+        profile.AnalyticsMeasurementId.ShouldBe("G-EXAMPLE123");
+        profile.AnalyticsHosts.ShouldBe("profile.example,www.profile.example");
+        profile.AppName.ShouldBe("Example Links");
+        profile.AppIcon.ShouldBe("https://a.storyblok.com/f/1/512x512/example/icon.png");
+        profile.AppMaskableIcon.ShouldBeNull();
+        profile.Image.ShouldBe("https://a.storyblok.com/f/1/608x912/abc/profile.jpg/m/600x600/smart");
+        profile.SameAs.ShouldBe(["https://portfolio.example.com", "https://github.com/Layfully"]);
     }
 
     [Fact]
-    public async Task Listed_links_whose_address_the_site_refused_or_lacks_are_named()
+    public async Task RenderAsync_ShouldNameLinksWithoutAnAddress_WhenTheSiteRefusedOrLacksTheUrl()
     {
+        // Arrange
         _storyblok.Answer(HttpStatusCode.OK, """
             { "story": { "name": "Home", "content": { "_uid": "11111111-1111-1111-1111-111111111111", "component": "page", "body": [
                 { "_uid": "22222222-2222-2222-2222-222222222222", "component": "list", "entries": [
@@ -97,30 +104,38 @@ public sealed class HomeRendererTests : IDisposable
             ] } }, "cv": 0 }
             """);
 
+        // Act
         RenderedHome home = await RenderHomeAsync();
 
-        Assert.Equal(["Typo", "Coming soon"], home.LinksWithoutAddress);
+        // Assert
+        home.LinksWithoutAddress.ShouldBe(["Typo", "Coming soon"]);
     }
 
     [Fact]
-    public async Task A_home_page_that_isnt_published_isnt_rendered()
+    public async Task RenderAsync_ShouldThrow_WhenTheHomeStoryIsNotPublished()
     {
+        // Arrange
         _storyblok.Answer(HttpStatusCode.NotFound, "{}");
 
-        InvalidOperationException exception = await Assert.ThrowsAsync<InvalidOperationException>(RenderHomeAsync);
+        // Act
+        InvalidOperationException exception = await Should.ThrowAsync<InvalidOperationException>(RenderHomeAsync);
 
-        Assert.Equal("The home story isn't published.", exception.Message);
+        // Assert
+        exception.Message.ShouldBe("The home story isn't published.");
     }
 
     [Fact]
-    public async Task An_outage_says_what_Storyblok_answered()
+    public async Task RenderAsync_ShouldSayWhatStoryblokAnswered_WhenTheApiIsUnavailable()
     {
+        // Arrange
         _storyblok.Answer(HttpStatusCode.Unauthorized, "{}");
 
-        InvalidOperationException exception = await Assert.ThrowsAsync<InvalidOperationException>(RenderHomeAsync);
+        // Act
+        InvalidOperationException exception = await Should.ThrowAsync<InvalidOperationException>(RenderHomeAsync);
 
-        Assert.Equal("Storyblok is unavailable.", exception.Message);
-        Assert.Contains("401", ExceptionText.Describe(exception), StringComparison.Ordinal);
+        // Assert
+        exception.Message.ShouldBe("Storyblok is unavailable.");
+        ExceptionText.Describe(exception).ShouldContain("401", Case.Sensitive);
     }
 
     private async Task<RenderedHome> RenderHomeAsync()

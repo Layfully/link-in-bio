@@ -9,6 +9,7 @@
   <ItemGroup>
     <PackageReference Include="bunit" />
     <PackageReference Include="Microsoft.Extensions.TimeProvider.Testing" />
+    <PackageReference Include="Shouldly" />
     <PackageReference Include="xunit.v3" />
   </ItemGroup>
 
@@ -20,6 +21,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <Using Include="Shouldly" />
     <Using Include="Xunit" />
   </ItemGroup>
 </Project>
